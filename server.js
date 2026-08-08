@@ -14,11 +14,14 @@ app.set('trust proxy', 1);
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
 
-// Helper function to dynamically pull DOMAIN and strip trailing slashes
-const getCleanDomain = () => (process.env.DOMAIN || 'http://localhost:3000').replace(/\/+$/, '');
+// Helper function: Ensures DOMAIN has no trailing slash to prevent double slashes (//)
+const getCleanDomain = () => {
+    const rawDomain = process.env.DOMAIN || `http://localhost:${PORT}`;
+    return rawDomain.trim().replace(/\/+$/, '');
+};
 
-// ==================== IN-MEMORY SCRIPT VAULT ====================
-// Runs 24/7 in Render server RAM
+// ==================== IN-MEMORY VAULT ====================
+// Runs 24/7 in RAM on Railway/Render
 const scriptVault = new Map();
 
 // ==================== MIDDLEWARE ====================
@@ -30,8 +33,9 @@ app.use(express.static(path.join(__dirname)));
 app.use(cookieSession({
     name: 'sin_session',
     keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_999'],
-    maxAge: 24 * 60 * 60 * 1000,
-    sameSite: 'lax'
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 Days
+    sameSite: 'lax',
+    secure: false // Set to true if running strictly on HTTPS
 }));
 
 function generateShortId() {
@@ -102,24 +106,21 @@ return (function(...)
 end)(...);`;
 }
 
-// ==================== ROUTES ====================
+// ==================== DISCORD AUTH ROUTES ====================
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Discord Auth Routes
+// Step 1: Initiate Login
 app.get('/auth/discord', (req, res) => {
     try {
         const DOMAIN = getCleanDomain();
-        const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
-        const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
+        const redirectUri = `${DOMAIN}/auth/discord/callback`;
+        const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify`;
         return res.redirect(discordUrl);
     } catch (err) {
         return res.status(500).send("Failed to initiate Discord login: " + err.message);
     }
 });
 
+// Step 2: Callback Handler
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
@@ -128,6 +129,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     const redirectUri = `${DOMAIN}/auth/discord/callback`;
 
     try {
+        // Token Exchange
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
             body: new URLSearchParams({
@@ -142,16 +144,18 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         const tokenData = await tokenResponse.json();
         if (!tokenData.access_token) {
-            console.error("Token Exchange Error:", tokenData);
-            return res.status(400).send("Authentication failed. Make sure Client Secret in Render environment variables is correct.");
+            console.error("[AUTH ERROR] Token exchange failed:", tokenData);
+            return res.status(400).send(`Authentication failed: ${tokenData.error_description || 'Invalid Client Secret or Redirect URI'}`);
         }
 
+        // Fetch User Info
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
         });
 
         const userData = await userResponse.json();
 
+        // Store User in Cookie Session
         req.session.user = {
             id: userData.id,
             username: userData.username,
@@ -162,11 +166,12 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         res.redirect('/');
     } catch (err) {
-        console.error("Discord Auth Callback Error:", err);
+        console.error("[AUTH ERROR] Callback Exception:", err);
         res.status(500).send("Login error: " + err.message);
     }
 });
 
+// Fetch Current Logged-in User
 app.get('/api/me', (req, res) => {
     if (req.session && req.session.user) {
         return res.json({ authenticated: true, user: req.session.user });
@@ -174,15 +179,18 @@ app.get('/api/me', (req, res) => {
     return res.json({ authenticated: false });
 });
 
+// Logout
 app.get('/auth/logout', (req, res) => {
     req.session = null;
     res.redirect('/');
 });
 
-// API Obfuscate Endpoint
+// ==================== OBFUSCATE & VAULT API ====================
+
+// Obfuscate Script (Requires Auth)
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
+        return res.status(401).json({ success: false, error: "You must be logged in with Discord to obfuscate scripts!" });
     }
 
     try {
@@ -195,12 +203,16 @@ app.post('/api/obfuscate', (req, res) => {
         const vmPayload = compileToHardenedLuauVM(script);
         const scriptId = generateShortId();
 
-        // Stored continuously in RAM
-        scriptVault.set(scriptId, {
+        const newEntry = {
+            id: scriptId,
             ownerId: req.session.user.id,
+            name: (scriptName || '').trim() || `Script_${scriptId}`,
             payload: vmPayload,
-            createdAt: new Date().toLocaleString()
-        });
+            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
+        };
+
+        // Save to RAM Vault
+        scriptVault.set(scriptId, newEntry);
 
         const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
 
@@ -208,12 +220,57 @@ app.post('/api/obfuscate', (req, res) => {
             success: true,
             id: scriptId,
             loader: loaderLink,
-            name: (scriptName || '').trim() || `Script_${scriptId}`,
-            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
+            name: newEntry.name,
+            createdAt: newEntry.createdAt
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
+});
+
+// Get User's Personal Vault
+app.get('/api/vault', (req, res) => {
+    if (!req.session || !req.session.user) {
+        return res.status(401).json({ success: false, error: "Unauthorized access." });
+    }
+
+    const userId = req.session.user.id;
+    const DOMAIN = getCleanDomain();
+
+    const userScripts = [];
+    for (const [id, item] of scriptVault.entries()) {
+        if (item.ownerId === userId) {
+            userScripts.push({
+                id: item.id,
+                name: item.name,
+                loader: `loadstring(game:HttpGet("${DOMAIN}/raw/${item.id}"))()`,
+                createdAt: item.createdAt
+            });
+        }
+    }
+
+    return res.json({ success: true, scripts: userScripts });
+});
+
+// Delete Script from Vault
+app.post('/api/delete', (req, res) => {
+    if (!req.session || !req.session.user) {
+        return res.status(401).json({ success: false, error: "Unauthorized access." });
+    }
+
+    const { id } = req.body;
+    const entry = scriptVault.get(id);
+
+    if (!entry) {
+        return res.status(404).json({ success: false, error: "Script not found." });
+    }
+
+    if (entry.ownerId !== req.session.user.id) {
+        return res.status(403).json({ success: false, error: "You do not own this script." });
+    }
+
+    scriptVault.delete(id);
+    return res.json({ success: true, message: `Script ${id} deleted.` });
 });
 
 // ==================== RAW ENDPOINT ====================
@@ -262,6 +319,11 @@ app.get('/raw/:id', (req, res) => {
     // Serve raw script directly to Roblox executor
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.status(200).send(entry.payload);
+});
+
+// Serve Main Site
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Start Express Listener
