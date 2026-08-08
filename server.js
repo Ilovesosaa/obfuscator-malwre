@@ -12,7 +12,7 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350'
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
 const DOMAIN = 'https://sinobfuscator.vercel.app';
 
-// In-memory script storage
+// In-memory vault for script storage
 const scriptVault = new Map();
 
 app.use(cors());
@@ -20,13 +20,13 @@ app.use(express.json({ limit: '10mb' }));
 
 app.use(cookieSession({
     name: 'sin_session',
-    keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_123'],
+    keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_999'],
     maxAge: 24 * 60 * 60 * 1000,
     sameSite: 'lax'
 }));
 
 function generateShortId() {
-    return crypto.randomBytes(4).toString('hex'); // Returns 8-char ID
+    return crypto.randomBytes(4).toString('hex'); // 8-character ID
 }
 
 function compileToHardenedLuauVM(sourceCode) {
@@ -59,7 +59,7 @@ return (function(...)
 end)(...);`;
 }
 
-// Auth Routes
+// ==================== DISCORD AUTH ROUTES ====================
 app.get('/auth/discord', (req, res) => {
     try {
         const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
@@ -124,7 +124,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscate Route
+// ==================== OBFUSCATION API ====================
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -139,7 +139,12 @@ app.post('/api/obfuscate', (req, res) => {
         const vmPayload = compileToHardenedLuauVM(script);
         const scriptId = generateShortId();
 
-        scriptVault.set(scriptId, vmPayload);
+        // Store script in server memory vault
+        scriptVault.set(scriptId, {
+            ownerId: req.session.user.id,
+            payload: vmPayload,
+            createdAt: new Date().toLocaleString()
+        });
 
         const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
 
@@ -147,39 +152,51 @@ app.post('/api/obfuscate', (req, res) => {
             success: true,
             id: scriptId,
             loader: loaderLink,
-            name: scriptName || `Script_${scriptId}`,
-            createdAt: new Date().toLocaleString()
+            name: scriptName.trim() || `Script_${scriptId}`,
+            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// Delete Route (Destroys the raw loader link)
+// ==================== DELETE SCRIPT ENDPOINT ====================
 app.post('/api/delete', (req, res) => {
     if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
+        return res.status(401).json({ success: false, error: "Unauthorized access." });
     }
 
     const { id } = req.body;
-    if (!id) return res.status(400).json({ success: false, error: "Missing script ID" });
+    if (!id) {
+        return res.status(400).json({ success: false, error: "Missing script ID." });
+    }
 
-    // Remove from server vault
-    scriptVault.delete(id);
+    // Check if script exists in memory map
+    if (scriptVault.has(id)) {
+        const storedScript = scriptVault.get(id);
+        
+        // Optional security: verify owner matching
+        if (storedScript.ownerId && storedScript.ownerId !== req.session.user.id) {
+            return res.status(403).json({ success: false, error: "You do not own this script." });
+        }
 
-    return res.json({ success: true, message: "Script destroyed successfully." });
+        // Wipe from server memory
+        scriptVault.delete(id);
+    }
+
+    return res.json({ success: true, message: `Script ${id} deleted successfully.` });
 });
 
-// Raw Endpoint
+// ==================== RAW LOADER ENDPOINT ====================
 app.get('/raw/:id', (req, res) => {
     const id = req.params.id;
     const userAgent = req.headers['user-agent'] || '';
 
-    const payload = scriptVault.get(id);
+    const entry = scriptVault.get(id);
 
-    if (!payload) {
+    if (!entry) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(404).send("-- LOCKED: Script ID not found or deleted.");
+        return res.status(404).send("-- LOCKED: Script ID not found, expired, or deleted.");
     }
 
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
@@ -189,11 +206,11 @@ app.get('/raw/:id', (req, res) => {
     }
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(200).send(payload);
+    res.status(200).send(entry.payload);
 });
 
 if (require.main === module) {
-    app.listen(PORT, () => console.log(`SIN Obfuscator Server running on port ${PORT}`));
+    app.listen(PORT, () => console.log(`[SIN HUB] Server active on port ${PORT}`));
 }
 
 module.exports = app;
