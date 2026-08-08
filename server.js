@@ -13,9 +13,25 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Bulletproof path resolution for Vercel serverless environments
-const publicPath = fs.existsSync(path.join(__dirname, 'public'))
-    ? path.join(__dirname, 'public')
-    : path.join(process.cwd(), 'public');
+const possiblePaths = [
+    path.join(__dirname, 'public'),
+    path.join(__dirname, '../public'),
+    path.join(process.cwd(), 'public'),
+    path.resolve('./public')
+];
+
+let publicPath = possiblePaths.find(p => fs.existsSync(p)) || possiblePaths[0];
+
+app.use(express.static(publicPath));
+
+app.get('/', (req, res) => {
+    const indexPath = path.join(publicPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.status(404).send(`Error: index.html not found. Searched in: ${possiblePaths.join(', ')}`);
+    }
+});
 
 app.use(express.static(publicPath));
 
