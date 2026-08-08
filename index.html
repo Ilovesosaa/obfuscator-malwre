@@ -111,7 +111,7 @@
 
     textarea {
       width: 100%;
-      height: 240px;
+      height: 220px;
       background: #0b0b0f;
       border: 1px solid var(--card-border);
       border-radius: 8px;
@@ -133,6 +133,34 @@
       border-radius: 8px;
       cursor: pointer;
       box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .output-box {
+      display: none;
+      flex-direction: column;
+      gap: 0.5rem;
+      background: #0b0b0f;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+
+    .output-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--green);
+    }
+
+    .link-field {
+      width: 100%;
+      background: #141419;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      color: var(--green);
+      font-family: monospace;
+      font-size: 0.85rem;
+      padding: 0.6rem;
+      word-break: break-all;
     }
 
     .vault-title { font-size: 1.2rem; font-weight: 800; color: var(--text); }
@@ -161,16 +189,6 @@
 
     .script-name { font-weight: 700; color: #f87171; }
     .script-date { font-size: 0.75rem; color: var(--text-sub); }
-
-    .loader-code {
-      background: #0b0b0f;
-      padding: 0.6rem;
-      border-radius: 6px;
-      font-family: monospace;
-      font-size: 0.85rem;
-      color: var(--green);
-      word-break: break-all;
-    }
 
     .btn-copy-small {
       background: #231924;
@@ -209,24 +227,31 @@
 
       <textarea id="sourceCode" placeholder="-- Paste your raw Luau script here..." spellcheck="false"></textarea>
 
-      <button class="btn-build" id="buildBtn" onclick="buildCloudLoader()">Obfuscate & Save to Account</button>
+      <button class="btn-build" id="buildBtn" onclick="buildCloudLoader()">Generate Obfuscated Link</button>
+
+      <div class="output-box" id="resultBox">
+        <span class="output-title">✓ Generated Loader Link:</span>
+        <div class="link-field" id="loaderResult"></div>
+        <button class="btn-copy-small" onclick="copyResultLink()">Copy Loader Link</button>
+      </div>
     </main>
 
     <div class="card locked-notice" id="loginNotice">
       <h2>🔑 Login Required</h2>
-      <p style="margin-top: 0.5rem;">Please log in with your Discord account to obfuscate and save your scripts.</p>
+      <p style="margin-top: 0.5rem;">Please log in with your Discord account to generate script loader links.</p>
     </div>
 
     <div class="card" id="vaultCard" style="display: none;">
-      <h2 class="vault-title">📁 Your Obfuscated Script Vault</h2>
+      <h2 class="vault-title">📁 Your Saved Loader Links</h2>
       <div class="script-list" id="scriptVaultList">
-        <p style="color: var(--text-sub);">No obfuscated scripts saved yet.</p>
+        <p style="color: var(--text-sub);">No loader links saved yet.</p>
       </div>
     </div>
   </div>
 
   <script>
     let currentUser = null;
+    let latestGeneratedLink = "";
 
     window.onload = async function() {
       await checkAuth();
@@ -272,7 +297,7 @@
       }
 
       buildBtn.disabled = true;
-      buildBtn.innerText = "Obfuscating...";
+      buildBtn.innerText = "Generating Link...";
 
       try {
         const response = await fetch('/api/obfuscate', {
@@ -284,20 +309,30 @@
         const data = await response.json();
 
         if (data.success) {
+          latestGeneratedLink = data.loader;
+          document.getElementById('loaderResult').innerText = data.loader;
+          document.getElementById('resultBox').style.display = 'flex';
+
           saveToLocalVault(data);
           document.getElementById('sourceCode').value = '';
           document.getElementById('scriptName').value = '';
-          alert("Script obfuscated and saved to your vault!");
           loadUserScripts();
         } else {
-          alert("Error: " + (data.error || "Failed to obfuscate script."));
+          alert("Error: " + (data.error || "Failed to generate loader link."));
         }
       } catch (err) {
         alert("Server error. Check console for details.");
         console.error(err);
       } finally {
         buildBtn.disabled = false;
-        buildBtn.innerText = "Obfuscate & Save to Account";
+        buildBtn.innerText = "Generate Obfuscated Link";
+      }
+    }
+
+    function copyResultLink() {
+      if (latestGeneratedLink) {
+        navigator.clipboard.writeText(latestGeneratedLink);
+        alert("Loader link copied to clipboard!");
       }
     }
 
@@ -322,18 +357,18 @@
               <span class="script-name">${escapeHtml(s.name)}</span>
               <span class="script-date">${s.createdAt}</span>
             </div>
-            <div class="loader-code">${escapeHtml(s.loader)}</div>
-            <button class="btn-copy-small" onclick="copyText('${escapeJs(s.loader)}')">Copy Loader</button>
+            <div class="link-field">${escapeHtml(s.loader)}</div>
+            <button class="btn-copy-small" onclick="copyText('${escapeJs(s.loader)}')">Copy Link</button>
           </div>
         `).join('');
       } else {
-        container.innerHTML = '<p style="color: var(--text-sub);">No obfuscated scripts saved yet.</p>';
+        container.innerHTML = '<p style="color: var(--text-sub);">No loader links saved yet.</p>';
       }
     }
 
     function copyText(text) {
       navigator.clipboard.writeText(text);
-      alert("Loader copied to clipboard!");
+      alert("Loader link copied!");
     }
 
     function escapeHtml(str) {
