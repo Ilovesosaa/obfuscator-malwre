@@ -21,7 +21,7 @@ app.use(limiter);
 
 const obfuscateLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 10,
+    max: 15,
     message: { success: false, error: "Rate limit reached. Please wait a minute before obfuscating again." }
 });
 
@@ -32,16 +32,14 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
-// Stateless session cookie for Vercel serverless compatibility
+// Lightweight cookie session (User Auth only)
 app.use(cookieSession({
     name: 'sin_session',
     keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_123'],
     maxAge: 24 * 60 * 60 * 1000,
-    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax'
 }));
 
-// Helper to encode/decode script payloads statelessly into tokens
 function encodePayload(payload) {
     return Buffer.from(payload, 'utf8').toString('base64url');
 }
@@ -90,7 +88,7 @@ function getBaseUrl(req) {
     return `${proto}://${host}`;
 }
 
-// Discord OAuth Routes
+// Discord Auth
 app.get('/auth/discord', (req, res) => {
     const baseUrl = getBaseUrl(req);
     const redirectUri = encodeURIComponent(`${baseUrl}/auth/discord/callback`);
@@ -122,8 +120,8 @@ app.get('/auth/discord/callback', async (req, res) => {
         const tokenData = await tokenResponse.json();
 
         if (!tokenData.access_token) {
-            console.error("Discord Token Error Response:", tokenData);
-            return res.status(400).send("Authentication failed: " + JSON.stringify(tokenData));
+            console.error("Discord Token Error:", tokenData);
+            return res.status(400).send("Authentication failed.");
         }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
@@ -139,10 +137,6 @@ app.get('/auth/discord/callback', async (req, res) => {
                 ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
                 : `https://cdn.discordapp.com/embed/avatars/0.png`
         };
-
-        if (!req.session.scripts) {
-            req.session.scripts = [];
-        }
 
         res.redirect('/');
     } catch (err) {
@@ -162,7 +156,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscation Endpoints
+// Obfuscation Endpoint
 app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -181,37 +175,19 @@ app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
         const baseUrl = getBaseUrl(req);
         const loaderScript = `loadstring(game:HttpGet("${baseUrl}/v3/loader/${loaderToken}"))()`;
 
-        if (!req.session.scripts) {
-            req.session.scripts = [];
-        }
-
-        req.session.scripts.unshift({
-            id: loaderToken,
-            name: scriptName || `Script_${loaderToken.substring(0, 8)}`,
-            loader: loaderScript,
-            createdAt: new Date().toLocaleString()
-        });
-
         return res.json({
             success: true,
             loaderId: loaderToken,
-            loader: loaderScript
+            loader: loaderScript,
+            name: scriptName || `Script_${loaderToken.substring(0, 6)}`,
+            createdAt: new Date().toLocaleString()
         });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
 });
 
-app.get('/api/my-scripts', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
-    const history = req.session.scripts || [];
-    return res.json({ success: true, scripts: history });
-});
-
-// Loader Endpoint (Stateless payload retrieval)
+// Roblox Executer Loader Route
 app.get('/v3/loader/:token', (req, res) => {
     const token = req.params.token;
     const userAgent = req.headers['user-agent'] || '';
@@ -226,7 +202,7 @@ app.get('/v3/loader/:token', (req, res) => {
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
     if (isBrowser) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(403).send("LOCKED: Direct browser viewing denied.");
+        return res.status(403).send("LOCKED: Direct browser access denied.");
     }
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
