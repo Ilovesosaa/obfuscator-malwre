@@ -3,18 +3,40 @@ const cors = require('cors');
 const crypto = require('crypto');
 const path = require('path');
 const session = require('express-session');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ==========================================
+// DDoS PROTECTION / RATE LIMITER
+// ==========================================
+// Trust Render's secure proxy headers (Required for correct IP tracking behind Render)
+app.set('trust proxy', 1);
+
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes window
+    max: 100, // Limit each IP to 100 requests per windowMs
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    message: { success: false, error: "Too many requests from this IP, please try again later." }
+});
+
+// Apply rate limiter to all requests (or specific API routes)
+app.use(limiter);
+
+// Specific stricter limit for obfuscation to prevent server flooding
+const obfuscateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 10, // Max 10 scripts obfuscated per minute per IP
+    message: { success: false, error: "Rate limit reached. Please wait a minute before obfuscating again." }
+});
+
+// ==========================================
 // DISCORD OAUTH2 CONFIGURATION
 // ==========================================
 const DISCORD_CLIENT_ID = '1535568167223562350';
-const DISCORD_CLIENT_SECRET = 'r7fbaNC2wNVHBlUw0XF57GLDGzvW_y58';
-
-// Trust Render's secure proxy headers
-app.set('trust proxy', 1);
+const DISCORD_CLIENT_SECRET = 'cYnDYaMrZNlxz6QCoGAVLD5gNc5jIbO-';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -106,7 +128,6 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         const tokenData = await tokenResponse.json();
 
-        // Detailed error logging to your Render dashboard logs
         if (!tokenData.access_token) {
             console.error("Discord Token Error Response:", tokenData);
             return res.status(400).send("Authentication failed: " + JSON.stringify(tokenData));
@@ -148,7 +169,8 @@ app.get('/auth/logout', (req, res) => {
 // OBFUSCATION & HISTORY ENDPOINTS
 // ==========================================
 
-app.post('/api/obfuscate', (req, res) => {
+// Apply strict rate limiting specifically to the obfuscation endpoint
+app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
     }
