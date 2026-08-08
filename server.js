@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const cookieSession = require('cookie-session');
 const rateLimit = require('express-rate-limit');
+const pako = require('pako');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,7 +33,7 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
-// Lightweight cookie session (User Auth only)
+// Lightweight cookie session
 app.use(cookieSession({
     name: 'sin_session',
     keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_123'],
@@ -40,13 +41,18 @@ app.use(cookieSession({
     sameSite: 'lax'
 }));
 
+// Compress and encode script payload into a compact token
 function encodePayload(payload) {
-    return Buffer.from(payload, 'utf8').toString('base64url');
+    const compressed = pako.deflate(payload);
+    return Buffer.from(compressed).toString('base64url');
 }
 
+// Decode and decompress payload
 function decodePayload(token) {
     try {
-        return Buffer.from(token, 'base64url').toString('utf8');
+        const buffer = Buffer.from(token, 'base64url');
+        const decompressed = pako.inflate(buffer, { to: 'string' });
+        return decompressed;
     } catch (e) {
         return null;
     }
@@ -88,7 +94,7 @@ function getBaseUrl(req) {
     return `${proto}://${host}`;
 }
 
-// Discord Auth
+// Discord Auth Routes
 app.get('/auth/discord', (req, res) => {
     const baseUrl = getBaseUrl(req);
     const redirectUri = encodeURIComponent(`${baseUrl}/auth/discord/callback`);
@@ -156,7 +162,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscation Endpoint
+// Obfuscation Endpoint - Returns ONLY the loader link
 app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -173,12 +179,11 @@ app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
         const loaderToken = encodePayload(vmPayload);
 
         const baseUrl = getBaseUrl(req);
-        const loaderScript = `loadstring(game:HttpGet("${baseUrl}/v3/loader/${loaderToken}"))()`;
+        const loaderLink = `loadstring(game:HttpGet("${baseUrl}/v3/loader/${loaderToken}"))()`;
 
         return res.json({
             success: true,
-            loaderId: loaderToken,
-            loader: loaderScript,
+            loader: loaderLink,
             name: scriptName || `Script_${loaderToken.substring(0, 6)}`,
             createdAt: new Date().toLocaleString()
         });
@@ -187,7 +192,7 @@ app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
     }
 });
 
-// Roblox Executer Loader Route
+// Loader Endpoint - Serves raw obfuscated bytecode to executors
 app.get('/v3/loader/:token', (req, res) => {
     const token = req.params.token;
     const userAgent = req.headers['user-agent'] || '';
