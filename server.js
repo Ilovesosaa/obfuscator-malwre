@@ -10,8 +10,8 @@ const PORT = process.env.PORT || 3000;
 // ==========================================
 // DISCORD OAUTH2 CONFIGURATION
 // ==========================================
-const DISCORD_CLIENT_ID = 'YOUR_DISCORD_CLIENT_ID_HERE';
-const DISCORD_CLIENT_SECRET = 'YOUR_DISCORD_CLIENT_SECRET_HERE';
+const DISCORD_CLIENT_ID = '1535568167223562350';
+const DISCORD_CLIENT_SECRET = 'cYNdYMrZNIxz6QCoGAVLD5gCnq5jlBo-';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
