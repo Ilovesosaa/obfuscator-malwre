@@ -13,19 +13,3 @@
     }
   ]
 }
-    {
-      "src": "index.html",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(auth|api|raw|v3)(.*)",
-      "dest": "server.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "index.html"
-    }
-  ]
-}
