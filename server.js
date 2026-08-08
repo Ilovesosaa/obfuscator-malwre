@@ -12,9 +12,6 @@ app.use(express.static(__dirname));
 
 const scriptStore = new Map();
 
-/**
- * SAFE LUAU VM COMPILER (NO INFINITE LOOPS)
- */
 function compileToHardenedLuauVM(sourceCode, options = {}) {
     const seedKey = Math.floor(Math.random() * 220) + 20;
     
@@ -25,7 +22,7 @@ function compileToHardenedLuauVM(sourceCode, options = {}) {
 
     const { antiHttpSpy = true } = options;
 
-    return `--[[ Luarmor Cloud Protection Engine ]]--
+    return `--[[ SIN Obfuscator v4.0 (Cloud Protection Engine) ]]--
 return (function(...)
     local _bxor = bit32 and bit32.bxor or function(a, b) return a end
     local _char = string.char
@@ -33,9 +30,9 @@ return (function(...)
     local _key = ${seedKey}
 
     ${antiHttpSpy ? `
-    -- Anti-Hooking Check (Safe Error instead of Game Freeze)
+    -- Anti-Hooking Check
     if hookfunction and (getgenv().httpspy or getgenv().HttpSpy) then
-        error("[Luarmor]: Execution blocked by security policy.", 0)
+        error("[SIN Security]: Execution blocked by security policy.", 0)
     end
     ` : ''}
 
@@ -50,14 +47,14 @@ return (function(...)
     local _load = loadstring or (vExecutionEnvironment and vExecutionEnvironment.loadstring)
 
     if not _load then
-        error("[Luarmor Error]: 'loadstring' is not enabled or supported in this environment.", 0)
+        error("[SIN Error]: 'loadstring' is not enabled or supported in this environment.", 0)
     end
 
     local _exec, _err = _load(_rawScript)
     if _exec then
         return _exec(...)
     else
-        error("[Luarmor Runtime Error]: " .. tostring(_err), 0)
+        error("[SIN Runtime Error]: " .. tostring(_err), 0)
     end
 end)(...);`;
 }
@@ -78,7 +75,6 @@ app.post('/api/obfuscate', (req, res) => {
         const protocol = req.protocol || 'http';
         const host = req.get('host') || `localhost:${PORT}`;
         
-        // 1-Line Loader Output
         const loaderScript = `loadstring(game:HttpGet("${protocol}://${host}/v3/loader/${loaderId}"))()`;
 
         return res.json({
@@ -102,7 +98,6 @@ app.get('/v3/loader/:id', (req, res) => {
         return res.status(404).send("LOCKED: Invalid or expired script key.");
     }
 
-    // Browser lockout check
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
     if (isBrowser) {
         res.setHeader('Content-Type', 'text/plain');
@@ -118,5 +113,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server running safely on http://localhost:${PORT}`);
+    console.log(`SIN Obfuscator Server running on port ${PORT}`);
 });
