@@ -26,7 +26,7 @@ const obfuscateLimiter = rateLimit({
 });
 
 const DISCORD_CLIENT_ID = '1535568167223562350';
-const DISCORD_CLIENT_SECRET = 'TZEhwTcBM_8K8Y7ol2hlw6BrMf5t2r06';
+const DISCORD_CLIENT_SECRET = 'hAbMYlbS7z_8lZevUPrrbAFwfs_g3d8u';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
