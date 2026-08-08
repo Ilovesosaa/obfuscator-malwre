@@ -3,629 +3,553 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIN OBFUSCATOR | Hardened Luau Protection v5.0</title>
-    <!-- FontAwesome & Google Fonts -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    
+    <title>SIN Obfuscator | Hardened Luau Protection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-main: #060609;
-            --bg-card: rgba(13, 13, 20, 0.75);
-            --bg-input: #09090e;
+            --bg-main: #06060a;
+            --bg-card: #0d0d14;
+            --bg-card-border: rgba(255, 255, 255, 0.08);
             --accent-red: #ef4444;
-            --accent-red-glow: rgba(239, 68, 68, 0.4);
-            --accent-crimson: #dc2626;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --border-color: rgba(255, 255, 255, 0.08);
-            --border-red: rgba(239, 68, 68, 0.3);
+            --accent-red-hover: #dc2626;
+            --accent-glow: rgba(239, 68, 68, 0.25);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --font-code: 'Fira Code', monospace;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Inter', sans-serif;
         }
 
         body {
             background-color: var(--bg-main);
-            color: var(--text-primary);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            background-image: 
-                radial-gradient(circle at 15% 15%, rgba(239, 68, 68, 0.08) 0%, transparent 40%),
-                radial-gradient(circle at 85% 85%, rgba(185, 28, 28, 0.05) 0%, transparent 40%);
-            background-attachment: fixed;
-            overflow-x: hidden;
+            align-items: center;
+            padding-bottom: 3rem;
         }
 
-        /* --- Navbar --- */
-        nav {
+        /* NAVBAR */
+        header {
+            width: 100%;
+            max-width: 1100px;
+            padding: 1.5rem 1rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1.2rem 2.5rem;
-            background: rgba(6, 6, 9, 0.85);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid var(--border-color);
-            position: sticky;
-            top: 0;
-            z-index: 100;
+            border-bottom: 1px solid var(--bg-card-border);
         }
 
         .brand {
             display: flex;
             align-items: center;
-            gap: 12px;
-            font-weight: 800;
-            font-size: 1.25rem;
-            letter-spacing: 1px;
+            gap: 0.75rem;
+            font-weight: 700;
+            font-size: 1.3rem;
+            letter-spacing: -0.5px;
         }
 
-        .brand i {
-            color: var(--accent-red);
-            font-size: 1.5rem;
-            filter: drop-shadow(0 0 8px var(--accent-red-glow));
+        .brand-badge {
+            background: var(--accent-red);
+            color: white;
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
         }
 
-        .brand span {
-            background: linear-gradient(135deg, #fff 30%, var(--accent-red) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .user-panel {
+        .user-nav {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 1rem;
         }
 
-        .discord-btn {
+        .auth-btn {
             background: #5865F2;
             color: white;
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
             text-decoration: none;
-            font-weight: 600;
+            padding: 0.55rem 1.1rem;
+            border-radius: 6px;
             font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.2);
-        }
-
-        .discord-btn:hover {
-            background: #4752C4;
-            transform: translateY(-2px);
-        }
-
-        .user-profile {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.04);
-            padding: 6px 14px 6px 6px;
-            border-radius: 30px;
-            border: 1px solid var(--border-color);
-        }
-
-        .user-profile img {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            border: 2px solid var(--accent-red);
-        }
-
-        .user-profile span {
             font-weight: 600;
-            font-size: 0.88rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: opacity 0.2s;
         }
 
-        .logout-btn {
-            color: var(--text-secondary);
-            margin-left: 5px;
-            cursor: pointer;
-            transition: color 0.2s;
+        .auth-btn:hover {
+            opacity: 0.9;
         }
 
-        .logout-btn:hover {
+        .profile-card {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            padding: 0.4rem 0.8rem;
+            border-radius: 30px;
+        }
+
+        .profile-card img {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+        }
+
+        .profile-card span {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .logout-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.8rem;
+            margin-left: 0.5rem;
+        }
+
+        .logout-link:hover {
             color: var(--accent-red);
         }
 
-        /* --- Main Layout --- */
-        .container {
-            max-width: 1300px;
+        /* MAIN CONTAINER */
+        main {
             width: 100%;
-            margin: 2rem auto;
-            padding: 0 1.5rem;
-            display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 1.8rem;
-            flex-grow: 1;
+            max-width: 1100px;
+            padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
         }
 
-        @media (max-width: 992px) {
-            .container { grid-template-columns: 1fr; }
-        }
-
-        /* --- Glass Cards --- */
-        .glass-card {
+        .card {
             background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            backdrop-filter: blur(16px);
-            border-radius: 14px;
+            border: 1px solid var(--bg-card-border);
+            border-radius: 12px;
             padding: 1.5rem;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
         }
 
         .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.2rem;
-            padding-bottom: 0.8rem;
-            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 1rem;
         }
 
         .card-header h2 {
-            font-size: 1.1rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-primary);
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-main);
         }
 
-        .card-header h2 i { color: var(--accent-red); }
-
-        /* --- Code Editor Section --- */
-        .editor-wrapper {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            height: 520px;
+        .card-header p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
         }
 
-        .editor-toolbar {
-            display: flex;
-            justify-content: space-between;
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            padding: 0 4px;
-        }
-
-        textarea {
-            width: 100%;
-            height: 100%;
-            background-color: var(--bg-input);
-            color: #38bdf8;
-            font-family: 'Fira Code', monospace;
-            font-size: 0.9rem;
-            padding: 1.2rem;
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            resize: none;
-            outline: none;
-            line-height: 1.5;
-            transition: border-color 0.2s;
-        }
-
-        textarea:focus {
-            border-color: var(--border-red);
-            box-shadow: 0 0 15px rgba(239, 68, 68, 0.1);
-        }
-
-        /* --- Control Sidebar --- */
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-        }
-
+        /* FORM CONTROLS */
         .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
             margin-bottom: 1.2rem;
         }
 
-        .input-group label {
-            display: block;
-            font-size: 0.82rem;
+        label {
+            font-size: 0.8rem;
             font-weight: 600;
-            color: var(--text-secondary);
-            margin-bottom: 6px;
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
-        .input-group input {
+        input[type="text"], textarea {
             width: 100%;
-            background: var(--bg-input);
-            border: 1px solid var(--border-color);
-            color: #fff;
-            padding: 0.75rem 1rem;
+            background: #040406;
+            border: 1px solid var(--bg-card-border);
             border-radius: 8px;
-            outline: none;
+            color: var(--text-main);
+            padding: 0.75rem 1rem;
             font-size: 0.9rem;
-            transition: border-color 0.2s;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .input-group input:focus {
+        input[type="text"]:focus, textarea:focus {
             border-color: var(--accent-red);
+            box-shadow: 0 0 10px var(--accent-glow);
         }
 
-        .btn-obfuscate {
-            width: 100%;
-            padding: 1rem;
-            background: linear-gradient(135deg, var(--accent-red), var(--accent-crimson));
+        textarea {
+            font-family: var(--font-code);
+            height: 280px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        .btn-primary {
+            background: var(--accent-red);
             color: white;
             border: none;
-            border-radius: 10px;
-            font-weight: 700;
+            padding: 0.85rem 1.5rem;
+            border-radius: 8px;
             font-size: 0.95rem;
-            letter-spacing: 0.5px;
+            font-weight: 600;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            box-shadow: 0 4px 20px var(--accent-red-glow);
-            transition: all 0.2s ease;
+            transition: background 0.2s, transform 0.1s;
+            width: 100%;
         }
 
-        .btn-obfuscate:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(239, 68, 68, 0.6);
+        .btn-primary:hover {
+            background: var(--accent-red-hover);
         }
 
-        .btn-obfuscate:disabled {
+        .btn-primary:active {
+            transform: scale(0.99);
+        }
+
+        .btn-primary:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-            transform: none;
         }
 
-        /* --- Output Card --- */
+        /* OUTPUT BOX */
         .output-box {
             display: none;
-            background: rgba(4, 4, 6, 0.8);
-            border: 1px solid var(--border-red);
-            border-radius: 10px;
+            margin-top: 1.5rem;
+            background: #040406;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
             padding: 1rem;
-            margin-top: 1rem;
         }
 
-        .output-box.active { display: block; }
-
-        .loader-code {
-            background: #000;
-            color: #4ade80;
-            font-family: 'Fira Code', monospace;
-            font-size: 0.78rem;
-            padding: 0.8rem;
-            border-radius: 6px;
-            word-break: break-all;
-            margin: 0.8rem 0;
-            border: 1px solid rgba(74, 222, 128, 0.2);
+        .output-box.active {
+            display: block;
         }
 
-        .btn-copy {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--border-color);
-            color: #fff;
-            padding: 0.6rem;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .btn-copy:hover {
-            background: rgba(255, 255, 255, 0.12);
-        }
-
-        /* --- Vault Session List --- */
-        .vault-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            max-height: 220px;
-            overflow-y: auto;
-        }
-
-        .vault-item {
+        .output-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border-color);
-            padding: 0.7rem 1rem;
-            border-radius: 8px;
-            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
         }
 
-        .vault-info {
+        .output-header span {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #22c55e;
+        }
+
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--bg-card-border);
+            color: var(--text-main);
+            padding: 0.3rem 0.7rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .loader-code {
+            font-family: var(--font-code);
+            font-size: 0.8rem;
+            color: #38bdf8;
+            word-break: break-all;
+        }
+
+        /* VAULT GRID */
+        .vault-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .vault-card {
+            background: #040406;
+            border: 1px solid var(--bg-card-border);
+            border-radius: 8px;
+            padding: 1rem;
             display: flex;
             flex-direction: column;
+            justify-content: space-between;
+            gap: 0.8rem;
         }
 
-        .vault-name { font-weight: 600; color: #fff; }
-        .vault-time { font-size: 0.75rem; color: var(--text-secondary); }
+        .vault-card-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .vault-card-date {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
 
         .vault-actions {
             display: flex;
-            gap: 8px;
+            gap: 0.5rem;
         }
 
-        .icon-btn {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 0.35rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
             cursor: pointer;
-            font-size: 0.9rem;
-            transition: color 0.2s;
         }
 
-        .icon-btn:hover { color: var(--accent-red); }
-
-        /* --- Toast Notifications --- */
-        #toast-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.3);
         }
 
-        .toast {
-            background: #0f172a;
-            border-left: 4px solid var(--accent-red);
-            color: white;
-            padding: 0.9rem 1.4rem;
-            border-radius: 6px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-            font-size: 0.88rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn 0.3s ease forwards;
+        .empty-vault {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-style: italic;
         }
 
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        /* ERROR/ALERT NOTIFICATIONS */
+        .alert {
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
         }
     </style>
 </head>
 <body>
 
-    <!-- Navbar -->
-    <nav>
+    <!-- NAVBAR -->
+    <header>
         <div class="brand">
-            <i class="fa-solid fa-shield-halved"></i>
-            <span>SIN OBFUSCATOR</span>
+            <span>SIN</span>
+            <span class="brand-badge">v5.0</span>
         </div>
-
-        <div class="user-panel" id="userPanel">
-            <!-- Dynamically populated via JS -->
-            <a href="/auth/discord" class="discord-btn">
-                <i class="fa-brands fa-discord"></i> Login with Discord
-            </a>
+        <div class="user-nav" id="userNav">
+            <!-- Populated dynamically via JS -->
+            <a href="/auth/discord" class="auth-btn">Login with Discord</a>
         </div>
-    </nav>
+    </header>
 
-    <!-- Main Content -->
-    <div class="container">
-        <!-- Editor Section -->
-        <div class="glass-card">
+    <!-- MAIN DASHBOARD -->
+    <main>
+
+        <div id="alertBox" class="alert alert-error"></div>
+
+        <!-- EDITOR CARD -->
+        <section class="card">
             <div class="card-header">
-                <h2><i class="fa-solid fa-code"></i> Luau Source Code</h2>
-                <span id="scriptStats" style="font-size: 0.8rem; color: var(--text-secondary);">0 Lines | 0 Chars</span>
-            </div>
-            
-            <div class="editor-wrapper">
-                <textarea id="sourceCode" placeholder="-- Paste your un-obfuscated Luau script here...&#10;function hello()&#10;    print('SIN Shield Active')&#10;end&#10;hello()" spellcheck="false"></textarea>
-            </div>
-        </div>
-
-        <!-- Sidebar Section -->
-        <div class="sidebar">
-            <!-- Obfuscation Config -->
-            <div class="glass-card">
-                <div class="card-header">
-                    <h2><i class="fa-solid fa-sliders"></i> Protection Hub</h2>
-                </div>
-
-                <div class="input-group">
-                    <label>Script Title</label>
-                    <input type="text" id="scriptName" placeholder="MyRobloxScript_v1" />
-                </div>
-
-                <button class="btn-obfuscate" id="obfuscateBtn" onclick="runObfuscator()">
-                    <i class="fa-solid fa-bolt"></i> OBFUSCATE SCRIPT
-                </button>
-
-                <!-- Output Box -->
-                <div class="output-box" id="outputBox">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size: 0.8rem; font-weight:700; color:var(--accent-red);">LOADER GENERATED</span>
-                        <i class="fa-solid fa-check-circle" style="color:#4ade80;"></i>
-                    </div>
-                    <div class="loader-code" id="loaderOutput"></div>
-                    <button class="btn-copy" onclick="copyLoader()">
-                        <i class="fa-regular fa-copy"></i> Copy Loader Code
-                    </button>
-                </div>
+                <h2>Luau Obfuscator Engine</h2>
+                <p>Compile source Luau scripts into dynamic VM loader links.</p>
             </div>
 
-            <!-- Session History Vault -->
-            <div class="glass-card">
-                <div class="card-header">
-                    <h2><i class="fa-solid fa-vault"></i> Recent Vault</h2>
-                </div>
-                <div class="vault-list" id="vaultList">
-                    <div style="color: var(--text-secondary); font-size: 0.82rem; text-align: center; padding: 1rem;">
-                        No scripts generated in this session.
-                    </div>
-                </div>
+            <div class="input-group">
+                <label for="scriptName">Script Identifier / Title</label>
+                <input type="text" id="scriptName" placeholder="e.g. Main_Hub_v1">
             </div>
-        </div>
-    </div>
 
-    <!-- Toast Notifications -->
-    <div id="toast-container"></div>
+            <div class="input-group">
+                <label for="sourceCode">Luau Source Code</label>
+                <textarea id="sourceCode" placeholder="-- Paste Luau script here...&#10;print('Hello World')"></textarea>
+            </div>
 
+            <button id="obfuscateBtn" class="btn-primary">Obfuscate Script</button>
+
+            <div id="outputBox" class="output-box">
+                <div class="output-header">
+                    <span>✅ Script Encrypted Successfully!</span>
+                    <button class="copy-btn" onclick="copyLoader()">Copy Loader Link</button>
+                </div>
+                <div class="loader-code" id="loaderOutput"></div>
+            </div>
+        </section>
+
+        <!-- VAULT CARD -->
+        <section class="card">
+            <div class="card-header">
+                <h2>Your Script Vault</h2>
+                <p>Manage and copy active execution links hosted in server RAM.</p>
+            </div>
+
+            <div id="vaultGrid" class="vault-grid">
+                <p class="empty-vault">Login to view your saved scripts.</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FRONTEND LOGIC -->
     <script>
-        let currentUser = null;
-        const vaultHistory = [];
+        let currentUserId = null;
 
-        // Fetch User Session State on Load
+        // Initialize Session Check
         async function checkAuth() {
             try {
                 const res = await fetch('/api/me');
                 const data = await res.json();
-                
-                const userPanel = document.getElementById('userPanel');
+
+                const userNav = document.getElementById('userNav');
 
                 if (data.authenticated) {
-                    currentUser = data.user;
-                    userPanel.innerHTML = `
-                        <div class="user-profile">
+                    currentUserId = data.user.id;
+                    userNav.innerHTML = `
+                        <div class="profile-card">
                             <img src="${data.user.avatar}" alt="Avatar">
                             <span>${data.user.username}</span>
-                            <a href="/auth/logout" class="logout-btn" title="Logout">
-                                <i class="fa-solid fa-right-from-bracket"></i>
-                            </a>
+                            <a href="/auth/logout" class="logout-link">Logout</a>
                         </div>
                     `;
+                    loadVault();
                 } else {
-                    currentUser = null;
-                    userPanel.innerHTML = `
-                        <a href="/auth/discord" class="discord-btn">
-                            <i class="fa-brands fa-discord"></i> Login with Discord
-                        </a>
-                    `;
+                    userNav.innerHTML = `<a href="/auth/discord" class="auth-btn">Login with Discord</a>`;
+                    document.getElementById('vaultGrid').innerHTML = `<p class="empty-vault">Log in with Discord to access your script vault.</p>`;
                 }
             } catch (err) {
-                console.error("Auth check error:", err);
+                console.error("Auth status error:", err);
             }
         }
 
-        // Live Editor Stats Counter
-        const sourceInput = document.getElementById('sourceCode');
-        const scriptStats = document.getElementById('scriptStats');
+        // Show Alert Banner
+        function showAlert(msg) {
+            const box = document.getElementById('alertBox');
+            box.innerText = msg;
+            box.style.display = 'block';
+            setTimeout(() => { box.style.display = 'none'; }, 5000);
+        }
 
-        sourceInput.addEventListener('input', () => {
-            const val = sourceInput.value;
-            const lines = val ? val.split('\n').length : 0;
-            const chars = val.length;
-            scriptStats.innerText = `${lines} Lines | ${chars} Chars`;
-        });
-
-        // Run Obfuscation
-        async function runObfuscator() {
-            if (!currentUser) {
-                showToast("You must log in with Discord first!", "error");
-                return;
-            }
-
-            const script = sourceInput.value;
-            const scriptName = document.getElementById('scriptName').value || 'Untitled_Script';
+        // Obfuscate Action
+        document.getElementById('obfuscateBtn').addEventListener('click', async () => {
+            const script = document.getElementById('sourceCode').value;
+            const scriptName = document.getElementById('scriptName').value;
+            const btn = document.getElementById('obfuscateBtn');
+            const outputBox = document.getElementById('outputBox');
 
             if (!script.trim()) {
-                showToast("Please enter Luau code to obfuscate.", "error");
+                showAlert("Please enter Luau source code before obfuscating.");
                 return;
             }
 
-            const btn = document.getElementById('obfuscateBtn');
             btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ENCRYPTING...`;
+            btn.innerText = "Encrypting & Building VM...";
 
             try {
-                const response = await fetch('/api/obfuscate', {
+                const res = await fetch('/api/obfuscate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ script, scriptName })
                 });
 
-                const data = await response.json();
+                const data = await res.json();
 
-                if (data.success) {
-                    showToast("Script hardened successfully!", "success");
-                    
-                    // Display loader card
-                    document.getElementById('loaderOutput').innerText = data.loader;
-                    document.getElementById('outputBox').classList.add('active');
-
-                    // Add to vault list
-                    vaultHistory.unshift(data);
-                    renderVault();
-                } else {
-                    showToast(data.error || "Obfuscation failed.", "error");
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || "Obfuscation failed.");
                 }
+
+                document.getElementById('loaderOutput').innerText = data.loader;
+                outputBox.classList.add('active');
+
+                // Reload vault automatically
+                if (currentUserId) loadVault();
+
             } catch (err) {
-                showToast("Server connection error.", "error");
+                showAlert(err.message);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `<i class="fa-solid fa-bolt"></i> OBFUSCATE SCRIPT`;
+                btn.innerText = "Obfuscate Script";
             }
-        }
+        });
 
         // Copy Loader to Clipboard
         function copyLoader() {
-            const loaderText = document.getElementById('loaderOutput').innerText;
-            navigator.clipboard.writeText(loaderText);
-            showToast("Loader copied to clipboard!", "success");
+            const text = document.getElementById('loaderOutput').innerText;
+            navigator.clipboard.writeText(text);
+            alert("Loader copied to clipboard!");
         }
 
-        // Render Vault Items
-        function renderVault() {
-            const vaultList = document.getElementById('vaultList');
-            if (vaultHistory.length === 0) return;
+        // Fetch User Vault
+        async function loadVault() {
+            try {
+                const res = await fetch('/api/vault');
+                const data = await res.json();
 
-            vaultList.innerHTML = vaultHistory.map(item => `
-                <div class="vault-item">
-                    <div class="vault-info">
-                        <span class="vault-name">${item.name}</span>
-                        <span class="vault-time">${item.createdAt}</span>
+                const grid = document.getElementById('vaultGrid');
+
+                if (!data.success || !data.scripts || data.scripts.length === 0) {
+                    grid.innerHTML = `<p class="empty-vault">No scripts saved in vault yet.</p>`;
+                    return;
+                }
+
+                grid.innerHTML = data.scripts.map(item => `
+                    <div class="vault-card">
+                        <div>
+                            <div class="vault-card-title">${escapeHtml(item.name)}</div>
+                            <div class="vault-card-date">Created ${item.createdAt}</div>
+                        </div>
+                        <div class="vault-actions">
+                            <button class="copy-btn" onclick="navigator.clipboard.writeText('${escapeHtml(item.loader)}'); alert('Loader copied!');">Copy Link</button>
+                            <button class="btn-danger" onclick="deleteScript('${item.id}')">Delete</button>
+                        </div>
                     </div>
-                    <div class="vault-actions">
-                        <button class="icon-btn" onclick="copyVaultLoader('${item.loader}')" title="Copy Loader">
-                            <i class="fa-regular fa-copy"></i>
-                        </button>
-                    </div>
-                </div>
-            `).join('');
+                `).join('');
+
+            } catch (err) {
+                console.error("Failed to load vault:", err);
+            }
         }
 
-        function copyVaultLoader(loaderStr) {
-            navigator.clipboard.writeText(loaderStr);
-            showToast("Vault loader copied!", "success");
+        // Delete Script from Vault
+        async function deleteScript(id) {
+            if (!confirm("Are you sure you want to delete this script from RAM?")) return;
+
+            try {
+                const res = await fetch('/api/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    loadVault();
+                } else {
+                    showAlert(data.error || "Failed to delete script.");
+                }
+            } catch (err) {
+                showAlert("Error deleting script.");
+            }
         }
 
-        // Toast Helper
-        function showToast(msg, type = "info") {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = 'toast';
-            
-            const icon = type === 'success' ? 'fa-check-circle' : 'fa-triangle-exclamation';
-            toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${msg}</span>`;
-            
-            container.appendChild(toast);
-
-            setTimeout(() => {
-                toast.style.animation = 'slideIn 0.3s ease reverse forwards';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
+        // Utility: Escaping HTML strings
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
 
-        // Initialize Page
+        // Run on load
         checkAuth();
     </script>
 </body>
