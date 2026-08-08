@@ -1,9 +1,11 @@
 {
   "name": "sin-obfuscator",
   "version": "1.0.0",
+  "description": "SIN Obfuscator Backend & Script Storage API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
     "cookie-session": "^2.1.0",
