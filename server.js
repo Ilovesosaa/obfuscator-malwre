@@ -113,7 +113,6 @@ app.post('/api/obfuscate', (req, res) => {
         const obfuscatedCode = runObfuscationPipeline(script, type);
         const scriptId = crypto.randomBytes(8).toString('hex');
         
-        // Dynamically fallback domain if process.env.DOMAIN is missing
         const domain = process.env.DOMAIN || `${req.protocol}://${req.get('host')}`;
         const loader = `loadstring(game:HttpGet("${domain}/raw/${scriptId}"))()`;
 
@@ -179,6 +178,17 @@ app.post('/api/delete', (req, res) => {
     userVaults.set(req.user.id, updated);
 
     res.json({ success: true });
+});
+
+// PREVENT API ROUTES FROM FALLING THROUGH TO HTML (Fixes Unexpected token '<' errors)
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ success: false, error: 'API endpoint not found.' });
+});
+
+// GLOBAL JSON ERROR HANDLER
+app.use((err, req, res, next) => {
+    console.error("Server Error:", err);
+    res.status(500).json({ success: false, error: err.message || 'Internal server error.' });
 });
 
 // SERVE FRONTEND INDEX.HTML
