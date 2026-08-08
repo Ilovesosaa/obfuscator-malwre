@@ -1,4 +1,3 @@
-const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const cookieSession = require('cookie-session');
@@ -16,24 +15,26 @@ const limiter = rateLimit({
     max: 100,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success: false, error: "Too many requests from this IP, please try again later." }
+    message: { success: false, error: "Too many requests, please try again later." }
 });
 app.use(limiter);
 
 const obfuscateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 15,
-    message: { success: false, error: "Rate limit reached. Please wait a minute before obfuscating again." }
+    message: { success: false, error: "Rate limit reached. Please wait a minute." }
 });
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
 
+// Main Vercel Domain
+const DOMAIN = 'https://sinobfuscator.vercel.app';
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
-// Lightweight cookie session
 app.use(cookieSession({
     name: 'sin_session',
     keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_123'],
@@ -41,18 +42,15 @@ app.use(cookieSession({
     sameSite: 'lax'
 }));
 
-// Compress and encode script payload into a compact token
 function encodePayload(payload) {
     const compressed = pako.deflate(payload);
     return Buffer.from(compressed).toString('base64url');
 }
 
-// Decode and decompress payload
 function decodePayload(token) {
     try {
         const buffer = Buffer.from(token, 'base64url');
-        const decompressed = pako.inflate(buffer, { to: 'string' });
-        return decompressed;
+        return pako.inflate(buffer, { to: 'string' });
     } catch (e) {
         return null;
     }
@@ -88,16 +86,9 @@ return (function(...)
 end)(...);`;
 }
 
-function getBaseUrl(req) {
-    const host = req.headers['x-forwarded-host'] || req.get('host') || `localhost:${PORT}`;
-    const proto = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
-    return `${proto}://${host}`;
-}
-
 // Discord Auth Routes
 app.get('/auth/discord', (req, res) => {
-    const baseUrl = getBaseUrl(req);
-    const redirectUri = encodeURIComponent(`${baseUrl}/auth/discord/callback`);
+    const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
     const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
     
     res.redirect(discordUrl);
@@ -107,8 +98,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
 
-    const baseUrl = getBaseUrl(req);
-    const redirectUri = `${baseUrl}/auth/discord/callback`;
+    const redirectUri = `${DOMAIN}/auth/discord/callback`;
 
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -162,7 +152,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscation Endpoint - Returns ONLY the loader link
+// Obfuscation Endpoint - Outputs: loadstring(game:HttpGet("https://sinobfuscator.vercel.app/raw/..."))()
 app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -176,15 +166,15 @@ app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
         }
 
         const vmPayload = compileToHardenedLuauVM(script);
-        const loaderToken = encodePayload(vmPayload);
+        const token = encodePayload(vmPayload);
 
-        const baseUrl = getBaseUrl(req);
-        const loaderLink = `loadstring(game:HttpGet("${baseUrl}/v3/loader/${loaderToken}"))()`;
+        // Format direct loadstring URL
+        const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${token}"))()`;
 
         return res.json({
             success: true,
             loader: loaderLink,
-            name: scriptName || `Script_${loaderToken.substring(0, 6)}`,
+            name: scriptName || `Script_${token.substring(0, 6)}`,
             createdAt: new Date().toLocaleString()
         });
     } catch (err) {
@@ -192,8 +182,8 @@ app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
     }
 });
 
-// Loader Endpoint - Serves raw obfuscated bytecode to executors
-app.get('/v3/loader/:token', (req, res) => {
+// Raw Endpoint for Roblox Executors
+app.get('/raw/:token', (req, res) => {
     const token = req.params.token;
     const userAgent = req.headers['user-agent'] || '';
 
@@ -201,13 +191,13 @@ app.get('/v3/loader/:token', (req, res) => {
 
     if (!payload) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(404).send("LOCKED: Invalid or expired script token.");
+        return res.status(404).send("-- LOCKED: Invalid or expired script token.");
     }
 
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
     if (isBrowser) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(403).send("LOCKED: Direct browser access denied.");
+        return res.status(403).send("-- LOCKED: Direct browser access denied.");
     }
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
