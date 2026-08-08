@@ -190,6 +190,11 @@
     .script-name { font-weight: 700; color: #f87171; }
     .script-date { font-size: 0.75rem; color: var(--text-sub); }
 
+    .action-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
     .btn-copy-small {
       background: #231924;
       color: #fff;
@@ -198,8 +203,18 @@
       border-radius: 4px;
       font-size: 0.8rem;
       cursor: pointer;
-      align-self: flex-start;
     }
+
+    .btn-delete-small {
+      background: #2b1114;
+      color: #f87171;
+      border: 1px solid #4a191e;
+      padding: 0.35rem 0.7rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .btn-delete-small:hover { background: #3d151a; }
 
     .locked-notice {
       text-align: center;
@@ -344,6 +359,15 @@
       localStorage.setItem(key, JSON.stringify(existing));
     }
 
+    function deleteScript(scriptId) {
+      if (!currentUser) return;
+      const key = `sin_vault_${currentUser.id}`;
+      let existing = JSON.parse(localStorage.getItem(key) || '[]');
+      existing = existing.filter(s => s.id !== scriptId);
+      localStorage.setItem(key, JSON.stringify(existing));
+      loadUserScripts();
+    }
+
     function loadUserScripts() {
       if (!currentUser) return;
       const key = `sin_vault_${currentUser.id}`;
@@ -358,7 +382,10 @@
               <span class="script-date">${s.createdAt}</span>
             </div>
             <div class="link-field">${escapeHtml(s.loader)}</div>
-            <button class="btn-copy-small" onclick="copyText('${escapeJs(s.loader)}')">Copy Link</button>
+            <div class="action-row">
+              <button class="btn-copy-small" onclick="copyText('${escapeJs(s.loader)}')">Copy Link</button>
+              <button class="btn-delete-small" onclick="deleteScript('${s.id}')">Delete</button>
+            </div>
           </div>
         `).join('');
       } else {
