@@ -1,8 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const crypto = require('crypto');
 const path = require('path');
-const session = require('express-session');
+const cookieSession = require('cookie-session');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
@@ -10,6 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
 
+// Rate Limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
@@ -25,25 +25,34 @@ const obfuscateLimiter = rateLimit({
     message: { success: false, error: "Rate limit reached. Please wait a minute before obfuscating again." }
 });
 
-const DISCORD_CLIENT_ID = '1535568167223562350';
-const DISCORD_CLIENT_SECRET = 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
-app.use(session({
-    secret: 'sin_obfuscator_super_secret_key_123',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { 
-        secure: true, 
-        maxAge: 24 * 60 * 60 * 1000 
-    }
+// Stateless session cookie for Vercel serverless compatibility
+app.use(cookieSession({
+    name: 'sin_session',
+    keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_123'],
+    maxAge: 24 * 60 * 60 * 1000,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
 }));
 
-const scriptStore = new Map();     
-const userScriptsStore = new Map(); 
+// Helper to encode/decode script payloads statelessly into tokens
+function encodePayload(payload) {
+    return Buffer.from(payload, 'utf8').toString('base64url');
+}
+
+function decodePayload(token) {
+    try {
+        return Buffer.from(token, 'base64url').toString('utf8');
+    } catch (e) {
+        return null;
+    }
+}
 
 function compileToHardenedLuauVM(sourceCode) {
     const key = Math.floor(Math.random() * 200) + 10;
@@ -75,13 +84,16 @@ return (function(...)
 end)(...);`;
 }
 
-// Discord Auth
+function getBaseUrl(req) {
+    const host = req.headers['x-forwarded-host'] || req.get('host') || `localhost:${PORT}`;
+    const proto = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
+    return `${proto}://${host}`;
+}
+
+// Discord OAuth Routes
 app.get('/auth/discord', (req, res) => {
-    const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
-    const protocol = isRender ? 'https' : req.protocol;
-    const host = req.get('host') || `localhost:${PORT}`;
-    
-    const redirectUri = encodeURIComponent(`${protocol}://${host}/auth/discord/callback`);
+    const baseUrl = getBaseUrl(req);
+    const redirectUri = encodeURIComponent(`${baseUrl}/auth/discord/callback`);
     const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
     
     res.redirect(discordUrl);
@@ -91,10 +103,8 @@ app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
 
-    const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
-    const protocol = isRender ? 'https' : req.protocol;
-    const host = req.get('host') || `localhost:${PORT}`;
-    const redirectUri = `${protocol}://${host}/auth/discord/callback`;
+    const baseUrl = getBaseUrl(req);
+    const redirectUri = `${baseUrl}/auth/discord/callback`;
 
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -130,6 +140,10 @@ app.get('/auth/discord/callback', async (req, res) => {
                 : `https://cdn.discordapp.com/embed/avatars/0.png`
         };
 
+        if (!req.session.scripts) {
+            req.session.scripts = [];
+        }
+
         res.redirect('/');
     } catch (err) {
         res.status(500).send("Login error: " + err.message);
@@ -144,7 +158,7 @@ app.get('/api/me', (req, res) => {
 });
 
 app.get('/auth/logout', (req, res) => {
-    req.session.destroy();
+    req.session = null;
     res.redirect('/');
 });
 
@@ -161,33 +175,26 @@ app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
             return res.status(400).json({ success: false, error: "No Luau source code provided." });
         }
 
-        const loaderId = crypto.randomBytes(6).toString('hex');
         const vmPayload = compileToHardenedLuauVM(script);
+        const loaderToken = encodePayload(vmPayload);
 
-        scriptStore.set(loaderId, { payload: vmPayload });
+        const baseUrl = getBaseUrl(req);
+        const loaderScript = `loadstring(game:HttpGet("${baseUrl}/v3/loader/${loaderToken}"))()`;
 
-        const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
-        const protocol = isRender ? 'https' : req.protocol;
-        const host = req.get('host') || `localhost:${PORT}`;
-        const loaderScript = `loadstring(game:HttpGet("${protocol}://${host}/v3/loader/${loaderId}"))()`;
-
-        const userId = req.session.user.id;
-        if (!userScriptsStore.has(userId)) {
-            userScriptsStore.set(userId, []);
+        if (!req.session.scripts) {
+            req.session.scripts = [];
         }
 
-        const userHistory = userScriptsStore.get(userId);
-        userHistory.unshift({
-            id: loaderId,
-            name: scriptName || `Script_${loaderId}`,
-            rawScript: script, // Saved so it can be re-loaded into editor for editing
+        req.session.scripts.unshift({
+            id: loaderToken,
+            name: scriptName || `Script_${loaderToken.substring(0, 8)}`,
             loader: loaderScript,
             createdAt: new Date().toLocaleString()
         });
 
         return res.json({
             success: true,
-            loaderId: loaderId,
+            loaderId: loaderToken,
             loader: loaderScript
         });
     } catch (err) {
@@ -200,88 +207,40 @@ app.get('/api/my-scripts', (req, res) => {
         return res.status(401).json({ success: false, error: "Unauthorized" });
     }
 
-    const userId = req.session.user.id;
-    const history = userScriptsStore.get(userId) || [];
+    const history = req.session.scripts || [];
     return res.json({ success: true, scripts: history });
 });
 
-// EDIT SCRIPT ENDPOINT
-app.put('/api/script/:id', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
-    const scriptId = req.params.id;
-    const userId = req.session.user.id;
-    const { script, scriptName } = req.body;
-
-    const userHistory = userScriptsStore.get(userId) || [];
-    const index = userHistory.findIndex(s => s.id === scriptId);
-
-    if (index === -1) {
-        return res.status(404).json({ success: false, error: "Script not found in your vault." });
-    }
-
-    try {
-        const vmPayload = compileToHardenedLuauVM(script);
-        scriptStore.set(scriptId, { payload: vmPayload });
-
-        // Update vault data
-        userHistory[index].name = scriptName || userHistory[index].name;
-        userHistory[index].rawScript = script;
-        userHistory[index].createdAt = new Date().toLocaleString() + " (Edited)";
-
-        return res.json({ success: true, loader: userHistory[index].loader });
-    } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// DELETE SCRIPT ENDPOINT
-app.delete('/api/script/:id', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
-    const scriptId = req.params.id;
-    const userId = req.session.user.id;
-
-    const userHistory = userScriptsStore.get(userId) || [];
-    const index = userHistory.findIndex(s => s.id === scriptId);
-
-    if (index !== -1) {
-        userHistory.splice(index, 1);
-    }
-
-    scriptStore.delete(scriptId);
-    return res.json({ success: true });
-});
-
-app.get('/v3/loader/:id', (req, res) => {
-    const loaderId = req.params.id;
+// Loader Endpoint (Stateless payload retrieval)
+app.get('/v3/loader/:token', (req, res) => {
+    const token = req.params.token;
     const userAgent = req.headers['user-agent'] || '';
 
-    const entry = scriptStore.get(loaderId);
+    const payload = decodePayload(token);
 
-    if (!entry) {
+    if (!payload) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(404).send("LOCKED: Invalid or expired script key.");
+        return res.status(404).send("LOCKED: Invalid or expired script token.");
     }
 
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
     if (isBrowser) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(403).send("LOCKED: Source code access denied.");
+        return res.status(403).send("LOCKED: Direct browser viewing denied.");
     }
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(200).send(entry.payload);
+    res.status(200).send(payload);
 });
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(PORT, () => {
-    console.log(`SIN Obfuscator Server running on port ${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`SIN Obfuscator Server running on port ${PORT}`);
+    });
+}
+
+module.exports = app;
