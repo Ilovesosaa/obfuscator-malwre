@@ -77,8 +77,8 @@ end)(...);`;
 
 // Discord Auth
 app.get('/auth/discord', (req, res) => {
-    const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
-    const protocol = isRender ? 'https' : req.protocol;
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.RENDER || req.get('host').includes('vercel.app') || req.get('host').includes('onrender.com');
+    const protocol = isProduction ? 'https' : req.protocol;
     const host = req.get('host') || `localhost:${PORT}`;
     
     const redirectUri = encodeURIComponent(`${protocol}://${host}/auth/discord/callback`);
@@ -91,8 +91,8 @@ app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
 
-    const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
-    const protocol = isRender ? 'https' : req.protocol;
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.RENDER || req.get('host').includes('vercel.app') || req.get('host').includes('onrender.com');
+    const protocol = isProduction ? 'https' : req.protocol;
     const host = req.get('host') || `localhost:${PORT}`;
     const redirectUri = `${protocol}://${host}/auth/discord/callback`;
 
