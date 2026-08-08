@@ -1,339 +1,187 @@
+require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const cookieSession = require('cookie-session');
+const session = require('express-session');
+const passport = require('passport');
+const DiscordStrategy = require('passport-discord').Strategy;
 const crypto = require('crypto');
 const path = require('path');
-
-const fetch = globalThis.fetch || require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.set('trust proxy', 1);
+// IN-MEMORY STORAGE (RAM VAULT)
+const scriptVault = new Map(); // Stores obfuscated raw code
+const userVaults = new Map();  // Maps userId -> array of script meta
 
-const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
-
-// ==================== BULLETPROOF DOMAIN SANITIZER ====================
-// Eliminates "Invalid OAuth2 redirect_uri" errors caused by trailing or double slashes
-const getCleanDomain = () => {
-    let domain = process.env.DOMAIN || process.env.RAILWAY_PUBLIC_DOMAIN || `http://localhost:${PORT}`;
-    domain = domain.trim();
-    
-    // Ensure protocol is present
-    if (!domain.startsWith('http://') && !domain.startsWith('https://')) {
-        domain = `https://${domain}`;
-    }
-    
-    // Strip trailing slashes
-    return domain.replace(/\/+$/, '');
-};
-
-// ==================== IN-MEMORY VAULT ====================
-// Active 24/7 in server RAM
-const scriptVault = new Map();
-
-// ==================== MIDDLEWARE ====================
-app.use(cors());
+// EXPRESS CONFIG
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'public')));
 
-app.use(cookieSession({
-    name: 'sin_session',
-    keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_999'],
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 Days
-    sameSite: 'lax',
-    secure: false
+// SESSION CONFIG
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'sin_obfuscator_default_secret_key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false }
 }));
 
-function generateShortId() {
-    return crypto.randomBytes(4).toString('hex');
-}
+// PASSPORT DISCORD AUTH SETUP
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(obj, done));
 
-// ==================== OBFUSCATOR ENGINE ====================
-function compileToHardenedLuauVM(sourceCode) {
-    const genVar = () => '_0x' + Math.random().toString(16).substring(2, 8);
+passport.use(new DiscordStrategy({
+    clientID: process.env.DISCORD_CLIENT_ID,
+    clientSecret: process.env.DISCORD_CLIENT_SECRET,
+    callbackURL: `${process.env.DOMAIN}/auth/discord/callback`,
+    scope: ['identify']
+}, (accessToken, refreshToken, profile, done) => {
+    return done(null, profile);
+}));
 
-    const v_char = genVar();
-    const v_concat = genVar();
-    const v_bxor = genVar();
-    const v_load = genVar();
-    const v_key = genVar();
-    const v_bytes = genVar();
-    const v_result = genVar();
-    const v_idx = genVar();
-    const v_val = genVar();
-    const v_func = genVar();
-    const v_err = genVar();
-    const v_realByte = genVar();
+app.use(passport.initialize());
+app.use(passport.session());
 
-    const baseKey = Math.floor(Math.random() * 180) + 40;
-    const shiftStep = Math.floor(Math.random() * 13) + 3;
+// AUTH ROUTES
+app.get('/auth/discord', passport.authenticate('discord'));
 
-    // Convert UTF-8 source string safely to byte buffer
-    const sourceBuffer = Buffer.from(sourceCode, 'utf-8');
-    const encryptedBytes = [];
-
-    for (let i = 0; i < sourceBuffer.length; i++) {
-        let byteVal = sourceBuffer[i];
-        let dynamicKey = (baseKey + (i * shiftStep)) % 256;
-        encryptedBytes.push(byteVal ^ dynamicKey);
-    }
-
-    const bytesArrayString = `{${encryptedBytes.join(',')}}`;
-
-    return `--[[ SIN Luau Hardened Shield v5.0 ]]--
-return (function(...)
-    local ${v_char} = string.char
-    local ${v_concat} = table.concat
-    local ${v_bxor} = (bit32 and bit32.bxor) or function(a, b) return a ~ b end
-    local ${v_load} = loadstring or load
-
-    local ${v_key} = ${baseKey}
-    local ${v_bytes} = ${bytesArrayString}
-    local ${v_result} = {}
-
-    for ${v_idx} = 1, #${v_bytes} do
-        local ${v_val} = ${v_bytes}[${v_idx}]
-        local ${v_realByte} = ${v_bxor}(${v_val}, (${v_key} + ((${v_idx} - 1) * ${shiftStep})) % 256)
-        ${v_result}[${v_idx}] = ${v_char}(${v_realByte})
-    end
-
-    local _rawCode = ${v_concat}(${v_result})
-    ${v_bytes} = nil
-    ${v_result} = nil
-
-    local ${v_func}, ${v_err} = ${v_load}(_rawCode)
-    _rawCode = nil
-
-    if ${v_func} then
-        return ${v_func}(...)
-    else
-        error("[SIN Security Runtime Error]: " .. tostring(${v_err}), 0)
-    end
-end)(...);`;
-}
-
-// ==================== DISCORD AUTHENTICATION ====================
-
-// Initiate Discord Login
-app.get('/auth/discord', (req, res) => {
-    try {
-        const DOMAIN = getCleanDomain();
-        const redirectUri = `${DOMAIN}/auth/discord/callback`;
-        const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify`;
-        return res.redirect(discordUrl);
-    } catch (err) {
-        return res.status(500).send("Failed to initiate Discord login: " + err.message);
-    }
-});
-
-// OAuth2 Callback Endpoint
-app.get('/auth/discord/callback', async (req, res) => {
-    const code = req.query.code;
-    if (!code) return res.redirect('/');
-
-    const DOMAIN = getCleanDomain();
-    const redirectUri = `${DOMAIN}/auth/discord/callback`;
-
-    try {
-        // Exchange Code for Access Token
-        const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
-            method: 'POST',
-            body: new URLSearchParams({
-                client_id: DISCORD_CLIENT_ID,
-                client_secret: DISCORD_CLIENT_SECRET,
-                grant_type: 'authorization_code',
-                code: code,
-                redirect_uri: redirectUri,
-            }),
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
-
-        const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) {
-            console.error("[AUTH ERROR] Token exchange failed:", tokenData);
-            return res.status(400).send(`Authentication failed: ${tokenData.error_description || 'Invalid Secret or Redirect URI mismatch'}`);
-        }
-
-        // Fetch User Identity
-        const userResponse = await fetch('https://discord.com/api/users/@me', {
-            headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
-        });
-
-        const userData = await userResponse.json();
-
-        // Save User Session Cookie
-        req.session.user = {
-            id: userData.id,
-            username: userData.username,
-            avatar: userData.avatar 
-                ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
-                : `https://cdn.discordapp.com/embed/avatars/0.png`
-        };
-
-        res.redirect('/');
-    } catch (err) {
-        console.error("[AUTH ERROR] Exception:", err);
-        res.status(500).send("Login error: " + err.message);
-    }
-});
-
-// Fetch Session Info
-app.get('/api/me', (req, res) => {
-    if (req.session && req.session.user) {
-        return res.json({ authenticated: true, user: req.session.user });
-    }
-    return res.json({ authenticated: false });
-});
-
-// Logout User
-app.get('/auth/logout', (req, res) => {
-    req.session = null;
+app.get('/auth/discord/callback', passport.authenticate('discord', {
+    failureRedirect: '/'
+}), (req, res) => {
     res.redirect('/');
 });
 
-// ==================== OBFUSCATOR & VAULT API ====================
+app.get('/auth/logout', (req, res) => {
+    req.logout(() => {
+        res.redirect('/');
+    });
+});
 
-// Obfuscate Luau Code
-app.post('/api/obfuscate', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "You must be logged in with Discord to obfuscate scripts!" });
+app.get('/api/me', (req, res) => {
+    if (req.isAuthenticated()) {
+        const avatar = req.user.avatar 
+            ? `https://cdn.discordapp.com/avatars/${req.user.id}/${req.user.avatar}.png`
+            : `https://cdn.discordapp.com/embed/avatars/${req.user.discriminator % 5}.png`;
+        return res.json({
+            authenticated: true,
+            user: {
+                id: req.user.id,
+                username: req.user.username,
+                avatar: avatar
+            }
+        });
+    }
+    res.json({ authenticated: false });
+});
+
+// ROBLOX-COMPATIBLE OBFUSCATION PIPELINE (.lua & .luau)
+function runObfuscationPipeline(code, fileType) {
+    const header = `--[[ Protected by SIN Obfuscator v5.0 [Roblox Executor Ready] (${fileType.toUpperCase()}) ]]\n`;
+    
+    // Convert source code characters into an escaped byte string array for safe Roblox execution
+    const bytes = [];
+    for (let i = 0; i < code.length; i++) {
+        bytes.push(code.charCodeAt(i));
     }
 
+    // Generates a self-decoding runner fully compatible with Luau VMs in Roblox executors
+    const obfuscatedWrapper = `
+${header}
+local _b = {${bytes.join(',')}}
+local _s = ""
+for i = 1, #_b do
+    _s = _s .. string.char(_b[i])
+end
+return loadstring(_s)()
+`.trim();
+
+    return obfuscatedWrapper;
+}
+
+// OBFUSCATE API
+app.post('/api/obfuscate', (req, res) => {
+    const { script, scriptName, fileType } = req.body;
+
+    if (!script || typeof script !== 'string' || !script.trim()) {
+        return res.status(400).json({ success: false, error: 'No code provided.' });
+    }
+
+    const type = (fileType === 'luau' || script.includes('type ') || script.includes('continue')) ? 'luau' : 'lua';
+    const name = (scriptName && scriptName.trim()) ? scriptName.trim() : `Script_${Date.now().toString().slice(-4)}`;
+
     try {
-        const { script, scriptName } = req.body;
-        if (!script || typeof script !== 'string' || script.trim() === '') {
-            return res.status(400).json({ success: false, error: "No Luau source code provided." });
+        const obfuscatedCode = runObfuscationPipeline(script, type);
+        const scriptId = crypto.randomBytes(8).toString('hex');
+        const loader = `loadstring(game:HttpGet("${process.env.DOMAIN}/raw/${scriptId}"))()`;
+
+        scriptVault.set(scriptId, {
+            code: obfuscatedCode,
+            owner: req.isAuthenticated() ? req.user.id : null,
+            createdAt: new Date()
+        });
+
+        if (req.isAuthenticated()) {
+            const userId = req.user.id;
+            if (!userVaults.has(userId)) userVaults.set(userId, []);
+            userVaults.get(userId).push({
+                id: scriptId,
+                name: name,
+                fileType: type,
+                loader: loader,
+                createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
         }
-
-        const DOMAIN = getCleanDomain();
-        const vmPayload = compileToHardenedLuauVM(script);
-        const scriptId = generateShortId();
-
-        const newEntry = {
-            id: scriptId,
-            ownerId: req.session.user.id,
-            name: (scriptName || '').trim() || `Script_${scriptId}`,
-            payload: vmPayload,
-            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
-        };
-
-        // Store in RAM
-        scriptVault.set(scriptId, newEntry);
-
-        const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
 
         return res.json({
             success: true,
-            id: scriptId,
-            loader: loaderLink,
-            name: newEntry.name,
-            createdAt: newEntry.createdAt
+            loader: loader,
+            scriptId: scriptId
         });
+
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        return res.status(500).json({ success: false, error: 'Obfuscation error: ' + err.message });
     }
 });
 
-// Fetch Personal Vault Items
+// RAW SCRIPT EXECUTION ENDPOINT (Roblox game:HttpGet target)
+app.get('/raw/:id', (req, res) => {
+    const item = scriptVault.get(req.params.id);
+    if (!item) {
+        return res.status(404).send('-- Script expired or invalid loader ID.');
+    }
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(item.code);
+});
+
+// USER VAULT API
 app.get('/api/vault', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized access." });
+    if (!req.isAuthenticated()) {
+        return res.json({ success: false, error: 'Unauthenticated' });
     }
-
-    const userId = req.session.user.id;
-    const DOMAIN = getCleanDomain();
-
-    const userScripts = [];
-    for (const [id, item] of scriptVault.entries()) {
-        if (item.ownerId === userId) {
-            userScripts.push({
-                id: item.id,
-                name: item.name,
-                loader: `loadstring(game:HttpGet("${DOMAIN}/raw/${item.id}"))()`,
-                createdAt: item.createdAt
-            });
-        }
-    }
-
-    return res.json({ success: true, scripts: userScripts });
+    const scripts = userVaults.get(req.user.id) || [];
+    res.json({ success: true, scripts: scripts });
 });
 
-// Delete Item from Vault
 app.post('/api/delete', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized access." });
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
     const { id } = req.body;
-    const entry = scriptVault.get(id);
-
-    if (!entry) {
-        return res.status(404).json({ success: false, error: "Script not found." });
-    }
-
-    if (entry.ownerId !== req.session.user.id) {
-        return res.status(403).json({ success: false, error: "You do not own this script." });
-    }
-
     scriptVault.delete(id);
-    return res.json({ success: true, message: `Script ${id} deleted.` });
+
+    const userList = userVaults.get(req.user.id) || [];
+    const updated = userList.filter(s => s.id !== id);
+    userVaults.set(req.user.id, updated);
+
+    res.json({ success: true });
 });
 
-// ==================== EXECUTOR RAW ENDPOINT ====================
-app.get('/raw/:id', (req, res) => {
-    const id = req.params.id;
-    const acceptHeader = (req.headers['accept'] || '').toLowerCase();
-    const DOMAIN = getCleanDomain();
-
-    const entry = scriptVault.get(id);
-
-    if (!entry) {
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        return res.status(404).send(`error("[SIN SECURITY]: Script ID '${id}' not found or expired.", 0)`);
-    }
-
-    // Direct Browser Access Protection
-    const isBrowserRequest = acceptHeader.includes('text/html');
-
-    if (isBrowserRequest) {
-        res.setHeader('Content-Type', 'text/html');
-        return res.status(403).send(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Access Denied | SIN Obfuscator</title>
-    <style>
-        body { background: #060609; color: #f1f5f9; font-family: system-ui; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .lock-card { background: #0d0d14; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 2.5rem; max-width: 420px; text-align: center; }
-        h1 { color: #ef4444; font-size: 1.4rem; }
-        .cmd-box { background: #040406; border: 1px solid #1e293b; color: #38bdf8; padding: 0.8rem; border-radius: 8px; font-family: monospace; font-size: 0.78rem; word-break: break-all; }
-    </style>
-</head>
-<body>
-    <div class="lock-card">
-        <div style="font-size:3rem;">🔒</div>
-        <h1>RAW ACCESS BLOCKED</h1>
-        <p style="color:#94a3b8; font-size: 0.88rem;">Direct browser viewing is disabled. Execute in Roblox:</p>
-        <div class="cmd-box">loadstring(game:HttpGet("${DOMAIN}/raw/${id}"))()</div>
-    </div>
-</body>
-</html>
-        `);
-    }
-
-    // Serve raw script directly to Roblox executor
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(200).send(entry.payload);
+// SERVE FRONTEND INDEX.HTML
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Serve Main Page
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+app.listen(PORT, () => {
+    console.log(`[SIN] Roblox-compatible Engine operational on port ${PORT}`);
 });
-
-// Start Express Server
-app.listen(PORT, () => console.log(`[SIN HUB] Server active on port ${PORT}`));
