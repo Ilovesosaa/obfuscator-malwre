@@ -1,7 +1,7 @@
 {
   "name": "sin-obfuscator",
-  "version": "1.0.0",
-  "description": "SIN Obfuscator Backend Service",
+  "version": "4.0.0",
+  "description": "Enterprise Luau Security",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,6 +9,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
     "express-session": "^1.17.3"
   }
 }
