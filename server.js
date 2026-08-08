@@ -102,16 +102,15 @@ return (function(...)
 end)(...);`;
 }
 
-// ==================== ROUTES ====================
+// ==================== DISCORD AUTHENTICATION ROUTES ====================
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+// Automatically removes trailing slashes to prevent double-slash bugs
+const getCleanDomain = () => (process.env.DOMAIN || 'http://localhost:3000').replace(/\/+$/, '');
 
-// Discord Auth Routes
 app.get('/auth/discord', (req, res) => {
     try {
-        const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
+        const cleanDomain = getCleanDomain();
+        const redirectUri = encodeURIComponent(`${cleanDomain}/auth/discord/callback`);
         const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
         return res.redirect(discordUrl);
     } catch (err) {
@@ -123,7 +122,8 @@ app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
 
-    const redirectUri = `${DOMAIN}/auth/discord/callback`;
+    const cleanDomain = getCleanDomain();
+    const redirectUri = `${cleanDomain}/auth/discord/callback`;
 
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -139,7 +139,10 @@ app.get('/auth/discord/callback', async (req, res) => {
         });
 
         const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) return res.status(400).send("Authentication failed.");
+        if (!tokenData.access_token) {
+            console.error("Token Exchange Error:", tokenData);
+            return res.status(400).send("Authentication failed. Check your Client Secret in Render environment variables.");
+        }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
@@ -157,6 +160,7 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         res.redirect('/');
     } catch (err) {
+        console.error("Discord Auth Callback Error:", err);
         res.status(500).send("Login error: " + err.message);
     }
 });
