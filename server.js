@@ -77,11 +77,10 @@ end)(...);`;
 
 // Discord Auth
 app.get('/auth/discord', (req, res) => {
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.RENDER || req.get('host').includes('vercel.app') || req.get('host').includes('onrender.com');
-    const protocol = isProduction ? 'https' : req.protocol;
-    const host = req.get('host') || `localhost:${PORT}`;
+    // Force the exact live production URL on Vercel
+    const host = process.env.VERCEL_URL || req.get('host');
+    const redirectUri = encodeURIComponent(`https://sinobfuscator.vercel.app/auth/discord/callback`);
     
-    const redirectUri = encodeURIComponent(`${protocol}://${host}/auth/discord/callback`);
     const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
     
     res.redirect(discordUrl);
@@ -91,10 +90,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
 
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.RENDER || req.get('host').includes('vercel.app') || req.get('host').includes('onrender.com');
-    const protocol = isProduction ? 'https' : req.protocol;
-    const host = req.get('host') || `localhost:${PORT}`;
-    const redirectUri = `${protocol}://${host}/auth/discord/callback`;
+    const redirectUri = `https://sinobfuscator.vercel.app/auth/discord/callback`;
 
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
