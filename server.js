@@ -3,6 +3,7 @@ const cors = require('cors');
 const cookieSession = require('cookie-session');
 const crypto = require('crypto');
 const path = require('path');
+const { Redis } = require('@upstash/redis');
 
 // Polyfill fetch for older Node runtimes
 const fetch = globalThis.fetch || require('node-fetch');
@@ -14,12 +15,43 @@ app.set('trust proxy', 1);
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
-const DOMAIN = 'https://sinobfuscator.vercel.app';
+const DOMAIN = process.env.DOMAIN || 'https://sinobfuscator.vercel.app';
 
-// In-memory script storage
-const scriptVault = new Map();
+// ==================== PERSISTENT STORAGE SETUP ====================
+// Connect to Upstash Redis (or fall back to local Map if keys aren't set)
+const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+    ? Redis.fromEnv()
+    : null;
 
-// Middleware
+const fallbackVault = new Map(); // Local fallback for development
+
+async function saveScript(id, data) {
+    if (redis) {
+        // Automatically expires/deletes scripts after 7 days (604,800 seconds)
+        await redis.set(`script:${id}`, JSON.stringify(data), { ex: 604800 });
+    } else {
+        fallbackVault.set(id, data);
+    }
+}
+
+async function getScript(id) {
+    if (redis) {
+        const data = await redis.get(`script:${id}`);
+        if (!data) return null;
+        return typeof data === 'string' ? JSON.parse(data) : data;
+    }
+    return fallbackVault.get(id);
+}
+
+async function deleteScript(id) {
+    if (redis) {
+        await redis.del(`script:${id}`);
+    } else {
+        fallbackVault.delete(id);
+    }
+}
+
+// ==================== MIDDLEWARE ====================
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -174,7 +206,7 @@ app.get('/auth/logout', (req, res) => {
 });
 
 // Obfuscate API Endpoint
-app.post('/api/obfuscate', (req, res) => {
+app.post('/api/obfuscate', async (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
     }
@@ -188,7 +220,8 @@ app.post('/api/obfuscate', (req, res) => {
         const vmPayload = compileToHardenedLuauVM(script);
         const scriptId = generateShortId();
 
-        scriptVault.set(scriptId, {
+        // Save persistently to Redis / Vault
+        await saveScript(scriptId, {
             ownerId: req.session.user.id,
             payload: vmPayload,
             createdAt: new Date().toLocaleString()
@@ -209,7 +242,7 @@ app.post('/api/obfuscate', (req, res) => {
 });
 
 // Delete Script Endpoint
-app.post('/api/delete', (req, res) => {
+app.post('/api/delete', async (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "Unauthorized access." });
     }
@@ -217,19 +250,18 @@ app.post('/api/delete', (req, res) => {
     const { id } = req.body;
     if (!id) return res.status(400).json({ success: false, error: "Missing script ID." });
 
-    if (scriptVault.has(id)) {
-        scriptVault.delete(id);
-    }
+    await deleteScript(id);
 
     return res.json({ success: true, message: `Script ${id} deleted successfully.` });
 });
 
 // ==================== HARDENED RAW ENDPOINT ====================
-app.get('/raw/:id', (req, res) => {
+app.get('/raw/:id', async (req, res) => {
     const id = req.params.id;
     const userAgent = (req.headers['user-agent'] || '').toLowerCase();
 
-    const entry = scriptVault.get(id);
+    // Retrieve persistently from Redis / Vault
+    const entry = await getScript(id);
 
     if (!entry) {
         res.setHeader('Content-Type', 'text/plain');
