@@ -12,17 +12,8 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Bulletproof path resolution for Vercel serverless environments
-const possiblePaths = [
-    path.join(__dirname, 'public'),
-    path.join(__dirname, '../public'),
-    path.join(process.cwd(), 'public'),
-    path.resolve('./public')
-];
-
-let publicPath = possiblePaths.find(p => fs.existsSync(p)) || possiblePaths[0];
-
-app.use(express.static(publicPath));
+// Serve static files directly from the main project folder
+app.use(express.static(__dirname));
 
 app.use(session({
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
@@ -42,11 +33,11 @@ const pool = new Pool({
 });
 
 app.get('/', (req, res) => {
-    const indexPath = path.join(publicPath, 'index.html');
+    const indexPath = path.join(__dirname, 'index.html');
     if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
     } else {
-        res.status(404).send(`Error: index.html not found. Searched in: ${possiblePaths.join(', ')}`);
+        res.status(404).send("Error: index.html not found in the main project folder.");
     }
 });
 
