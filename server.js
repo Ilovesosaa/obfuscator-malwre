@@ -1,88 +1,37 @@
 const express = require('express');
-const cors = require('cors');
-const crypto = require('crypto');
-const path = require('path');
 const session = require('express-session');
-const rateLimit = require('express-rate-limit');
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
 
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, error: "Too many requests from this IP, please try again later." }
-});
-app.use(limiter);
-
-const obfuscateLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 10,
-    message: { success: false, error: "Rate limit reached. Please wait a minute before obfuscating again." }
-});
-
-const DISCORD_CLIENT_ID = '1535568167223562350';
-const DISCORD_CLIENT_SECRET = 'hAbMYlbS7z_8lZevUPrrbAFwfs_g3d8u';
-
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static(__dirname));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
 
 app.use(session({
-    secret: 'sin_obfuscator_super_secret_key_123',
+    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
     resave: false,
     saveUninitialized: false,
-    cookie: { 
-        secure: true, 
-        maxAge: 24 * 60 * 60 * 1000 
+    cookie: {
+        secure: true,
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000
     }
 }));
 
-const scriptStore = new Map();     
-const userScriptsStore = new Map(); 
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
 
-function compileToHardenedLuauVM(sourceCode) {
-    const key = Math.floor(Math.random() * 200) + 10;
-    let encoded = '';
-    for (let i = 0; i < sourceCode.length; i++) {
-        encoded += String.fromCharCode(sourceCode.charCodeAt(i) ^ key);
-    }
-    const safeString = JSON.stringify(encoded);
-
-    return `--[[ SIN Obfuscator v4.0 ]]--
-return (function(...)
-    local _k = ${key}
-    local _str = ${safeString}
-    local _char = string.char
-    if type(_str) ~= "string" then return end
-
-    local _buf = {}
-    local _sub = string.sub
-    local _byte = string.byte
-    local _len = #_str
-
-    for i = 1, _len do
-        _buf[i] = _char(bit32 and bit32.bxor(_byte(_sub(_str, i, i)), _k) or (_byte(_sub(_str, i, i)) ~ _k))
-    end
-
-    local _code = table.concat(_buf)
-    local _f, _e = loadstring(_code)
-    if _f then return _f(...) else error("[SIN Runtime Error]: " .. tostring(_e), 0) end
-end)(...);`;
-}
-
-// Discord Auth
+// Discord Authentication Routes
 app.get('/auth/discord', (req, res) => {
-    // Force the exact live production URL on Vercel
-    const host = process.env.VERCEL_URL || req.get('host');
     const redirectUri = encodeURIComponent(`https://sinobfuscator.vercel.app/auth/discord/callback`);
-    
-    const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
-    
+    const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
     res.redirect(discordUrl);
 });
 
@@ -96,8 +45,8 @@ app.get('/auth/discord/callback', async (req, res) => {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
             body: new URLSearchParams({
-                client_id: DISCORD_CLIENT_ID,
-                client_secret: DISCORD_CLIENT_SECRET,
+                client_id: process.env.DISCORD_CLIENT_ID,
+                client_secret: process.env.DISCORD_CLIENT_SECRET,
                 grant_type: 'authorization_code',
                 code: code,
                 redirect_uri: redirectUri,
@@ -140,144 +89,72 @@ app.get('/api/me', (req, res) => {
 });
 
 app.get('/auth/logout', (req, res) => {
-    req.session.destroy();
-    res.redirect('/');
+    req.session.destroy(() => {
+        res.redirect('/');
+    });
 });
 
-// Obfuscation Endpoints
-app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
+// Script Vault API Routes
+app.post('/api/save-script', async (req, res) => {
     if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
+        return res.status(401).json({ error: "You must be logged in with Discord to save scripts." });
+    }
+
+    const { scriptName, scriptContent } = req.body;
+    const discordId = req.session.user.id;
+
+    if (!scriptName || !scriptContent) {
+        return res.status(400).json({ error: "Script name and content are required." });
     }
 
     try {
-        const { script, scriptName } = req.body;
-
-        if (!script || typeof script !== 'string' || script.trim() === '') {
-            return res.status(400).json({ success: false, error: "No Luau source code provided." });
-        }
-
-        const loaderId = crypto.randomBytes(6).toString('hex');
-        const vmPayload = compileToHardenedLuauVM(script);
-
-        scriptStore.set(loaderId, { payload: vmPayload });
-
-        const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
-        const protocol = isRender ? 'https' : req.protocol;
-        const host = req.get('host') || `localhost:${PORT}`;
-        const loaderScript = `loadstring(game:HttpGet("${protocol}://${host}/v3/loader/${loaderId}"))()`;
-
-        const userId = req.session.user.id;
-        if (!userScriptsStore.has(userId)) {
-            userScriptsStore.set(userId, []);
-        }
-
-        const userHistory = userScriptsStore.get(userId);
-        userHistory.unshift({
-            id: loaderId,
-            name: scriptName || `Script_${loaderId}`,
-            rawScript: script, // Saved so it can be re-loaded into editor for editing
-            loader: loaderScript,
-            createdAt: new Date().toLocaleString()
-        });
-
-        return res.json({
-            success: true,
-            loaderId: loaderId,
-            loader: loaderScript
-        });
+        const query = `INSERT INTO saved_scripts (discord_id, script_name, script_content) VALUES ($1, $2, $3) RETURNING *`;
+        const values = [discordId, scriptName, scriptContent];
+        const result = await pool.query(query, values);
+        
+        res.json({ success: true, saved: result.rows[0] });
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        console.error("Database Save Error:", err);
+        res.status(500).json({ error: "Failed to save script to vault." });
     }
 });
 
-app.get('/api/my-scripts', (req, res) => {
+app.get('/api/my-scripts', async (req, res) => {
     if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
-    const userId = req.session.user.id;
-    const history = userScriptsStore.get(userId) || [];
-    return res.json({ success: true, scripts: history });
-});
-
-// EDIT SCRIPT ENDPOINT
-app.put('/api/script/:id', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
-    const scriptId = req.params.id;
-    const userId = req.session.user.id;
-    const { script, scriptName } = req.body;
-
-    const userHistory = userScriptsStore.get(userId) || [];
-    const index = userHistory.findIndex(s => s.id === scriptId);
-
-    if (index === -1) {
-        return res.status(404).json({ success: false, error: "Script not found in your vault." });
+        return res.status(401).json({ error: "Unauthorized" });
     }
 
     try {
-        const vmPayload = compileToHardenedLuauVM(script);
-        scriptStore.set(scriptId, { payload: vmPayload });
-
-        // Update vault data
-        userHistory[index].name = scriptName || userHistory[index].name;
-        userHistory[index].rawScript = script;
-        userHistory[index].createdAt = new Date().toLocaleString() + " (Edited)";
-
-        return res.json({ success: true, loader: userHistory[index].loader });
+        const query = `SELECT id, script_name, script_content, created_at FROM saved_scripts WHERE discord_id = $1 ORDER BY created_at DESC`;
+        const result = await pool.query(query, [req.session.user.id]);
+        
+        res.json({ scripts: result.rows });
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        console.error("Database Fetch Error:", err);
+        res.status(500).json({ error: "Failed to load scripts." });
     }
 });
 
-// DELETE SCRIPT ENDPOINT
-app.delete('/api/script/:id', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-
+// Roblox Loadstring Loader Route
+app.get('/v3/loader/:id', async (req, res) => {
     const scriptId = req.params.id;
-    const userId = req.session.user.id;
 
-    const userHistory = userScriptsStore.get(userId) || [];
-    const index = userHistory.findIndex(s => s.id === scriptId);
+    try {
+        const query = `SELECT script_content FROM saved_scripts WHERE id = $1`;
+        const result = await pool.query(query, [scriptId]);
 
-    if (index !== -1) {
-        userHistory.splice(index, 1);
-    }
+        if (result.rows.length === 0) {
+            return res.status(404).send("-- Error: Script not found in vault.");
+        }
 
-    scriptStore.delete(scriptId);
-    return res.json({ success: true });
-});
-
-app.get('/v3/loader/:id', (req, res) => {
-    const loaderId = req.params.id;
-    const userAgent = req.headers['user-agent'] || '';
-
-    const entry = scriptStore.get(loaderId);
-
-    if (!entry) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(404).send("LOCKED: Invalid or expired script key.");
+        res.send(result.rows[0].script_content);
+    } catch (err) {
+        console.error("Loader Error:", err);
+        res.status(500).send("-- Error: Failed to load script.");
     }
-
-    const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
-    if (isBrowser) {
-        res.setHeader('Content-Type', 'text/plain');
-        return res.status(403).send("LOCKED: Source code access denied.");
-    }
-
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.status(200).send(entry.payload);
-});
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`SIN Obfuscator Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
