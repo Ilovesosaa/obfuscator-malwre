@@ -7,7 +7,7 @@ const path = require('path');
 const fetch = globalThis.fetch || require('node-fetch');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 app.set('trust proxy', 1);
 
