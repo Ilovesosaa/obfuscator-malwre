@@ -3,416 +3,757 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIN Obfuscator | Hardened Luau Protection</title>
+    <title>SIN | Next-Gen Luau Script Protection</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-main: #06060a;
-            --bg-card: #0d0d14;
-            --bg-card-border: rgba(255, 255, 255, 0.08);
+            --bg-dark: #030305;
+            --card-bg: rgba(13, 13, 20, 0.65);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --card-border-glow: rgba(239, 68, 68, 0.35);
+            
             --accent-red: #ef4444;
             --accent-red-hover: #dc2626;
-            --accent-glow: rgba(239, 68, 68, 0.25);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --font-code: 'Fira Code', monospace;
+            --accent-glow: rgba(239, 68, 68, 0.4);
+            
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-dark: #64748b;
+            
+            --font-sans: 'Plus Jakarta Sans', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            user-select: none;
         }
 
         body {
-            background-color: var(--bg-main);
-            color: var(--text-main);
-            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding-bottom: 3rem;
+            overflow-x: hidden;
+            position: relative;
         }
 
-        /* NAVBAR */
+        /* AMBIENT BACKGROUND GLOWS */
+        .ambient-glow-1 {
+            position: absolute;
+            top: -150px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+            filter: blur(80px);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .ambient-glow-2 {
+            position: absolute;
+            bottom: 0;
+            right: -100px;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
+            filter: blur(100px);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* GRID OVERLAY EFFECT */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* HEADER */
         header {
             width: 100%;
-            max-width: 1100px;
-            padding: 1.5rem 1rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1.5rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid var(--bg-card-border);
         }
 
         .brand {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            font-weight: 700;
-            font-size: 1.3rem;
+            gap: 0.8rem;
+            text-decoration: none;
+        }
+
+        .brand-logo {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, #ef4444, #991b1b);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: white;
+            font-size: 1.1rem;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .brand-title {
+            font-size: 1.25rem;
+            font-weight: 800;
             letter-spacing: -0.5px;
+            color: var(--text-primary);
         }
 
         .brand-badge {
-            background: var(--accent-red);
-            color: white;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--accent-red);
             font-size: 0.65rem;
             font-weight: 700;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            border-radius: 20px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .user-nav {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
+        /* USER PROFILE / AUTH BUTTON */
         .auth-btn {
             background: #5865F2;
             color: white;
             text-decoration: none;
-            padding: 0.55rem 1.1rem;
-            border-radius: 6px;
-            font-size: 0.9rem;
+            padding: 0.65rem 1.3rem;
+            border-radius: 10px;
+            font-size: 0.88rem;
             font-weight: 600;
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-            transition: opacity 0.2s;
+            gap: 0.6rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.25);
         }
 
         .auth-btn:hover {
-            opacity: 0.9;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(88, 101, 242, 0.4);
         }
 
         .profile-card {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            background: var(--bg-card);
-            border: 1px solid var(--bg-card-border);
-            padding: 0.4rem 0.8rem;
+            gap: 0.8rem;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(12px);
+            padding: 0.4rem 1rem 0.4rem 0.5rem;
             border-radius: 30px;
         }
 
         .profile-card img {
-            width: 28px;
-            height: 28px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
+            border: 2px solid var(--accent-red);
         }
 
-        .profile-card span {
+        .profile-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .profile-name {
             font-size: 0.85rem;
-            font-weight: 600;
+            font-weight: 700;
         }
 
         .logout-link {
-            color: var(--text-muted);
+            color: var(--text-dark);
             text-decoration: none;
-            font-size: 0.8rem;
-            margin-left: 0.5rem;
+            font-size: 0.75rem;
+            transition: color 0.2s;
         }
 
         .logout-link:hover {
             color: var(--accent-red);
         }
 
-        /* MAIN CONTAINER */
+        /* CONTAINER */
         main {
             width: 100%;
-            max-width: 1100px;
-            padding: 2rem 1rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1.5rem;
             display: flex;
             flex-direction: column;
             gap: 2rem;
         }
 
+        /* STATS BAR */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(16px);
+            border-radius: 14px;
+            padding: 1.2rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .stat-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--card-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .stat-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .stat-label {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #22c55e;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
+        /* MAIN OBFUSCATOR CARD */
         .card {
-            background: var(--bg-card);
-            border: 1px solid var(--bg-card-border);
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(16px);
+            border-radius: 18px;
+            padding: 1.8rem;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            transition: border-color 0.3s;
         }
 
         .card-header {
-            margin-bottom: 1rem;
-        }
-
-        .card-header h2 {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--text-main);
-        }
-
-        .card-header p {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-top: 0.2rem;
-        }
-
-        /* FORM CONTROLS */
-        .input-group {
             display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+
+        .card-title p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.3rem;
+        }
+
+        /* EDITOR STYLES */
+        .input-field-group {
             margin-bottom: 1.2rem;
         }
 
-        label {
-            font-size: 0.8rem;
+        .input-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.78rem;
             font-weight: 600;
-            color: var(--text-muted);
+            color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
         }
 
-        input[type="text"], textarea {
+        input[type="text"] {
             width: 100%;
-            background: #040406;
-            border: 1px solid var(--bg-card-border);
-            border-radius: 8px;
-            color: var(--text-main);
-            padding: 0.75rem 1rem;
+            background: rgba(4, 4, 6, 0.8);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            padding: 0.85rem 1rem;
             font-size: 0.9rem;
             outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            font-family: var(--font-sans);
+            transition: all 0.2s ease;
         }
 
-        input[type="text"]:focus, textarea:focus {
+        input[type="text"]:focus {
             border-color: var(--accent-red);
-            box-shadow: 0 0 10px var(--accent-glow);
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .editor-wrapper {
+            position: relative;
+            background: rgba(4, 4, 6, 0.85);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .editor-wrapper:focus-within {
+            border-color: var(--accent-red);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .editor-toolbar {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--card-border);
+            padding: 0.6rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .editor-lang {
+            font-family: var(--font-code);
+            font-size: 0.75rem;
+            color: var(--accent-red);
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .editor-clear-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dark);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .editor-clear-btn:hover {
+            color: var(--text-primary);
         }
 
         textarea {
+            width: 100%;
+            height: 320px;
+            background: transparent;
+            border: none;
+            color: #e2e8f0;
+            padding: 1rem;
+            font-size: 0.88rem;
             font-family: var(--font-code);
-            height: 280px;
+            line-height: 1.6;
             resize: vertical;
-            line-height: 1.5;
+            outline: none;
+            user-select: text;
         }
 
-        .btn-primary {
-            background: var(--accent-red);
+        textarea::placeholder {
+            color: #475569;
+        }
+
+        /* PRIMARY ACTION BUTTON */
+        .btn-submit {
+            margin-top: 1.2rem;
+            width: 100%;
+            background: linear-gradient(135deg, var(--accent-red), #b91c1c);
             color: white;
             border: none;
-            padding: 0.85rem 1.5rem;
-            border-radius: 8px;
+            padding: 1rem;
+            border-radius: 12px;
             font-size: 0.95rem;
-            font-weight: 600;
+            font-weight: 700;
+            letter-spacing: 0.3px;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-            width: 100%;
+            transition: all 0.25 ease;
+            box-shadow: 0 4px 20px var(--accent-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
         }
 
-        .btn-primary:hover {
-            background: var(--accent-red-hover);
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--accent-glow);
+            background: linear-gradient(135deg, #f87171, var(--accent-red));
         }
 
-        .btn-primary:active {
-            transform: scale(0.99);
+        .btn-submit:active {
+            transform: translateY(0);
         }
 
-        .btn-primary:disabled {
+        .btn-submit:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none !important;
         }
 
-        /* OUTPUT BOX */
-        .output-box {
+        /* OUTPUT MODAL BOX */
+        .output-panel {
             display: none;
             margin-top: 1.5rem;
-            background: #040406;
-            border: 1px solid rgba(34, 197, 94, 0.3);
-            border-radius: 8px;
-            padding: 1rem;
+            background: rgba(6, 78, 59, 0.15);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+            border-radius: 12px;
+            padding: 1.2rem;
+            animation: fadeIn 0.3s ease;
         }
 
-        .output-box.active {
+        .output-panel.active {
             display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .output-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.8rem;
         }
 
-        .output-header span {
-            font-size: 0.8rem;
+        .output-title {
+            color: #34d399;
+            font-size: 0.85rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .btn-copy {
+            background: rgba(52, 211, 153, 0.2);
+            border: 1px solid rgba(52, 211, 153, 0.4);
+            color: #6ee7b7;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.78rem;
             font-weight: 600;
-            color: #22c55e;
-        }
-
-        .copy-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--bg-card-border);
-            color: var(--text-main);
-            padding: 0.3rem 0.7rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
             cursor: pointer;
+            transition: all 0.2s;
         }
 
-        .copy-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
+        .btn-copy:hover {
+            background: rgba(52, 211, 153, 0.35);
+            color: white;
         }
 
-        .loader-code {
+        .loader-output-code {
+            background: rgba(4, 4, 6, 0.9);
+            border: 1px solid var(--card-border);
+            padding: 0.85rem;
+            border-radius: 8px;
             font-family: var(--font-code);
-            font-size: 0.8rem;
+            font-size: 0.82rem;
             color: #38bdf8;
             word-break: break-all;
+            user-select: text;
         }
 
-        /* VAULT GRID */
+        /* SCRIPT VAULT GRID */
         .vault-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1rem;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1.2rem;
             margin-top: 1rem;
         }
 
         .vault-card {
-            background: #040406;
-            border: 1px solid var(--bg-card-border);
-            border-radius: 8px;
-            padding: 1rem;
+            background: rgba(4, 4, 6, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 1.2rem;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            gap: 0.8rem;
+            gap: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .vault-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            background: rgba(10, 10, 16, 0.8);
         }
 
         .vault-card-title {
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: var(--text-main);
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
         }
 
         .vault-card-date {
             font-size: 0.75rem;
-            color: var(--text-muted);
+            color: var(--text-dark);
+            margin-top: 0.2rem;
         }
 
-        .vault-actions {
+        .vault-card-actions {
             display: flex;
-            gap: 0.5rem;
+            gap: 0.6rem;
         }
 
-        .btn-danger {
-            background: rgba(239, 68, 68, 0.15);
-            color: #f87171;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            padding: 0.35rem 0.6rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
+        .btn-vault-copy {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            color: var(--text-primary);
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
             cursor: pointer;
+            transition: background 0.2s;
         }
 
-        .btn-danger:hover {
-            background: rgba(239, 68, 68, 0.3);
+        .btn-vault-copy:hover {
+            background: rgba(255, 255, 255, 0.15);
         }
 
-        .empty-vault {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            font-style: italic;
-        }
-
-        /* ERROR/ALERT NOTIFICATIONS */
-        .alert {
-            padding: 0.8rem 1rem;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            margin-bottom: 1rem;
-            display: none;
-        }
-
-        .alert-error {
-            background: rgba(239, 68, 68, 0.15);
-            border: 1px solid rgba(239, 68, 68, 0.3);
+        .btn-vault-delete {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.25);
             color: #f87171;
+            padding: 0.5rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-vault-delete:hover {
+            background: rgba(239, 68, 68, 0.25);
+            color: white;
+        }
+
+        .empty-vault-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-dark);
+            font-size: 0.9rem;
+            border: 1px dashed var(--card-border);
+            border-radius: 12px;
+        }
+
+        /* TOAST NOTIFICATION SYSTEM */
+        #toastContainer {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 9999;
+        }
+
+        .toast {
+            background: rgba(13, 13, 20, 0.9);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(16px);
+            color: white;
+            padding: 0.85rem 1.2rem;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            animation: toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .toast-error { border-color: rgba(239, 68, 68, 0.5); }
+        .toast-success { border-color: rgba(52, 211, 153, 0.5); }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(50px); }
+            to { opacity: 1; transform: translateX(0); }
         }
     </style>
 </head>
 <body>
 
+    <!-- BACKGROUND GLOWS -->
+    <div class="ambient-glow-1"></div>
+    <div class="ambient-glow-2"></div>
+
+    <!-- TOAST CONTAINER -->
+    <div id="toastContainer"></div>
+
     <!-- NAVBAR -->
     <header>
-        <div class="brand">
-            <span>SIN</span>
+        <a href="/" class="brand">
+            <div class="brand-logo">S</div>
+            <span class="brand-title">SIN OBFUSCATOR</span>
             <span class="brand-badge">v5.0</span>
-        </div>
-        <div class="user-nav" id="userNav">
-            <!-- Populated dynamically via JS -->
-            <a href="/auth/discord" class="auth-btn">Login with Discord</a>
+        </a>
+
+        <div id="userNav">
+            <!-- Populated via JS -->
+            <a href="/auth/discord" class="auth-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+                Login with Discord
+            </a>
         </div>
     </header>
 
     <!-- MAIN DASHBOARD -->
     <main>
 
-        <div id="alertBox" class="alert alert-error"></div>
+        <!-- STATS BAR -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-icon"><div class="pulse-dot"></div></div>
+                <div>
+                    <div class="stat-value">Active & Ready</div>
+                    <div class="stat-label">Hardened VM Engine</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🛡️</div>
+                <div>
+                    <div class="stat-value">Luau v5.0</div>
+                    <div class="stat-label">Dynamic Key Obfuscation</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div>
+                    <div class="stat-value" id="scriptCountDisplay">0</div>
+                    <div class="stat-label">Saved In Memory Vault</div>
+                </div>
+            </div>
+        </div>
 
-        <!-- EDITOR CARD -->
+        <!-- MAIN EDITOR CARD -->
         <section class="card">
             <div class="card-header">
-                <h2>Luau Obfuscator Engine</h2>
-                <p>Compile source Luau scripts into dynamic VM loader links.</p>
-            </div>
-
-            <div class="input-group">
-                <label for="scriptName">Script Identifier / Title</label>
-                <input type="text" id="scriptName" placeholder="e.g. Main_Hub_v1">
-            </div>
-
-            <div class="input-group">
-                <label for="sourceCode">Luau Source Code</label>
-                <textarea id="sourceCode" placeholder="-- Paste Luau script here...&#10;print('Hello World')"></textarea>
-            </div>
-
-            <button id="obfuscateBtn" class="btn-primary">Obfuscate Script</button>
-
-            <div id="outputBox" class="output-box">
-                <div class="output-header">
-                    <span>✅ Script Encrypted Successfully!</span>
-                    <button class="copy-btn" onclick="copyLoader()">Copy Loader Link</button>
+                <div class="card-title">
+                    <h2>Script Encryption Engine</h2>
+                    <p>Compile source Luau code into protected in-memory loader URLs.</p>
                 </div>
-                <div class="loader-code" id="loaderOutput"></div>
+            </div>
+
+            <div class="input-field-group">
+                <div class="input-label">Script Identifier</div>
+                <input type="text" id="scriptName" placeholder="e.g. MainHub_v2">
+            </div>
+
+            <div class="input-field-group">
+                <div class="input-label">
+                    <span>Source Code</span>
+                    <span id="charCount" style="color: var(--text-dark);">0 chars</span>
+                </div>
+                <div class="editor-wrapper">
+                    <div class="editor-toolbar">
+                        <span class="editor-lang">LUAU / LUA 5.1</span>
+                        <button class="editor-clear-btn" id="clearBtn">Clear Editor</button>
+                    </div>
+                    <textarea id="sourceCode" placeholder="-- Paste Luau script here...&#10;print('Protected by SIN Obfuscator')"></textarea>
+                </div>
+            </div>
+
+            <button id="obfuscateBtn" class="btn-submit">
+                <span>Obfuscate Script</span>
+            </button>
+
+            <!-- OUTPUT LOADER PANEL -->
+            <div id="outputBox" class="output-panel">
+                <div class="output-header">
+                    <span class="output-title">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                        Script Encrypted & Hosted Successfully
+                    </span>
+                    <button class="btn-copy" onclick="copyLoader()">Copy Loader Link</button>
+                </div>
+                <div class="loader-output-code" id="loaderOutput"></div>
             </div>
         </section>
 
-        <!-- VAULT CARD -->
+        <!-- VAULT SECTION -->
         <section class="card">
             <div class="card-header">
-                <h2>Your Script Vault</h2>
-                <p>Manage and copy active execution links hosted in server RAM.</p>
+                <div class="card-title">
+                    <h2>Memory Vault</h2>
+                    <p>Manage and copy active execution loaders currently running in RAM.</p>
+                </div>
             </div>
 
             <div id="vaultGrid" class="vault-grid">
-                <p class="empty-vault">Login to view your saved scripts.</p>
+                <div class="empty-vault-state">Log in with Discord to access your script vault.</div>
             </div>
         </section>
 
     </main>
 
-    <!-- FRONTEND LOGIC -->
+    <!-- FRONTEND JAVASCRIPT -->
     <script>
         let currentUserId = null;
 
-        // Initialize Session Check
+        // SHOW TOAST NOTIFICATION
+        function showToast(message, type = 'error') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <span>${type === 'error' ? '⚠️' : '✅'}</span>
+                <span>${escapeHtml(message)}</span>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(50px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // INITIALIZE AUTH STATUS
         async function checkAuth() {
             try {
                 const res = await fetch('/api/me');
                 const data = await res.json();
-
                 const userNav = document.getElementById('userNav');
 
                 if (data.authenticated) {
@@ -420,42 +761,53 @@
                     userNav.innerHTML = `
                         <div class="profile-card">
                             <img src="${data.user.avatar}" alt="Avatar">
-                            <span>${data.user.username}</span>
-                            <a href="/auth/logout" class="logout-link">Logout</a>
+                            <div class="profile-info">
+                                <span class="profile-name">${escapeHtml(data.user.username)}</span>
+                                <a href="/auth/logout" class="logout-link">Sign Out</a>
+                            </div>
                         </div>
                     `;
                     loadVault();
                 } else {
-                    userNav.innerHTML = `<a href="/auth/discord" class="auth-btn">Login with Discord</a>`;
-                    document.getElementById('vaultGrid').innerHTML = `<p class="empty-vault">Log in with Discord to access your script vault.</p>`;
+                    userNav.innerHTML = `
+                        <a href="/auth/discord" class="auth-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+                            Login with Discord
+                        </a>
+                    `;
                 }
             } catch (err) {
                 console.error("Auth status error:", err);
             }
         }
 
-        // Show Alert Banner
-        function showAlert(msg) {
-            const box = document.getElementById('alertBox');
-            box.innerText = msg;
-            box.style.display = 'block';
-            setTimeout(() => { box.style.display = 'none'; }, 5000);
-        }
+        // CHARACTER COUNTER & CLEAR BUTTON
+        const sourceInput = document.getElementById('sourceCode');
+        const charCount = document.getElementById('charCount');
 
-        // Obfuscate Action
+        sourceInput.addEventListener('input', () => {
+            charCount.innerText = `${sourceInput.value.length} chars`;
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            sourceInput.value = '';
+            charCount.innerText = '0 chars';
+        });
+
+        // OBFUSCATE BUTTON ACTION
         document.getElementById('obfuscateBtn').addEventListener('click', async () => {
-            const script = document.getElementById('sourceCode').value;
+            const script = sourceInput.value;
             const scriptName = document.getElementById('scriptName').value;
             const btn = document.getElementById('obfuscateBtn');
             const outputBox = document.getElementById('outputBox');
 
             if (!script.trim()) {
-                showAlert("Please enter Luau source code before obfuscating.");
+                showToast("Please enter Luau source code before obfuscating.");
                 return;
             }
 
             btn.disabled = true;
-            btn.innerText = "Encrypting & Building VM...";
+            btn.innerHTML = `<span>Encrypting & Building Hardened VM...</span>`;
 
             try {
                 const res = await fetch('/api/obfuscate', {
@@ -472,37 +824,39 @@
 
                 document.getElementById('loaderOutput').innerText = data.loader;
                 outputBox.classList.add('active');
+                showToast("Script compiled successfully!", "success");
 
-                // Reload vault automatically
                 if (currentUserId) loadVault();
 
             } catch (err) {
-                showAlert(err.message);
+                showToast(err.message);
             } finally {
                 btn.disabled = false;
-                btn.innerText = "Obfuscate Script";
+                btn.innerHTML = `<span>Obfuscate Script</span>`;
             }
         });
 
-        // Copy Loader to Clipboard
+        // COPY LOADER TO CLIPBOARD
         function copyLoader() {
             const text = document.getElementById('loaderOutput').innerText;
             navigator.clipboard.writeText(text);
-            alert("Loader copied to clipboard!");
+            showToast("Loader link copied to clipboard!", "success");
         }
 
-        // Fetch User Vault
+        // FETCH SCRIPT VAULT
         async function loadVault() {
             try {
                 const res = await fetch('/api/vault');
                 const data = await res.json();
-
                 const grid = document.getElementById('vaultGrid');
 
                 if (!data.success || !data.scripts || data.scripts.length === 0) {
-                    grid.innerHTML = `<p class="empty-vault">No scripts saved in vault yet.</p>`;
+                    grid.innerHTML = `<div class="empty-vault-state">No active scripts stored in RAM.</div>`;
+                    document.getElementById('scriptCountDisplay').innerText = '0';
                     return;
                 }
+
+                document.getElementById('scriptCountDisplay').innerText = data.scripts.length;
 
                 grid.innerHTML = data.scripts.map(item => `
                     <div class="vault-card">
@@ -510,9 +864,9 @@
                             <div class="vault-card-title">${escapeHtml(item.name)}</div>
                             <div class="vault-card-date">Created ${item.createdAt}</div>
                         </div>
-                        <div class="vault-actions">
-                            <button class="copy-btn" onclick="navigator.clipboard.writeText('${escapeHtml(item.loader)}'); alert('Loader copied!');">Copy Link</button>
-                            <button class="btn-danger" onclick="deleteScript('${item.id}')">Delete</button>
+                        <div class="vault-card-actions">
+                            <button class="btn-vault-copy" onclick="navigator.clipboard.writeText('${escapeHtml(item.loader)}'); showToast('Copied loader link!', 'success');">Copy Link</button>
+                            <button class="btn-vault-delete" onclick="deleteScript('${item.id}')">Delete</button>
                         </div>
                     </div>
                 `).join('');
@@ -522,9 +876,9 @@
             }
         }
 
-        // Delete Script from Vault
+        // DELETE SCRIPT
         async function deleteScript(id) {
-            if (!confirm("Are you sure you want to delete this script from RAM?")) return;
+            if (!confirm("Delete this script from server memory?")) return;
 
             try {
                 const res = await fetch('/api/delete', {
@@ -535,21 +889,21 @@
 
                 const data = await res.json();
                 if (data.success) {
+                    showToast("Script removed from RAM", "success");
                     loadVault();
                 } else {
-                    showAlert(data.error || "Failed to delete script.");
+                    showToast(data.error || "Failed to delete script.");
                 }
             } catch (err) {
-                showAlert("Error deleting script.");
+                showToast("Error deleting script.");
             }
         }
 
-        // Utility: Escaping HTML strings
+        // UTILITY: ESCAPE HTML
         function escapeHtml(str) {
             return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
 
-        // Run on load
         checkAuth();
     </script>
 </body>
