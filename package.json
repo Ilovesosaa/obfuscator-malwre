@@ -1,14 +1,14 @@
 {
-  "name": "sinobfuscator",
+  "name": "sin-obfuscator",
   "version": "1.0.0",
-  "description": "Lua Script Obfuscator and Vault",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "cookie-session": "^2.1.0",
+    "cors": "^2.8.5",
     "express": "^4.19.2",
-    "express-session": "^1.18.0",
-    "pg": "^8.11.3"
+    "express-rate-limit": "^7.3.1"
   }
 }
