@@ -50,8 +50,8 @@ app.get('/auth/discord/callback', async (req, res) => {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
             body: new URLSearchParams({
-                client_id: process.env.DISCORD_CLIENT_ID,
-                client_secret: process.env.DISCORD_CLIENT_SECRET,
+                client_id: process.env.1535568167223562350,
+                client_secret: process.env.gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN,
                 grant_type: 'authorization_code',
                 code: code,
                 redirect_uri: redirectUri,
