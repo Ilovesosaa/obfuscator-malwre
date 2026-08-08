@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'eUPsy6H-IXsQBZUDppPEIincubwPB5m5';
 
 // Helper function: Ensures DOMAIN has no trailing slash to prevent double slashes (//)
 const getCleanDomain = () => {
