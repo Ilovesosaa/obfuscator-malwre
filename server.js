@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 // DISCORD OAUTH2 CONFIGURATION
 // ==========================================
 const DISCORD_CLIENT_ID = '1535568167223562350';
-const DISCORD_CLIENT_SECRET = 'cYnDYaMrZNlxz6QCoGAVLD5gNc5jIbO-';
+const DISCORD_CLIENT_SECRET = 'r7fbaNC2wNVHBlUw0XF57GLDGzvW_y58';
 
 // Trust Render's secure proxy headers
 app.set('trust proxy', 1);
