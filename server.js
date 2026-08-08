@@ -7,21 +7,30 @@ const path = require('path');
 const fetch = globalThis.fetch || require('node-fetch');
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'eUPsy6H-IXsQBZUDppPEIincubwPB5m5';
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
 
-// Helper function: Ensures DOMAIN has no trailing slash to prevent double slashes (//)
+// ==================== BULLETPROOF DOMAIN SANITIZER ====================
+// Eliminates "Invalid OAuth2 redirect_uri" errors caused by trailing or double slashes
 const getCleanDomain = () => {
-    const rawDomain = process.env.DOMAIN || `http://localhost:${PORT}`;
-    return rawDomain.trim().replace(/\/+$/, '');
+    let domain = process.env.DOMAIN || process.env.RAILWAY_PUBLIC_DOMAIN || `http://localhost:${PORT}`;
+    domain = domain.trim();
+    
+    // Ensure protocol is present
+    if (!domain.startsWith('http://') && !domain.startsWith('https://')) {
+        domain = `https://${domain}`;
+    }
+    
+    // Strip trailing slashes
+    return domain.replace(/\/+$/, '');
 };
 
 // ==================== IN-MEMORY VAULT ====================
-// Runs 24/7 in RAM on Railway/Render
+// Active 24/7 in server RAM
 const scriptVault = new Map();
 
 // ==================== MIDDLEWARE ====================
@@ -35,7 +44,7 @@ app.use(cookieSession({
     keys: [process.env.SESSION_SECRET || 'sin_obfuscator_super_secret_key_999'],
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 Days
     sameSite: 'lax',
-    secure: false // Set to true if running strictly on HTTPS
+    secure: false
 }));
 
 function generateShortId() {
@@ -106,9 +115,9 @@ return (function(...)
 end)(...);`;
 }
 
-// ==================== DISCORD AUTH ROUTES ====================
+// ==================== DISCORD AUTHENTICATION ====================
 
-// Step 1: Initiate Login
+// Initiate Discord Login
 app.get('/auth/discord', (req, res) => {
     try {
         const DOMAIN = getCleanDomain();
@@ -120,7 +129,7 @@ app.get('/auth/discord', (req, res) => {
     }
 });
 
-// Step 2: Callback Handler
+// OAuth2 Callback Endpoint
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
@@ -129,7 +138,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     const redirectUri = `${DOMAIN}/auth/discord/callback`;
 
     try {
-        // Token Exchange
+        // Exchange Code for Access Token
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
             body: new URLSearchParams({
@@ -145,17 +154,17 @@ app.get('/auth/discord/callback', async (req, res) => {
         const tokenData = await tokenResponse.json();
         if (!tokenData.access_token) {
             console.error("[AUTH ERROR] Token exchange failed:", tokenData);
-            return res.status(400).send(`Authentication failed: ${tokenData.error_description || 'Invalid Client Secret or Redirect URI'}`);
+            return res.status(400).send(`Authentication failed: ${tokenData.error_description || 'Invalid Secret or Redirect URI mismatch'}`);
         }
 
-        // Fetch User Info
+        // Fetch User Identity
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
         });
 
         const userData = await userResponse.json();
 
-        // Store User in Cookie Session
+        // Save User Session Cookie
         req.session.user = {
             id: userData.id,
             username: userData.username,
@@ -166,12 +175,12 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         res.redirect('/');
     } catch (err) {
-        console.error("[AUTH ERROR] Callback Exception:", err);
+        console.error("[AUTH ERROR] Exception:", err);
         res.status(500).send("Login error: " + err.message);
     }
 });
 
-// Fetch Current Logged-in User
+// Fetch Session Info
 app.get('/api/me', (req, res) => {
     if (req.session && req.session.user) {
         return res.json({ authenticated: true, user: req.session.user });
@@ -179,15 +188,15 @@ app.get('/api/me', (req, res) => {
     return res.json({ authenticated: false });
 });
 
-// Logout
+// Logout User
 app.get('/auth/logout', (req, res) => {
     req.session = null;
     res.redirect('/');
 });
 
-// ==================== OBFUSCATE & VAULT API ====================
+// ==================== OBFUSCATOR & VAULT API ====================
 
-// Obfuscate Script (Requires Auth)
+// Obfuscate Luau Code
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord to obfuscate scripts!" });
@@ -211,7 +220,7 @@ app.post('/api/obfuscate', (req, res) => {
             createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
         };
 
-        // Save to RAM Vault
+        // Store in RAM
         scriptVault.set(scriptId, newEntry);
 
         const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
@@ -228,7 +237,7 @@ app.post('/api/obfuscate', (req, res) => {
     }
 });
 
-// Get User's Personal Vault
+// Fetch Personal Vault Items
 app.get('/api/vault', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "Unauthorized access." });
@@ -252,7 +261,7 @@ app.get('/api/vault', (req, res) => {
     return res.json({ success: true, scripts: userScripts });
 });
 
-// Delete Script from Vault
+// Delete Item from Vault
 app.post('/api/delete', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "Unauthorized access." });
@@ -273,7 +282,7 @@ app.post('/api/delete', (req, res) => {
     return res.json({ success: true, message: `Script ${id} deleted.` });
 });
 
-// ==================== RAW ENDPOINT ====================
+// ==================== EXECUTOR RAW ENDPOINT ====================
 app.get('/raw/:id', (req, res) => {
     const id = req.params.id;
     const acceptHeader = (req.headers['accept'] || '').toLowerCase();
@@ -286,7 +295,7 @@ app.get('/raw/:id', (req, res) => {
         return res.status(404).send(`error("[SIN SECURITY]: Script ID '${id}' not found or expired.", 0)`);
     }
 
-    // Direct web browser access check
+    // Direct Browser Access Protection
     const isBrowserRequest = acceptHeader.includes('text/html');
 
     if (isBrowserRequest) {
@@ -321,10 +330,10 @@ app.get('/raw/:id', (req, res) => {
     res.status(200).send(entry.payload);
 });
 
-// Serve Main Site
+// Serve Main Page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Start Express Listener
+// Start Express Server
 app.listen(PORT, () => console.log(`[SIN HUB] Server active on port ${PORT}`));
