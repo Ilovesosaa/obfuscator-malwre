@@ -78,7 +78,7 @@
                         </div>
                         <input type="text" id="script-name" placeholder="Script Name (e.g., Aimbot.lua)" class="bg-darkBg border border-cardBorder rounded-lg px-3 py-1 text-xs text-white font-mono focus:outline-none focus:border-red-500 w-48">
                     </div>
-                    <span class="text-xs font-mono text-gray-500">LUAU / ROBLOX</span>
+                    <div id="editor-mode-badge" class="text-xs font-mono text-gray-500">MODE: NEW SCRIPT</div>
                 </div>
 
                 <div class="relative flex-grow min-h-[350px] flex flex-col">
@@ -86,13 +86,16 @@
                 </div>
 
                 <div class="mt-4 flex items-center justify-between pt-2">
+                    <div id="cancel-edit-container" class="hidden">
+                        <button onclick="cancelEdit()" class="text-xs text-gray-400 hover:text-white underline">Cancel Edit</button>
+                    </div>
                     <div class="flex items-center space-x-2 text-xs text-gray-400">
                         <i class="fa-solid fa-lock text-red-500"></i>
                         <span>Hardened VM + Anti-Tamper Enabled</span>
                     </div>
-                    <button onclick="obfuscateScript()" id="obfuscate-btn" class="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold px-8 py-3 rounded-xl transition-all glow-btn flex items-center space-x-2 cursor-pointer">
+                    <button onclick="handleSaveAction()" id="obfuscate-btn" class="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold px-8 py-3 rounded-xl transition-all glow-btn flex items-center space-x-2 cursor-pointer">
                         <i class="fa-solid fa-wand-magic-sparkles"></i>
-                        <span>Protect Script</span>
+                        <span id="btn-text">Protect Script</span>
                     </button>
                 </div>
             </div>
@@ -151,6 +154,9 @@
 
     <!-- Frontend Script Logic -->
     <script>
+        let editingScriptId = null;
+        let scriptCache = [];
+
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             const icon = document.getElementById('toast-icon');
@@ -192,6 +198,14 @@
             }
         }
 
+        function handleSaveAction() {
+            if (editingScriptId) {
+                updateScript(editingScriptId);
+            } else {
+                obfuscateScript();
+            }
+        }
+
         async function obfuscateScript() {
             const script = document.getElementById('script-input').value;
             const scriptName = document.getElementById('script-name').value;
@@ -216,6 +230,8 @@
                 if (data.success) {
                     document.getElementById('output-loader').innerText = data.loader;
                     showToast("Script successfully protected!");
+                    document.getElementById('script-input').value = '';
+                    document.getElementById('script-name').value = '';
                     loadHistory();
                 } else {
                     showToast(data.error || "Obfuscation failed.", "error");
@@ -224,7 +240,89 @@
                 showToast("Network error occurred.", "error");
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>Protect Script</span>`;
+                btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span id="btn-text">Protect Script</span>`;
+            }
+        }
+
+        async function updateScript(id) {
+            const script = document.getElementById('script-input').value;
+            const scriptName = document.getElementById('script-name').value;
+            const btn = document.getElementById('obfuscate-btn');
+
+            if (!script.trim()) {
+                showToast("Script content cannot be empty.", "error");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i><span>Updating...</span>`;
+
+            try {
+                const res = await fetch(`/api/script/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script, scriptName })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('output-loader').innerText = data.loader;
+                    showToast("Script successfully updated!");
+                    cancelEdit();
+                    loadHistory();
+                } else {
+                    showToast(data.error || "Update failed.", "error");
+                }
+            } catch (err) {
+                showToast("Network error occurred.", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span id="btn-text">Protect Script</span>`;
+            }
+        }
+
+        function loadScriptIntoEditor(id) {
+            const scriptObj = scriptCache.find(s => s.id === id);
+            if (!scriptObj) return;
+
+            editingScriptId = scriptObj.id;
+            document.getElementById('script-input').value = scriptObj.rawScript || '';
+            document.getElementById('script-name').value = scriptObj.name || '';
+            document.getElementById('output-loader').innerText = scriptObj.loader;
+            document.getElementById('editor-mode-badge').innerText = "MODE: EDITING";
+            document.getElementById('editor-mode-badge').className = "text-xs font-mono text-red-500 font-bold";
+            document.getElementById('btn-text').innerText = "Update Script";
+            document.getElementById('cancel-edit-container').classList.remove('hidden');
+
+            showToast(`Loaded "${scriptObj.name}" into editor for editing.`);
+        }
+
+        function cancelEdit() {
+            editingScriptId = null;
+            document.getElementById('script-input').value = '';
+            document.getElementById('script-name').value = '';
+            document.getElementById('output-loader').innerText = "-- Your secure loadstring will appear here after protection...";
+            document.getElementById('editor-mode-badge').innerText = "MODE: NEW SCRIPT";
+            document.getElementById('editor-mode-badge').className = "text-xs font-mono text-gray-500";
+            document.getElementById('btn-text').innerText = "Protect Script";
+            document.getElementById('cancel-edit-container').classList.add('hidden');
+        }
+
+        async function deleteScript(id) {
+            if (!confirm("Are you sure you want to delete this script from your vault?")) return;
+
+            try {
+                const res = await fetch(`/api/script/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("Script deleted successfully.");
+                    if (editingScriptId === id) cancelEdit();
+                    loadHistory();
+                } else {
+                    showToast("Failed to delete script.", "error");
+                }
+            } catch (err) {
+                showToast("Network error occurred.", "error");
             }
         }
 
@@ -233,6 +331,7 @@
                 const res = await fetch('/api/my-scripts');
                 const data = await res.json();
                 if (data.success) {
+                    scriptCache = data.scripts;
                     const container = document.getElementById('history-container');
                     document.getElementById('script-count').innerText = `${data.scripts.length} Saved`;
                     
@@ -244,14 +343,22 @@
                     container.innerHTML = data.scripts.map(s => `
                         <div class="bg-darkBg border border-cardBorder hover:border-red-500/50 p-3 rounded-xl transition-all">
                             <div class="flex items-center justify-between mb-1.5">
-                                <span class="text-xs font-bold text-white truncate max-w-[160px]">${s.name}</span>
+                                <span class="text-xs font-bold text-white truncate max-w-[140px]">${s.name}</span>
                                 <span class="text-[10px] font-mono text-gray-500">${s.createdAt}</span>
                             </div>
-                            <div class="flex items-center justify-between mt-2">
-                                <span class="text-[10px] font-mono text-gray-400 truncate max-w-[140px]">${s.id}</span>
-                                <button onclick="navigator.clipboard.writeText('${s.loader}'); showToast('Loadstring copied!');" class="bg-cardBorder hover:bg-red-500 text-gray-300 hover:text-white text-xs px-2.5 py-1 rounded-lg transition-all">
-                                    <i class="fa-regular fa-copy"></i>
-                                </button>
+                            <div class="flex items-center justify-between mt-2 pt-2 border-t border-cardBorder">
+                                <span class="text-[10px] font-mono text-gray-400 truncate max-w-[110px]">${s.id}</span>
+                                <div class="flex items-center space-x-1.5">
+                                    <button onclick="navigator.clipboard.writeText('${s.loader}'); showToast('Loadstring copied!');" class="bg-cardBorder hover:bg-red-500 text-gray-300 hover:text-white text-xs px-2 py-1 rounded-lg transition-all" title="Copy Loadstring">
+                                        <i class="fa-regular fa-copy"></i>
+                                    </button>
+                                    <button onclick="loadScriptIntoEditor('${s.id}')" class="bg-cardBorder hover:bg-yellow-600 text-gray-300 hover:text-white text-xs px-2 py-1 rounded-lg transition-all" title="Edit Source">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </button>
+                                    <button onclick="deleteScript('${s.id}')" class="bg-cardBorder hover:bg-red-600 text-gray-300 hover:text-white text-xs px-2 py-1 rounded-lg transition-all" title="Delete Script">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     `).join('');
