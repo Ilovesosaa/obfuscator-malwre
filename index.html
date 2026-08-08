@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SIN Obfuscator - Cloud Hub</title>
+  <title>SIN Obfuscator - Hub</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -16,6 +16,7 @@
       --text: #f8fafc;
       --text-sub: #94a3b8;
       --green: #22c55e;
+      --discord-btn: #5865F2;
     }
 
     body {
@@ -25,37 +26,61 @@
       min-height: 100vh;
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start;
       padding: 2rem 1rem;
     }
 
     .container {
       width: 100%;
-      max-width: 900px;
+      max-width: 950px;
       display: flex;
       flex-direction: column;
       gap: 1.5rem;
     }
 
-    .header {
-      text-align: center;
+    .nav-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 1rem 1.5rem;
+      border-radius: 12px;
     }
 
-    .header h1 {
-      font-size: 2.75rem;
-      font-weight: 900;
-      letter-spacing: -0.02em;
+    .brand h1 { font-size: 1.8rem; font-weight: 900; }
+    .brand h1 span { color: var(--accent-red); text-shadow: 0 0 20px var(--accent-glow); }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
     }
 
-    .header h1 span {
-      color: var(--accent-red);
-      text-shadow: 0 0 30px var(--accent-glow);
-    }
+    .avatar { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--accent-red); }
+    .username { font-weight: 700; font-size: 0.95rem; }
 
-    .header p {
-      color: var(--text-sub);
-      margin-top: 0.5rem;
-      font-size: 0.95rem;
+    .btn-discord {
+      background: var(--discord-btn);
+      color: #fff;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.9rem;
+      transition: opacity 0.2s;
+    }
+    .btn-discord:hover { opacity: 0.85; }
+
+    .btn-logout {
+      background: #271a1c;
+      color: #ef4444;
+      border: 1px solid #451a1d;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 600;
     }
 
     .card {
@@ -66,169 +91,183 @@
       display: flex;
       flex-direction: column;
       gap: 1.25rem;
-      box-shadow: 0 10px 40px rgba(239, 68, 68, 0.08);
     }
 
-    .options-bar {
+    .input-group {
       display: flex;
-      flex-wrap: wrap;
-      gap: 1.5rem;
-      background: #171217;
-      padding: 1rem;
-      border-radius: 8px;
+      gap: 1rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: #0b0b0f;
       border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: #fff;
+      padding: 0.75rem 1rem;
+      outline: none;
     }
-
-    .checkbox-label {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.875rem;
-      color: #cbd5e1;
-      cursor: pointer;
-    }
-
-    .checkbox-label input {
-      accent-color: var(--accent-red);
-      width: 16px;
-      height: 16px;
-      cursor: pointer;
-    }
+    input[type="text"]:focus { border-color: var(--accent-red); }
 
     textarea {
       width: 100%;
-      height: 280px;
+      height: 240px;
       background: #0b0b0f;
       border: 1px solid var(--card-border);
       border-radius: 8px;
       color: #f87171;
-      font-family: "Fira Code", Consolas, Monaco, monospace;
+      font-family: Consolas, Monaco, monospace;
       font-size: 0.9rem;
       padding: 1rem;
       resize: vertical;
       outline: none;
-      line-height: 1.5;
-    }
-
-    textarea:focus {
-      border-color: var(--accent-red);
-      box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
     }
 
     .btn-build {
       background: linear-gradient(135deg, #ef4444 0%, #991b1b 100%);
       color: #fff;
-      font-size: 1.05rem;
+      font-size: 1rem;
       font-weight: 700;
-      padding: 0.9rem;
+      padding: 0.85rem;
       border: none;
       border-radius: 8px;
       cursor: pointer;
       box-shadow: 0 4px 20px var(--accent-glow);
-      transition: all 0.2s ease;
     }
 
-    .btn-build:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 28px rgba(239, 68, 68, 0.65);
-    }
+    /* Vault Section */
+    .vault-title { font-size: 1.2rem; font-weight: 800; color: var(--text); }
 
-    .result-box {
-      display: none;
-      background: #171217;
-      border: 1px dashed var(--accent-red);
-      border-radius: 8px;
-      padding: 1.25rem;
+    .script-list {
+      display: flex;
       flex-direction: column;
       gap: 0.75rem;
     }
 
-    .result-title {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--green);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+    .script-item {
+      background: #161217;
+      border: 1px solid var(--card-border);
+      padding: 1rem;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
+
+    .script-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .script-name { font-weight: 700; color: #f87171; }
+    .script-date { font-size: 0.75rem; color: var(--text-sub); }
 
     .loader-code {
       background: #0b0b0f;
-      border: 1px solid var(--card-border);
-      padding: 0.85rem;
+      padding: 0.6rem;
       border-radius: 6px;
       font-family: monospace;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       color: var(--green);
       word-break: break-all;
-      user-select: all;
     }
 
-    .btn-copy {
+    .btn-copy-small {
       background: #231924;
       color: #fff;
       border: 1px solid #38253a;
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
-      font-weight: 600;
+      padding: 0.35rem 0.7rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
       cursor: pointer;
       align-self: flex-start;
-      transition: all 0.2s;
     }
 
-    .btn-copy:hover {
-      background: #362238;
-      border-color: var(--accent-red);
+    .locked-notice {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-sub);
     }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <header class="header">
-      <h1><span>SIN</span> Obfuscator</h1>
-      <p>Hardened Cloud Security & Unstealable 1-Line Loader Generation</p>
-    </header>
+    <nav class="nav-header">
+      <div class="brand">
+        <h1><span>SIN</span> Obfuscator</h1>
+      </div>
+      <div id="authContainer">
+        <a href="/auth/discord" class="btn-discord">Login with Discord</a>
+      </div>
+    </nav>
 
-    <main class="card">
-      <div class="options-bar">
-        <label class="checkbox-label">
-          <input type="checkbox" id="chkAntiHttpSpy" checked /> Enable Anti-HttpSpy & Decompiler Traps
-        </label>
-
-        <label class="checkbox-label">
-          <input type="checkbox" id="chkHwidLock" /> Enable HWID Lock Protection
-        </label>
+    <!-- Main Workspace -->
+    <main class="card" id="workspaceCard" style="display: none;">
+      <div class="input-group">
+        <input type="text" id="scriptName" placeholder="Script Name (e.g. My Admin Hub)" />
       </div>
 
       <textarea id="sourceCode" placeholder="-- Paste your raw Luau script here..." spellcheck="false"></textarea>
 
-      <button class="btn-build" onclick="buildCloudLoader()">Obfuscate with SIN</button>
-
-      <div class="result-box" id="resultContainer">
-        <span class="result-title">✔ SIN Cloud Loader Generated</span>
-        <div class="loader-code" id="loaderResult"></div>
-        <button class="btn-copy" onclick="copyLoader()">Copy Loader Script</button>
-      </div>
+      <button class="btn-build" onclick="buildCloudLoader()">Obfuscate & Save to Account</button>
     </main>
+
+    <!-- Locked Workspace Notice -->
+    <div class="card locked-notice" id="loginNotice">
+      <h2>🔑 Login Required</h2>
+      <p style="margin-top: 0.5rem;">Please log in with your Discord account to obfuscate and save your scripts.</p>
+    </div>
+
+    <!-- Script Vault History -->
+    <div class="card" id="vaultCard" style="display: none;">
+      <h2 class="vault-title">📁 Your Obfuscated Script Vault</h2>
+      <div class="script-list" id="scriptVaultList">
+        <p style="color: var(--text-sub);">No obfuscated scripts saved yet.</p>
+      </div>
+    </div>
   </div>
 
   <script>
-    window.onload = function() {
-      document.getElementById('sourceCode').value = 
-`-- Protected by SIN Obfuscator
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+    let currentUser = null;
 
-print("==========================================")
-print("SIN Obfuscator Payload Successfully Loaded!")
-print("Welcome, " .. tostring(LocalPlayer))
-print("==========================================")`;
+    window.onload = async function() {
+      await checkAuth();
     };
+
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/me');
+        const data = await res.json();
+
+        if (data.authenticated) {
+          currentUser = data.user;
+          document.getElementById('authContainer').innerHTML = `
+            <div class="user-profile">
+              <img src="${data.user.avatar}" class="avatar" />
+              <span class="username">${data.user.username}</span>
+              <a href="/auth/logout" class="btn-logout">Logout</a>
+            </div>
+          `;
+          document.getElementById('workspaceCard').style.display = 'flex';
+          document.getElementById('vaultCard').style.display = 'flex';
+          document.getElementById('loginNotice').style.display = 'none';
+
+          loadUserScripts();
+        } else {
+          document.getElementById('workspaceCard').style.display = 'none';
+          document.getElementById('vaultCard').style.display = 'none';
+          document.getElementById('loginNotice').style.display = 'block';
+        }
+      } catch (err) {
+        console.error("Auth check failed", err);
+      }
+    }
 
     async function buildCloudLoader() {
       const script = document.getElementById('sourceCode').value;
-      const antiHttpSpy = document.getElementById('chkAntiHttpSpy').checked;
-      const hwidLock = document.getElementById('chkHwidLock').checked;
+      const scriptName = document.getElementById('scriptName').value;
 
       if (!script.trim()) {
         alert("Please enter Luau source code first!");
@@ -239,26 +278,61 @@ print("==========================================")`;
         const response = await fetch('/api/obfuscate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ script, antiHttpSpy, hwidLock })
+          body: JSON.stringify({ script, scriptName })
         });
 
         const data = await response.json();
 
         if (data.success) {
-          document.getElementById('resultContainer').style.display = 'flex';
-          document.getElementById('loaderResult').innerText = data.loader;
+          document.getElementById('sourceCode').value = '';
+          document.getElementById('scriptName').value = '';
+          alert("Script obfuscated and saved to your vault!");
+          loadUserScripts();
         } else {
-          alert("Obfuscation Error: " + data.error);
+          alert("Error: " + data.error);
         }
       } catch (err) {
-        alert("Failed to connect to SIN Backend Server!");
+        alert("Failed to connect to backend server.");
       }
     }
 
-    function copyLoader() {
-      const loaderText = document.getElementById('loaderResult').innerText;
-      navigator.clipboard.writeText(loaderText);
-      alert("SIN Loader script copied to clipboard!");
+    async function loadUserScripts() {
+      try {
+        const res = await fetch('/api/my-scripts');
+        const data = await res.json();
+
+        const container = document.getElementById('scriptVaultList');
+
+        if (data.success && data.scripts.length > 0) {
+          container.innerHTML = data.scripts.map(s => `
+            <div class="script-item">
+              <div class="script-header">
+                <span class="script-name">${escapeHtml(s.name)}</span>
+                <span class="script-date">${s.createdAt}</span>
+              </div>
+              <div class="loader-code">${escapeHtml(s.loader)}</div>
+              <button class="btn-copy-small" onclick="copyText('${escapeJs(s.loader)}')">Copy Loader</button>
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = '<p style="color: var(--text-sub);">No obfuscated scripts saved yet.</p>';
+        }
+      } catch (err) {
+        console.error("Failed to load scripts history");
+      }
+    }
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text);
+      alert("Loader copied to clipboard!");
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function escapeJs(str) {
+      return str.replace(/'/g, "\\'");
     }
   </script>
 
