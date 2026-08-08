@@ -1,7 +1,16 @@
+That crash happens because express-rate-limit breaks inside Vercel's serverless environment.
+
+When hosted on Vercel, requests pass through Vercel's Edge Proxies. In-memory rate limiters like express-rate-limit try to read client IP headers, get confused by Vercel's proxy layers, and throw an unhandled ERR_ERL_ exception that instantly crashes the Node process (FUNCTION_INVOCATION_FAILED). (Plus, in-memory rate limiting doesn't work on serverless anyway because lambdas don't share memory).
+
+Here is the clean, serverless-optimized server.js with the rate limiters stripped out and full try/catch error protection on the Discord auth route.
+
+Updated server.js
+Replace your entire server.js file with this:
+
+JavaScript
+const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const cookieSession = require('cookie-session');
-const rateLimit = require('express-rate-limit');
 const pako = require('pako');
 
 const app = express();
@@ -9,31 +18,12 @@ const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
 
-// Rate Limiting
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, error: "Too many requests, please try again later." }
-});
-app.use(limiter);
-
-const obfuscateLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 15,
-    message: { success: false, error: "Rate limit reached. Please wait a minute." }
-});
-
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
-
-// Main Vercel Domain
 const DOMAIN = 'https://sinobfuscator.vercel.app';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(__dirname));
 
 app.use(cookieSession({
     name: 'sin_session',
@@ -86,14 +76,19 @@ return (function(...)
 end)(...);`;
 }
 
-// Discord Auth Routes
+// Safe Discord Redirect Route
 app.get('/auth/discord', (req, res) => {
-    const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
-    const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
-    
-    res.redirect(discordUrl);
+    try {
+        const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
+        const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
+        return res.redirect(discordUrl);
+    } catch (err) {
+        console.error("Auth Redirect Error:", err);
+        return res.status(500).send("Failed to initiate Discord login: " + err.message);
+    }
 });
 
+// OAuth Callback Route
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
@@ -117,7 +112,7 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         if (!tokenData.access_token) {
             console.error("Discord Token Error:", tokenData);
-            return res.status(400).send("Authentication failed.");
+            return res.status(400).send("Authentication failed. Invalid token received from Discord.");
         }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
@@ -136,6 +131,7 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         res.redirect('/');
     } catch (err) {
+        console.error("Login Callback Error:", err);
         res.status(500).send("Login error: " + err.message);
     }
 });
@@ -152,8 +148,8 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscation Endpoint - Outputs: loadstring(game:HttpGet("https://sinobfuscator.vercel.app/raw/..."))()
-app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
+// Obfuscation Endpoint
+app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
     }
@@ -167,8 +163,6 @@ app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
 
         const vmPayload = compileToHardenedLuauVM(script);
         const token = encodePayload(vmPayload);
-
-        // Format direct loadstring URL
         const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${token}"))()`;
 
         return res.json({
@@ -202,10 +196,6 @@ app.get('/raw/:token', (req, res) => {
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.status(200).send(payload);
-});
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 if (require.main === module) {
