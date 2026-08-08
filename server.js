@@ -5,7 +5,6 @@ const crypto = require('crypto');
 const path = require('path');
 const { Redis } = require('@upstash/redis');
 
-// Polyfill fetch for older Node runtimes
 const fetch = globalThis.fetch || require('node-fetch');
 
 const app = express();
@@ -18,17 +17,15 @@ const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLv
 const DOMAIN = process.env.DOMAIN || 'https://sinobfuscator.vercel.app';
 
 // ==================== PERSISTENT STORAGE SETUP ====================
-// Connect to Upstash Redis (or fall back to local Map if keys aren't set)
 const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
     ? Redis.fromEnv()
     : null;
 
-const fallbackVault = new Map(); // Local fallback for development
+const fallbackVault = new Map();
 
 async function saveScript(id, data) {
     if (redis) {
-        // Automatically expires/deletes scripts after 7 days (604,800 seconds)
-        await redis.set(`script:${id}`, JSON.stringify(data), { ex: 604800 });
+        await redis.set(`script:${id}`, JSON.stringify(data), { ex: 604800 }); // 7 days expiration
     } else {
         fallbackVault.set(id, data);
     }
@@ -40,15 +37,7 @@ async function getScript(id) {
         if (!data) return null;
         return typeof data === 'string' ? JSON.parse(data) : data;
     }
-    return fallbackVault.get(id);
-}
-
-async function deleteScript(id) {
-    if (redis) {
-        await redis.del(`script:${id}`);
-    } else {
-        fallbackVault.delete(id);
-    }
+    return fallbackVault.get(id) || null;
 }
 
 // ==================== MIDDLEWARE ====================
@@ -72,7 +61,6 @@ function generateShortId() {
 function compileToHardenedLuauVM(sourceCode) {
     const genVar = () => '_0x' + Math.random().toString(16).substring(2, 8);
 
-    const v_hookcheck = genVar();
     const v_char = genVar();
     const v_concat = genVar();
     const v_bxor = genVar();
@@ -89,20 +77,20 @@ function compileToHardenedLuauVM(sourceCode) {
     const baseKey = Math.floor(Math.random() * 180) + 40;
     const shiftStep = Math.floor(Math.random() * 13) + 3;
 
+    // Convert UTF-8 source string safely to byte buffer
+    const sourceBuffer = Buffer.from(sourceCode, 'utf-8');
     const encryptedBytes = [];
-    for (let i = 0; i < sourceCode.length; i++) {
-        let charCode = sourceCode.charCodeAt(i);
+
+    for (let i = 0; i < sourceBuffer.length; i++) {
+        let byteVal = sourceBuffer[i];
         let dynamicKey = (baseKey + (i * shiftStep)) % 256;
-        let obfuscatedByte = charCode ^ dynamicKey;
-        encryptedBytes.push(obfuscatedByte);
+        encryptedBytes.push(byteVal ^ dynamicKey);
     }
 
     const bytesArrayString = `{${encryptedBytes.join(',')}}`;
 
     return `--[[ SIN Luau Hardened Shield v5.0 ]]--
 return (function(...)
-    local ${v_hookcheck} = (getfenv and getfenv()) or _ENV or {}
-    
     local ${v_char} = string.char
     local ${v_concat} = table.concat
     local ${v_bxor} = (bit32 and bit32.bxor) or function(a, b) return a ~ b end
@@ -128,19 +116,18 @@ return (function(...)
     if ${v_func} then
         return ${v_func}(...)
     else
-        error("[SIN Security Runtime Error]: Direct execution prevented.", 0)
+        error("[SIN Security Runtime Error]: " .. tostring(${v_err}), 0)
     end
 end)(...);`;
 }
 
 // ==================== ROUTES ====================
 
-// Root Route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Discord Auth Routes
+// Auth Routes
 app.get('/auth/discord', (req, res) => {
     try {
         const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
@@ -205,7 +192,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscate API Endpoint
+// API Obfuscate Endpoint
 app.post('/api/obfuscate', async (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -220,7 +207,6 @@ app.post('/api/obfuscate', async (req, res) => {
         const vmPayload = compileToHardenedLuauVM(script);
         const scriptId = generateShortId();
 
-        // Save persistently to Redis / Vault
         await saveScript(scriptId, {
             ownerId: req.session.user.id,
             payload: vmPayload,
@@ -241,37 +227,23 @@ app.post('/api/obfuscate', async (req, res) => {
     }
 });
 
-// Delete Script Endpoint
-app.post('/api/delete', async (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.status(401).json({ success: false, error: "Unauthorized access." });
-    }
-
-    const { id } = req.body;
-    if (!id) return res.status(400).json({ success: false, error: "Missing script ID." });
-
-    await deleteScript(id);
-
-    return res.json({ success: true, message: `Script ${id} deleted successfully.` });
-});
-
-// ==================== HARDENED RAW ENDPOINT ====================
+// ==================== RAW ENDPOINT ====================
 app.get('/raw/:id', async (req, res) => {
     const id = req.params.id;
-    const userAgent = (req.headers['user-agent'] || '').toLowerCase();
+    const acceptHeader = (req.headers['accept'] || '').toLowerCase();
 
-    // Retrieve persistently from Redis / Vault
     const entry = await getScript(id);
 
+    // If script not found in Redis/Vault, return an explicit error string to Roblox
     if (!entry) {
-        res.setHeader('Content-Type', 'text/plain');
-        return res.status(404).send("-- [SIN SECURITY]: Script ID not found or expired.");
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        return res.status(404).send(`error("[SIN SECURITY]: Script ID '${id}' not found or expired on Vercel.", 0)`);
     }
 
-    // Detect Browsers and Crawlers
-    const isBrowser = /mozilla|chrome|safari|edge|brave|firefox|gecko|applewebkit|discordbot|twitterbot/i.test(userAgent);
+    // Rely on explicit browser text/html ACCEPT headers rather than user-agent matching
+    const isBrowserRequest = acceptHeader.includes('text/html');
 
-    if (isBrowser) {
+    if (isBrowserRequest) {
         res.setHeader('Content-Type', 'text/html');
         return res.status(403).send(`
 <!DOCTYPE html>
@@ -329,12 +301,11 @@ app.get('/raw/:id', async (req, res) => {
         `);
     }
 
-    // Return pure payload to Roblox/Executor
+    // Serve raw script payload directly to Roblox
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.status(200).send(entry.payload);
 });
 
-// App listener
 if (require.main === module) {
     app.listen(PORT, () => console.log(`[SIN HUB] Server active on port ${PORT}`));
 }
