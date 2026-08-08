@@ -4,7 +4,6 @@ const cookieSession = require('cookie-session');
 const crypto = require('crypto');
 const path = require('path');
 
-// Polyfill fetch for older Node runtimes
 const fetch = globalThis.fetch || require('node-fetch');
 
 const app = express();
@@ -21,8 +20,7 @@ const scriptVault = new Map();
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-
-// Serve static files from the root directory
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname)));
 
 app.use(cookieSession({
@@ -66,12 +64,13 @@ return (function(...)
 end)(...);`;
 }
 
-// ==================== HOMEPAGE ROUTE ====================
+// ==================== ROUTES ====================
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// ==================== DISCORD AUTH ROUTES ====================
+// Auth Routes
 app.get('/auth/discord', (req, res) => {
     try {
         const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
@@ -136,14 +135,14 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// ==================== OBFUSCATION API ====================
+// Create Obfuscated Script (Supports Optional Password)
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
     }
 
     try {
-        const { script, scriptName } = req.body;
+        const { script, scriptName, password } = req.body;
         if (!script || typeof script !== 'string' || script.trim() === '') {
             return res.status(400).json({ success: false, error: "No Luau source code provided." });
         }
@@ -154,16 +153,20 @@ app.post('/api/obfuscate', (req, res) => {
         scriptVault.set(scriptId, {
             ownerId: req.session.user.id,
             payload: vmPayload,
+            password: password ? password.trim() : null,
             createdAt: new Date().toLocaleString()
         });
 
-        const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
+        // If password is set, append ?key= to loader link for Roblox
+        const passQuery = password ? `?key=${encodeURIComponent(password.trim())}` : '';
+        const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}${passQuery}"))()`;
 
         return res.json({
             success: true,
             id: scriptId,
             loader: loaderLink,
             name: scriptName.trim() || `Script_${scriptId}`,
+            hasPassword: !!password,
             createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
         });
     } catch (err) {
@@ -171,7 +174,6 @@ app.post('/api/obfuscate', (req, res) => {
     }
 });
 
-// ==================== DELETE ROUTE ====================
 app.post('/api/delete', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "Unauthorized access." });
@@ -187,9 +189,83 @@ app.post('/api/delete', (req, res) => {
     return res.json({ success: true, message: `Script ${id} deleted successfully.` });
 });
 
-// ==================== RAW ROUTE ====================
+// ==================== RAW ENDPOINT WITH PASSWORD GATEWAY ====================
+
+function renderPasswordPage(scriptId, errorMsg = '') {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protected Script | SIN Obfuscator</title>
+    <style>
+        body {
+            background: #060608;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .box {
+            background: rgba(15, 15, 21, 0.9);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 14px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+        }
+        h2 { margin-bottom: 0.5rem; font-size: 1.4rem; color: #ef4444; }
+        p { color: #94a3b8; font-size: 0.88rem; margin-bottom: 1.5rem; }
+        input {
+            width: 100%;
+            padding: 0.8rem;
+            background: #0a0a0f;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+            outline: none;
+        }
+        input:focus { border-color: #ef4444; }
+        button {
+            width: 100%;
+            padding: 0.8rem;
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #dc2626; }
+        .error { color: #f87171; font-size: 0.8rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>🔒 Protected Script</h2>
+        <p>This obfuscated script requires a password to view.</p>
+        ${errorMsg ? `<div class="error">${errorMsg}</div>` : ''}
+        <form method="POST" action="/raw/${scriptId}">
+            <input type="password" name="password" placeholder="Enter Script Password" required autofocus />
+            <button type="submit">Unlock Script</button>
+        </form>
+    </div>
+</body>
+</html>`;
+}
+
+// GET Route (Handles Browser & Roblox HttpGet)
 app.get('/raw/:id', (req, res) => {
     const id = req.params.id;
+    const providedKey = req.query.key || req.query.password;
     const userAgent = req.headers['user-agent'] || '';
 
     const entry = scriptVault.get(id);
@@ -200,9 +276,38 @@ app.get('/raw/:id', (req, res) => {
     }
 
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
-    if (isBrowser) {
-        res.setHeader('Content-Type', 'text/plain');
-        return res.status(403).send("-- LOCKED: Direct browser access denied.");
+
+    // If password exists for script
+    if (entry.password) {
+        if (providedKey !== entry.password) {
+            if (isBrowser) {
+                // Show password input page for browser users
+                return res.status(401).send(renderPasswordPage(id, providedKey ? "Incorrect Password" : ""));
+            } else {
+                // Deny Roblox if key query param is missing/incorrect
+                res.setHeader('Content-Type', 'text/plain');
+                return res.status(401).send("-- ERROR: Invalid or missing script password key.");
+            }
+        }
+    }
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(200).send(entry.payload);
+});
+
+// POST Route (Handles HTML Password Form submission from browser)
+app.post('/raw/:id', (req, res) => {
+    const id = req.params.id;
+    const submittedPassword = req.body.password;
+
+    const entry = scriptVault.get(id);
+
+    if (!entry) {
+        return res.status(404).send(renderPasswordPage(id, "Script not found."));
+    }
+
+    if (entry.password && submittedPassword !== entry.password) {
+        return res.status(401).send(renderPasswordPage(id, "Incorrect Password!"));
     }
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
