@@ -1,4 +1,4 @@
-const express = require('express');
+onst express = require('express');
 const cors = require('cors');
 const cookieSession = require('cookie-session');
 const crypto = require('crypto');
@@ -12,7 +12,7 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350'
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
 const DOMAIN = 'https://sinobfuscator.vercel.app';
 
-// In-memory store for short script IDs
+// In-memory script storage
 const scriptVault = new Map();
 
 app.use(cors());
@@ -26,7 +26,7 @@ app.use(cookieSession({
 }));
 
 function generateShortId() {
-    return crypto.randomBytes(4).toString('hex'); // Returns an 8-character ID (e.g., 'a1b2c3d4')
+    return crypto.randomBytes(4).toString('hex'); // Returns 8-char ID
 }
 
 function compileToHardenedLuauVM(sourceCode) {
@@ -59,7 +59,7 @@ return (function(...)
 end)(...);`;
 }
 
-// Discord Auth Routes
+// Auth Routes
 app.get('/auth/discord', (req, res) => {
     try {
         const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
@@ -90,10 +90,7 @@ app.get('/auth/discord/callback', async (req, res) => {
         });
 
         const tokenData = await tokenResponse.json();
-
-        if (!tokenData.access_token) {
-            return res.status(400).send("Authentication failed.");
-        }
+        if (!tokenData.access_token) return res.status(400).send("Authentication failed.");
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
@@ -127,7 +124,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscation Endpoint - Generates clean Luarmor-style short loadstrings
+// Obfuscate Route
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -135,7 +132,6 @@ app.post('/api/obfuscate', (req, res) => {
 
     try {
         const { script, scriptName } = req.body;
-
         if (!script || typeof script !== 'string' || script.trim() === '') {
             return res.status(400).json({ success: false, error: "No Luau source code provided." });
         }
@@ -143,10 +139,8 @@ app.post('/api/obfuscate', (req, res) => {
         const vmPayload = compileToHardenedLuauVM(script);
         const scriptId = generateShortId();
 
-        // Store compiled VM in vault map
         scriptVault.set(scriptId, vmPayload);
 
-        // Luarmor-style short loadstring
         const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
 
         return res.json({
@@ -161,7 +155,22 @@ app.post('/api/obfuscate', (req, res) => {
     }
 });
 
-// Raw Endpoint for Roblox Executors
+// Delete Route (Destroys the raw loader link)
+app.post('/api/delete', (req, res) => {
+    if (!req.session || !req.session.user) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ success: false, error: "Missing script ID" });
+
+    // Remove from server vault
+    scriptVault.delete(id);
+
+    return res.json({ success: true, message: "Script destroyed successfully." });
+});
+
+// Raw Endpoint
 app.get('/raw/:id', (req, res) => {
     const id = req.params.id;
     const userAgent = req.headers['user-agent'] || '';
@@ -170,7 +179,7 @@ app.get('/raw/:id', (req, res) => {
 
     if (!payload) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(404).send("-- LOCKED: Script ID not found or expired.");
+        return res.status(404).send("-- LOCKED: Script ID not found or deleted.");
     }
 
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
@@ -184,9 +193,7 @@ app.get('/raw/:id', (req, res) => {
 });
 
 if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`SIN Obfuscator Server running on port ${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`SIN Obfuscator Server running on port ${PORT}`));
 }
 
 module.exports = app;
