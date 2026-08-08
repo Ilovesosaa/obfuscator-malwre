@@ -25,7 +25,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: { 
-        secure: true, // Required for Render HTTPS
+        secure: true, 
         maxAge: 24 * 60 * 60 * 1000 // 24 Hours
     }
 }));
@@ -72,14 +72,27 @@ end)(...);`;
 // ==========================================
 
 app.get('/auth/discord', (req, res) => {
-    // Force HTTPS protocol for Render deployment environments
     const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
     const protocol = isRender ? 'https' : req.protocol;
     const host = req.get('host') || `localhost:${PORT}`;
     
     const redirectUri = encodeURIComponent(`${protocol}://${host}/auth/discord/callback`);
     const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
-   const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+    
+    res.redirect(discordUrl);
+});
+
+app.get('/auth/discord/callback', async (req, res) => {
+    const code = req.query.code;
+    if (!code) return res.redirect('/');
+
+    const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
+    const protocol = isRender ? 'https' : req.protocol;
+    const host = req.get('host') || `localhost:${PORT}`;
+    const redirectUri = `${protocol}://${host}/auth/discord/callback`;
+
+    try {
+        const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
             body: new URLSearchParams({
                 client_id: DISCORD_CLIENT_ID,
@@ -93,17 +106,10 @@ app.get('/auth/discord', (req, res) => {
 
         const tokenData = await tokenResponse.json();
 
-        // Print exact error to Render console logs
+        // Detailed error logging to your Render dashboard logs
         if (!tokenData.access_token) {
             console.error("Discord Token Error Response:", tokenData);
             return res.status(400).send("Authentication failed: " + JSON.stringify(tokenData));
-        }
-        });
-
-        const tokenData = await tokenResponse.json();
-
-        if (!tokenData.access_token) {
-            return res.status(400).send("Authentication failed: Invalid token response from Discord.");
         }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
