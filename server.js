@@ -19,6 +19,23 @@ const publicPath = fs.existsSync(path.join(__dirname, 'public'))
 
 app.use(express.static(publicPath));
 
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: true,
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    }
+}));
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
+
 app.get('/', (req, res) => {
     const indexPath = path.join(publicPath, 'index.html');
     if (fs.existsSync(indexPath)) {
@@ -45,8 +62,8 @@ app.get('/auth/discord/callback', async (req, res) => {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
             body: new URLSearchParams({
-                client_id: process.env.1535568167223562350,
-                client_secret: process.env.gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN,
+                client_id: process.env.DISCORD_CLIENT_ID,
+                client_secret: process.env.DISCORD_CLIENT_SECRET,
                 grant_type: 'authorization_code',
                 code: code,
                 redirect_uri: redirectUri,
