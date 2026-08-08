@@ -1,5 +1,5 @@
 {
-  "name": "sin-obfuscator",
+  "name": "SIN Obfuscator",
   "version": "1.0.0",
   "description": "SIN Obfuscator Backend",
   "main": "server.js",
