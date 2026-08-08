@@ -3,42 +3,23 @@ const cors = require('cors');
 const cookieSession = require('cookie-session');
 const crypto = require('crypto');
 const path = require('path');
-const { Redis } = require('@upstash/redis');
 
 const fetch = globalThis.fetch || require('node-fetch');
 
 const app = express();
+// Render assigns a dynamic PORT via environment variable
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
-const DOMAIN = process.env.DOMAIN || 'https://sinobfuscator.vercel.app';
+// Update process.env.DOMAIN in Render dashboard to your .onrender.com URL
+const DOMAIN = process.env.DOMAIN || 'http://localhost:3000';
 
-// ==================== PERSISTENT STORAGE SETUP ====================
-const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
-    ? Redis.fromEnv()
-    : null;
-
-const fallbackVault = new Map();
-
-async function saveScript(id, data) {
-    if (redis) {
-        await redis.set(`script:${id}`, JSON.stringify(data), { ex: 604800 }); // 7 days expiration
-    } else {
-        fallbackVault.set(id, data);
-    }
-}
-
-async function getScript(id) {
-    if (redis) {
-        const data = await redis.get(`script:${id}`);
-        if (!data) return null;
-        return typeof data === 'string' ? JSON.parse(data) : data;
-    }
-    return fallbackVault.get(id) || null;
-}
+// ==================== IN-MEMORY SCRIPT VAULT ====================
+// Runs 24/7 in Render server RAM
+const scriptVault = new Map();
 
 // ==================== MIDDLEWARE ====================
 app.use(cors());
@@ -127,7 +108,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Auth Routes
+// Discord Auth Routes
 app.get('/auth/discord', (req, res) => {
     try {
         const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
@@ -193,7 +174,7 @@ app.get('/auth/logout', (req, res) => {
 });
 
 // API Obfuscate Endpoint
-app.post('/api/obfuscate', async (req, res) => {
+app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
     }
@@ -207,7 +188,8 @@ app.post('/api/obfuscate', async (req, res) => {
         const vmPayload = compileToHardenedLuauVM(script);
         const scriptId = generateShortId();
 
-        await saveScript(scriptId, {
+        // Stored continuously in RAM
+        scriptVault.set(scriptId, {
             ownerId: req.session.user.id,
             payload: vmPayload,
             createdAt: new Date().toLocaleString()
@@ -228,19 +210,18 @@ app.post('/api/obfuscate', async (req, res) => {
 });
 
 // ==================== RAW ENDPOINT ====================
-app.get('/raw/:id', async (req, res) => {
+app.get('/raw/:id', (req, res) => {
     const id = req.params.id;
     const acceptHeader = (req.headers['accept'] || '').toLowerCase();
 
-    const entry = await getScript(id);
+    const entry = scriptVault.get(id);
 
-    // If script not found in Redis/Vault, return an explicit error string to Roblox
     if (!entry) {
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        return res.status(404).send(`error("[SIN SECURITY]: Script ID '${id}' not found or expired on Vercel.", 0)`);
+        return res.status(404).send(`error("[SIN SECURITY]: Script ID '${id}' not found or expired.", 0)`);
     }
 
-    // Rely on explicit browser text/html ACCEPT headers rather than user-agent matching
+    // Direct web browser access check
     const isBrowserRequest = acceptHeader.includes('text/html');
 
     if (isBrowserRequest) {
@@ -250,50 +231,19 @@ app.get('/raw/:id', async (req, res) => {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Access Denied | SIN Obfuscator</title>
     <style>
-        body {
-            background-color: #060609;
-            color: #f1f5f9;
-            font-family: system-ui, -apple-system, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .lock-card {
-            background: #0d0d14;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 12px;
-            padding: 2.5rem;
-            max-width: 420px;
-            text-align: center;
-            box-shadow: 0 0 40px rgba(239, 68, 68, 0.15);
-        }
-        .icon { font-size: 3rem; margin-bottom: 0.5rem; }
-        h1 { color: #ef4444; font-size: 1.4rem; margin: 0 0 0.8rem 0; letter-spacing: 0.5px; }
-        p { color: #94a3b8; font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.2rem; }
-        .cmd-box {
-            background: #040406;
-            border: 1px solid #1e293b;
-            color: #38bdf8;
-            padding: 0.8rem;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 0.78rem;
-            word-break: break-all;
-            user-select: all;
-        }
+        body { background: #060609; color: #f1f5f9; font-family: system-ui; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .lock-card { background: #0d0d14; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 2.5rem; max-width: 420px; text-align: center; }
+        h1 { color: #ef4444; font-size: 1.4rem; }
+        .cmd-box { background: #040406; border: 1px solid #1e293b; color: #38bdf8; padding: 0.8rem; border-radius: 8px; font-family: monospace; font-size: 0.78rem; word-break: break-all; }
     </style>
 </head>
 <body>
     <div class="lock-card">
-        <div class="icon">🔒</div>
+        <div style="font-size:3rem;">🔒</div>
         <h1>RAW ACCESS BLOCKED</h1>
-        <p>Direct browser access to raw code is disabled for security reasons to prevent scraping.</p>
-        <p style="color: #64748b; font-size: 0.8rem;">Execute this loader link directly in Roblox:</p>
+        <p style="color:#94a3b8; font-size: 0.88rem;">Direct browser viewing is disabled. Execute in Roblox:</p>
         <div class="cmd-box">loadstring(game:HttpGet("${DOMAIN}/raw/${id}"))()</div>
     </div>
 </body>
@@ -301,13 +251,10 @@ app.get('/raw/:id', async (req, res) => {
         `);
     }
 
-    // Serve raw script payload directly to Roblox
+    // Serve raw script directly to Roblox executor
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.status(200).send(entry.payload);
 });
 
-if (require.main === module) {
-    app.listen(PORT, () => console.log(`[SIN HUB] Server active on port ${PORT}`));
-}
-
-module.exports = app;
+// Start Express Listener
+app.listen(PORT, () => console.log(`[SIN HUB] Server active on port ${PORT}`));
