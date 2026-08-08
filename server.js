@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'QSTxgNTgXXsJeVvMY3frq0ZLVnT_LZVf';
 // Update process.env.DOMAIN in Render dashboard to your .onrender.com URL
 const DOMAIN = process.env.DOMAIN || 'http://localhost:3000';
 
