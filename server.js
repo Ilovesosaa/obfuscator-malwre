@@ -7,15 +7,15 @@ const path = require('path');
 const fetch = globalThis.fetch || require('node-fetch');
 
 const app = express();
-// Render assigns a dynamic PORT via environment variable
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'QSTxgNTgXXsJeVvMY3frq0ZLVnT_LZVf';
-// Update process.env.DOMAIN in Render dashboard to your .onrender.com URL
-const DOMAIN = process.env.DOMAIN || 'http://localhost:3000';
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
+
+// Helper function to dynamically pull DOMAIN and strip trailing slashes
+const getCleanDomain = () => (process.env.DOMAIN || 'http://localhost:3000').replace(/\/+$/, '');
 
 // ==================== IN-MEMORY SCRIPT VAULT ====================
 // Runs 24/7 in Render server RAM
@@ -102,15 +102,17 @@ return (function(...)
 end)(...);`;
 }
 
-// ==================== DISCORD AUTHENTICATION ROUTES ====================
+// ==================== ROUTES ====================
 
-// Automatically removes trailing slashes to prevent double-slash bugs
-const getCleanDomain = () => (process.env.DOMAIN || 'http://localhost:3000').replace(/\/+$/, '');
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
+// Discord Auth Routes
 app.get('/auth/discord', (req, res) => {
     try {
-        const cleanDomain = getCleanDomain();
-        const redirectUri = encodeURIComponent(`${cleanDomain}/auth/discord/callback`);
+        const DOMAIN = getCleanDomain();
+        const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
         const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
         return res.redirect(discordUrl);
     } catch (err) {
@@ -122,8 +124,8 @@ app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
 
-    const cleanDomain = getCleanDomain();
-    const redirectUri = `${cleanDomain}/auth/discord/callback`;
+    const DOMAIN = getCleanDomain();
+    const redirectUri = `${DOMAIN}/auth/discord/callback`;
 
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -141,7 +143,7 @@ app.get('/auth/discord/callback', async (req, res) => {
         const tokenData = await tokenResponse.json();
         if (!tokenData.access_token) {
             console.error("Token Exchange Error:", tokenData);
-            return res.status(400).send("Authentication failed. Check your Client Secret in Render environment variables.");
+            return res.status(400).send("Authentication failed. Make sure Client Secret in Render environment variables is correct.");
         }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
@@ -189,6 +191,7 @@ app.post('/api/obfuscate', (req, res) => {
             return res.status(400).json({ success: false, error: "No Luau source code provided." });
         }
 
+        const DOMAIN = getCleanDomain();
         const vmPayload = compileToHardenedLuauVM(script);
         const scriptId = generateShortId();
 
@@ -205,7 +208,7 @@ app.post('/api/obfuscate', (req, res) => {
             success: true,
             id: scriptId,
             loader: loaderLink,
-            name: scriptName.trim() || `Script_${scriptId}`,
+            name: (scriptName || '').trim() || `Script_${scriptId}`,
             createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
         });
     } catch (err) {
@@ -217,6 +220,7 @@ app.post('/api/obfuscate', (req, res) => {
 app.get('/raw/:id', (req, res) => {
     const id = req.params.id;
     const acceptHeader = (req.headers['accept'] || '').toLowerCase();
+    const DOMAIN = getCleanDomain();
 
     const entry = scriptVault.get(id);
 
