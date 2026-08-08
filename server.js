@@ -8,35 +8,25 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ==========================================
-// DDoS PROTECTION / RATE LIMITER
-// ==========================================
-// Trust Render's secure proxy headers (Required for correct IP tracking behind Render)
 app.set('trust proxy', 1);
 
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes window
-    max: 100, // Limit each IP to 100 requests per windowMs
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
     message: { success: false, error: "Too many requests from this IP, please try again later." }
 });
-
-// Apply rate limiter to all requests (or specific API routes)
 app.use(limiter);
 
-// Specific stricter limit for obfuscation to prevent server flooding
 const obfuscateLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 10, // Max 10 scripts obfuscated per minute per IP
+    windowMs: 60 * 1000,
+    max: 10,
     message: { success: false, error: "Rate limit reached. Please wait a minute before obfuscating again." }
 });
 
-// ==========================================
-// DISCORD OAUTH2 CONFIGURATION
-// ==========================================
 const DISCORD_CLIENT_ID = '1535568167223562350';
-const DISCORD_CLIENT_SECRET = 'r7fbaNC2wNVHBlUw0XF57GLDGzvW_y58';
+const DISCORD_CLIENT_SECRET = 'TZEhwTcBM_8K8Y7ol2hlw6BrMf5t2r06';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -48,17 +38,13 @@ app.use(session({
     saveUninitialized: false,
     cookie: { 
         secure: true, 
-        maxAge: 24 * 60 * 60 * 1000 // 24 Hours
+        maxAge: 24 * 60 * 60 * 1000 
     }
 }));
 
-// Databases (In-Memory)
 const scriptStore = new Map();     
 const userScriptsStore = new Map(); 
 
-/**
- * LIGHTWEIGHT CRASH-PROOF VM ENGINE
- */
 function compileToHardenedLuauVM(sourceCode) {
     const key = Math.floor(Math.random() * 200) + 10;
     let encoded = '';
@@ -89,10 +75,7 @@ return (function(...)
 end)(...);`;
 }
 
-// ==========================================
-// DISCORD AUTH ENDPOINTS
-// ==========================================
-
+// Discord Auth
 app.get('/auth/discord', (req, res) => {
     const isRender = req.headers['x-forwarded-proto'] === 'https' || process.env.RENDER || req.get('host').includes('onrender.com');
     const protocol = isRender ? 'https' : req.protocol;
@@ -165,11 +148,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// ==========================================
-// OBFUSCATION & HISTORY ENDPOINTS
-// ==========================================
-
-// Apply strict rate limiting specifically to the obfuscation endpoint
+// Obfuscation Endpoints
 app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -201,6 +180,7 @@ app.post('/api/obfuscate', obfuscateLimiter, (req, res) => {
         userHistory.unshift({
             id: loaderId,
             name: scriptName || `Script_${loaderId}`,
+            rawScript: script, // Saved so it can be re-loaded into editor for editing
             loader: loaderScript,
             createdAt: new Date().toLocaleString()
         });
@@ -223,6 +203,58 @@ app.get('/api/my-scripts', (req, res) => {
     const userId = req.session.user.id;
     const history = userScriptsStore.get(userId) || [];
     return res.json({ success: true, scripts: history });
+});
+
+// EDIT SCRIPT ENDPOINT
+app.put('/api/script/:id', (req, res) => {
+    if (!req.session || !req.session.user) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
+    const scriptId = req.params.id;
+    const userId = req.session.user.id;
+    const { script, scriptName } = req.body;
+
+    const userHistory = userScriptsStore.get(userId) || [];
+    const index = userHistory.findIndex(s => s.id === scriptId);
+
+    if (index === -1) {
+        return res.status(404).json({ success: false, error: "Script not found in your vault." });
+    }
+
+    try {
+        const vmPayload = compileToHardenedLuauVM(script);
+        scriptStore.set(scriptId, { payload: vmPayload });
+
+        // Update vault data
+        userHistory[index].name = scriptName || userHistory[index].name;
+        userHistory[index].rawScript = script;
+        userHistory[index].createdAt = new Date().toLocaleString() + " (Edited)";
+
+        return res.json({ success: true, loader: userHistory[index].loader });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// DELETE SCRIPT ENDPOINT
+app.delete('/api/script/:id', (req, res) => {
+    if (!req.session || !req.session.user) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
+    const scriptId = req.params.id;
+    const userId = req.session.user.id;
+
+    const userHistory = userScriptsStore.get(userId) || [];
+    const index = userHistory.findIndex(s => s.id === scriptId);
+
+    if (index !== -1) {
+        userHistory.splice(index, 1);
+    }
+
+    scriptStore.delete(scriptId);
+    return res.json({ success: true });
 });
 
 app.get('/v3/loader/:id', (req, res) => {
