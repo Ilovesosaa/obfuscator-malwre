@@ -36,15 +36,21 @@ function decodePayload(token) {
     }
 }
 
+// Injects unique salt so every obfuscation generates a unique loadstring URL
 function compileToHardenedLuauVM(sourceCode) {
+    const nonce = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const key = Math.floor(Math.random() * 200) + 10;
+    
+    // Salt source code with a unique comment block
+    const saltedSource = `-- [SIN Salt: ${nonce}]\n${sourceCode}`;
+
     let encoded = '';
-    for (let i = 0; i < sourceCode.length; i++) {
-        encoded += String.fromCharCode(sourceCode.charCodeAt(i) ^ key);
+    for (let i = 0; i < saltedSource.length; i++) {
+        encoded += String.fromCharCode(saltedSource.charCodeAt(i) ^ key);
     }
     const safeString = JSON.stringify(encoded);
 
-    return `--[[ SIN Obfuscator v4.0 ]]--
+    return `--[[ SIN Obfuscator v4.0 | Nonce: ${nonce} ]]--
 return (function(...)
     local _k = ${key}
     local _str = ${safeString}
@@ -66,19 +72,17 @@ return (function(...)
 end)(...);`;
 }
 
-// Safe Discord Redirect Route
+// Discord Auth Routes
 app.get('/auth/discord', (req, res) => {
     try {
         const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
         const discordUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
         return res.redirect(discordUrl);
     } catch (err) {
-        console.error("Auth Redirect Error:", err);
         return res.status(500).send("Failed to initiate Discord login: " + err.message);
     }
 });
 
-// OAuth Callback Route
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.redirect('/');
@@ -101,8 +105,7 @@ app.get('/auth/discord/callback', async (req, res) => {
         const tokenData = await tokenResponse.json();
 
         if (!tokenData.access_token) {
-            console.error("Discord Token Error:", tokenData);
-            return res.status(400).send("Authentication failed. Invalid token received from Discord.");
+            return res.status(400).send("Authentication failed.");
         }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
@@ -121,7 +124,6 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         res.redirect('/');
     } catch (err) {
-        console.error("Login Callback Error:", err);
         res.status(500).send("Login error: " + err.message);
     }
 });
@@ -138,7 +140,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscation Endpoint
+// Obfuscation Endpoint - Always generates a unique loadstring
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -157,6 +159,7 @@ app.post('/api/obfuscate', (req, res) => {
 
         return res.json({
             success: true,
+            id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             loader: loaderLink,
             name: scriptName || `Script_${token.substring(0, 6)}`,
             createdAt: new Date().toLocaleString()
