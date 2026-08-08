@@ -2,8 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const cookieSession = require('cookie-session');
 const crypto = require('crypto');
+const path = require('path');
 
-// Polyfill fetch for older Vercel Node runtimes
+// Polyfill fetch for older Node runtimes
 const fetch = globalThis.fetch || require('node-fetch');
 
 const app = express();
@@ -20,6 +21,9 @@ const scriptVault = new Map();
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Serve static files from the root directory
+app.use(express.static(path.join(__dirname)));
 
 app.use(cookieSession({
     name: 'sin_session',
@@ -62,7 +66,12 @@ return (function(...)
 end)(...);`;
 }
 
-// Discord Auth Routes
+// ==================== HOMEPAGE ROUTE ====================
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// ==================== DISCORD AUTH ROUTES ====================
 app.get('/auth/discord', (req, res) => {
     try {
         const redirectUri = encodeURIComponent(`${DOMAIN}/auth/discord/callback`);
@@ -127,7 +136,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// API Routes
+// ==================== OBFUSCATION API ====================
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -162,6 +171,7 @@ app.post('/api/obfuscate', (req, res) => {
     }
 });
 
+// ==================== DELETE ROUTE ====================
 app.post('/api/delete', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "Unauthorized access." });
@@ -177,6 +187,7 @@ app.post('/api/delete', (req, res) => {
     return res.json({ success: true, message: `Script ${id} deleted successfully.` });
 });
 
+// ==================== RAW ROUTE ====================
 app.get('/raw/:id', (req, res) => {
     const id = req.params.id;
     const userAgent = req.headers['user-agent'] || '';
@@ -199,7 +210,7 @@ app.get('/raw/:id', (req, res) => {
 });
 
 if (require.main === module) {
-    app.listen(PORT, () => console.log(`Server active on port ${PORT}`));
+    app.listen(PORT, () => console.log(`[SIN HUB] Server active on port ${PORT}`));
 }
 
 module.exports = app;
