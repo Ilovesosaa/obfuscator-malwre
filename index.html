@@ -209,7 +209,7 @@
 
       <textarea id="sourceCode" placeholder="-- Paste your raw Luau script here..." spellcheck="false"></textarea>
 
-      <button class="btn-build" onclick="buildCloudLoader()">Obfuscate & Save to Account</button>
+      <button class="btn-build" id="buildBtn" onclick="buildCloudLoader()">Obfuscate & Save to Account</button>
     </main>
 
     <div class="card locked-notice" id="loginNotice">
@@ -264,11 +264,15 @@
     async function buildCloudLoader() {
       const script = document.getElementById('sourceCode').value;
       const scriptName = document.getElementById('scriptName').value;
+      const buildBtn = document.getElementById('buildBtn');
 
       if (!script.trim()) {
         alert("Please enter Luau source code first!");
         return;
       }
+
+      buildBtn.disabled = true;
+      buildBtn.innerText = "Obfuscating...";
 
       try {
         const response = await fetch('/api/obfuscate', {
@@ -280,41 +284,50 @@
         const data = await response.json();
 
         if (data.success) {
+          saveToLocalVault(data);
           document.getElementById('sourceCode').value = '';
           document.getElementById('scriptName').value = '';
           alert("Script obfuscated and saved to your vault!");
           loadUserScripts();
         } else {
-          alert("Error: " + data.error);
+          alert("Error: " + (data.error || "Failed to obfuscate script."));
         }
       } catch (err) {
-        alert("Failed to connect to backend server.");
+        alert("Server error. Check console for details.");
+        console.error(err);
+      } finally {
+        buildBtn.disabled = false;
+        buildBtn.innerText = "Obfuscate & Save to Account";
       }
     }
 
-    async function loadUserScripts() {
-      try {
-        const res = await fetch('/api/my-scripts');
-        const data = await res.json();
+    function saveToLocalVault(item) {
+      if (!currentUser) return;
+      const key = `sin_vault_${currentUser.id}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      existing.unshift(item);
+      localStorage.setItem(key, JSON.stringify(existing));
+    }
 
-        const container = document.getElementById('scriptVaultList');
+    function loadUserScripts() {
+      if (!currentUser) return;
+      const key = `sin_vault_${currentUser.id}`;
+      const scripts = JSON.parse(localStorage.getItem(key) || '[]');
+      const container = document.getElementById('scriptVaultList');
 
-        if (data.success && data.scripts.length > 0) {
-          container.innerHTML = data.scripts.map(s => `
-            <div class="script-item">
-              <div class="script-header">
-                <span class="script-name">${escapeHtml(s.name)}</span>
-                <span class="script-date">${s.createdAt}</span>
-              </div>
-              <div class="loader-code">${escapeHtml(s.loader)}</div>
-              <button class="btn-copy-small" onclick="copyText('${escapeJs(s.loader)}')">Copy Loader</button>
+      if (scripts.length > 0) {
+        container.innerHTML = scripts.map(s => `
+          <div class="script-item">
+            <div class="script-header">
+              <span class="script-name">${escapeHtml(s.name)}</span>
+              <span class="script-date">${s.createdAt}</span>
             </div>
-          `).join('');
-        } else {
-          container.innerHTML = '<p style="color: var(--text-sub);">No obfuscated scripts saved yet.</p>';
-        }
-      } catch (err) {
-        console.error("Failed to load scripts history");
+            <div class="loader-code">${escapeHtml(s.loader)}</div>
+            <button class="btn-copy-small" onclick="copyText('${escapeJs(s.loader)}')">Copy Loader</button>
+          </div>
+        `).join('');
+      } else {
+        container.innerHTML = '<p style="color: var(--text-sub);">No obfuscated scripts saved yet.</p>';
       }
     }
 
