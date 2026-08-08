@@ -135,7 +135,6 @@
       box-shadow: 0 4px 20px var(--accent-glow);
     }
 
-    /* Vault Section */
     .vault-title { font-size: 1.2rem; font-weight: 800; color: var(--text); }
 
     .script-list {
@@ -203,7 +202,6 @@
       </div>
     </nav>
 
-    <!-- Main Workspace -->
     <main class="card" id="workspaceCard" style="display: none;">
       <div class="input-group">
         <input type="text" id="scriptName" placeholder="Script Name (e.g. My Admin Hub)" />
@@ -214,13 +212,11 @@
       <button class="btn-build" onclick="buildCloudLoader()">Obfuscate & Save to Account</button>
     </main>
 
-    <!-- Locked Workspace Notice -->
     <div class="card locked-notice" id="loginNotice">
       <h2>🔑 Login Required</h2>
       <p style="margin-top: 0.5rem;">Please log in with your Discord account to obfuscate and save your scripts.</p>
     </div>
 
-    <!-- Script Vault History -->
     <div class="card" id="vaultCard" style="display: none;">
       <h2 class="vault-title">📁 Your Obfuscated Script Vault</h2>
       <div class="script-list" id="scriptVaultList">
