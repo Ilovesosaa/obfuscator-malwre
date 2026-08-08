@@ -33,7 +33,7 @@ passport.deserializeUser((obj, done) => done(obj, done));
 passport.use(new DiscordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID,
     clientSecret: process.env.DISCORD_CLIENT_SECRET,
-    callbackURL: `${process.env.DOMAIN}/auth/discord/callback`,
+    callbackURL: `${process.env.DOMAIN || 'http://localhost:3000'}/auth/discord/callback`,
     scope: ['identify']
 }, (accessToken, refreshToken, profile, done) => {
     return done(null, profile);
@@ -100,19 +100,22 @@ return loadstring(_s)()
 
 // OBFUSCATE API
 app.post('/api/obfuscate', (req, res) => {
-    const { script, scriptName, fileType } = req.body;
-
-    if (!script || typeof script !== 'string' || !script.trim()) {
-        return res.status(400).json({ success: false, error: 'No code provided.' });
-    }
-
-    const type = (fileType === 'luau' || script.includes('type ') || script.includes('continue')) ? 'luau' : 'lua';
-    const name = (scriptName && scriptName.trim()) ? scriptName.trim() : `Script_${Date.now().toString().slice(-4)}`;
-
     try {
+        const { script, scriptName, fileType } = req.body;
+
+        if (!script || typeof script !== 'string' || !script.trim()) {
+            return res.status(400).json({ success: false, error: 'No code provided.' });
+        }
+
+        const type = (fileType === 'luau' || script.includes('type ') || script.includes('continue')) ? 'luau' : 'lua';
+        const name = (scriptName && scriptName.trim()) ? scriptName.trim() : `Script_${Date.now().toString().slice(-4)}`;
+
         const obfuscatedCode = runObfuscationPipeline(script, type);
         const scriptId = crypto.randomBytes(8).toString('hex');
-        const loader = `loadstring(game:HttpGet("${process.env.DOMAIN}/raw/${scriptId}"))()`;
+        
+        // Dynamically fallback domain if process.env.DOMAIN is missing
+        const domain = process.env.DOMAIN || `${req.protocol}://${req.get('host')}`;
+        const loader = `loadstring(game:HttpGet("${domain}/raw/${scriptId}"))()`;
 
         scriptVault.set(scriptId, {
             code: obfuscatedCode,
@@ -139,6 +142,7 @@ app.post('/api/obfuscate', (req, res) => {
         });
 
     } catch (err) {
+        console.error("Obfuscation error:", err);
         return res.status(500).json({ success: false, error: 'Obfuscation error: ' + err.message });
     }
 });
