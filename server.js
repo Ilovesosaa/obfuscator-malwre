@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const cookieSession = require('cookie-session');
-const pako = require('pako');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +11,9 @@ app.set('trust proxy', 1);
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1535568167223562350';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'gAFHKRDb9tLvxmeN7mhubHag7LOH1ttN';
 const DOMAIN = 'https://sinobfuscator.vercel.app';
+
+// In-memory store for short script IDs
+const scriptVault = new Map();
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -22,35 +25,19 @@ app.use(cookieSession({
     sameSite: 'lax'
 }));
 
-function encodePayload(payload) {
-    const compressed = pako.deflate(payload);
-    return Buffer.from(compressed).toString('base64url');
+function generateShortId() {
+    return crypto.randomBytes(4).toString('hex'); // Returns an 8-character ID (e.g., 'a1b2c3d4')
 }
 
-function decodePayload(token) {
-    try {
-        const buffer = Buffer.from(token, 'base64url');
-        return pako.inflate(buffer, { to: 'string' });
-    } catch (e) {
-        return null;
-    }
-}
-
-// Injects unique salt so every obfuscation generates a unique loadstring URL
 function compileToHardenedLuauVM(sourceCode) {
-    const nonce = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const key = Math.floor(Math.random() * 200) + 10;
-    
-    // Salt source code with a unique comment block
-    const saltedSource = `-- [SIN Salt: ${nonce}]\n${sourceCode}`;
-
     let encoded = '';
-    for (let i = 0; i < saltedSource.length; i++) {
-        encoded += String.fromCharCode(saltedSource.charCodeAt(i) ^ key);
+    for (let i = 0; i < sourceCode.length; i++) {
+        encoded += String.fromCharCode(sourceCode.charCodeAt(i) ^ key);
     }
     const safeString = JSON.stringify(encoded);
 
-    return `--[[ SIN Obfuscator v4.0 | Nonce: ${nonce} ]]--
+    return `--[[ SIN Obfuscator v4.0 ]]--
 return (function(...)
     local _k = ${key}
     local _str = ${safeString}
@@ -140,7 +127,7 @@ app.get('/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Obfuscation Endpoint - Always generates a unique loadstring
+// Obfuscation Endpoint - Generates clean Luarmor-style short loadstrings
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.status(401).json({ success: false, error: "You must be logged in with Discord!" });
@@ -154,14 +141,19 @@ app.post('/api/obfuscate', (req, res) => {
         }
 
         const vmPayload = compileToHardenedLuauVM(script);
-        const token = encodePayload(vmPayload);
-        const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${token}"))()`;
+        const scriptId = generateShortId();
+
+        // Store compiled VM in vault map
+        scriptVault.set(scriptId, vmPayload);
+
+        // Luarmor-style short loadstring
+        const loaderLink = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
 
         return res.json({
             success: true,
-            id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            id: scriptId,
             loader: loaderLink,
-            name: scriptName || `Script_${token.substring(0, 6)}`,
+            name: scriptName || `Script_${scriptId}`,
             createdAt: new Date().toLocaleString()
         });
     } catch (err) {
@@ -170,15 +162,15 @@ app.post('/api/obfuscate', (req, res) => {
 });
 
 // Raw Endpoint for Roblox Executors
-app.get('/raw/:token', (req, res) => {
-    const token = req.params.token;
+app.get('/raw/:id', (req, res) => {
+    const id = req.params.id;
     const userAgent = req.headers['user-agent'] || '';
 
-    const payload = decodePayload(token);
+    const payload = scriptVault.get(id);
 
     if (!payload) {
         res.setHeader('Content-Type', 'text/plain');
-        return res.status(404).send("-- LOCKED: Invalid or expired script token.");
+        return res.status(404).send("-- LOCKED: Script ID not found or expired.");
     }
 
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
