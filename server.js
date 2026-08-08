@@ -1,13 +1,3 @@
-That crash happens because express-rate-limit breaks inside Vercel's serverless environment.
-
-When hosted on Vercel, requests pass through Vercel's Edge Proxies. In-memory rate limiters like express-rate-limit try to read client IP headers, get confused by Vercel's proxy layers, and throw an unhandled ERR_ERL_ exception that instantly crashes the Node process (FUNCTION_INVOCATION_FAILED). (Plus, in-memory rate limiting doesn't work on serverless anyway because lambdas don't share memory).
-
-Here is the clean, serverless-optimized server.js with the rate limiters stripped out and full try/catch error protection on the Discord auth route.
-
-Updated server.js
-Replace your entire server.js file with this:
-
-JavaScript
 const express = require('express');
 const cors = require('cors');
 const cookieSession = require('cookie-session');
