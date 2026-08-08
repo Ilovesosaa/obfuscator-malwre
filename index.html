@@ -1,340 +1,279 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SIN Obfuscator - Hub</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg: #08080a;
-      --card-bg: #111116;
-      --card-border: #221c24;
-      --accent-red: #ef4444;
-      --accent-glow: rgba(239, 68, 68, 0.45);
-      --text: #f8fafc;
-      --text-sub: #94a3b8;
-      --green: #22c55e;
-      --discord-btn: #5865F2;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      padding: 2rem 1rem;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 950px;
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-
-    .nav-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      padding: 1rem 1.5rem;
-      border-radius: 12px;
-    }
-
-    .brand h1 { font-size: 1.8rem; font-weight: 900; }
-    .brand h1 span { color: var(--accent-red); text-shadow: 0 0 20px var(--accent-glow); }
-
-    .user-profile {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .avatar { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--accent-red); }
-    .username { font-weight: 700; font-size: 0.95rem; }
-
-    .btn-discord {
-      background: var(--discord-btn);
-      color: #fff;
-      padding: 0.6rem 1.2rem;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 700;
-      font-size: 0.9rem;
-      transition: opacity 0.2s;
-    }
-    .btn-discord:hover { opacity: 0.85; }
-
-    .btn-logout {
-      background: #271a1c;
-      color: #ef4444;
-      border: 1px solid #451a1d;
-      padding: 0.4rem 0.8rem;
-      border-radius: 6px;
-      text-decoration: none;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 1.5rem;
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-    }
-
-    .input-group {
-      display: flex;
-      gap: 1rem;
-    }
-
-    input[type="text"] {
-      flex: 1;
-      background: #0b0b0f;
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      color: #fff;
-      padding: 0.75rem 1rem;
-      outline: none;
-    }
-    input[type="text"]:focus { border-color: var(--accent-red); }
-
-    textarea {
-      width: 100%;
-      height: 240px;
-      background: #0b0b0f;
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      color: #f87171;
-      font-family: Consolas, Monaco, monospace;
-      font-size: 0.9rem;
-      padding: 1rem;
-      resize: vertical;
-      outline: none;
-    }
-
-    .btn-build {
-      background: linear-gradient(135deg, #ef4444 0%, #991b1b 100%);
-      color: #fff;
-      font-size: 1rem;
-      font-weight: 700;
-      padding: 0.85rem;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      box-shadow: 0 4px 20px var(--accent-glow);
-    }
-
-    /* Vault Section */
-    .vault-title { font-size: 1.2rem; font-weight: 800; color: var(--text); }
-
-    .script-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .script-item {
-      background: #161217;
-      border: 1px solid var(--card-border);
-      padding: 1rem;
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .script-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .script-name { font-weight: 700; color: #f87171; }
-    .script-date { font-size: 0.75rem; color: var(--text-sub); }
-
-    .loader-code {
-      background: #0b0b0f;
-      padding: 0.6rem;
-      border-radius: 6px;
-      font-family: monospace;
-      font-size: 0.85rem;
-      color: var(--green);
-      word-break: break-all;
-    }
-
-    .btn-copy-small {
-      background: #231924;
-      color: #fff;
-      border: 1px solid #38253a;
-      padding: 0.35rem 0.7rem;
-      border-radius: 4px;
-      font-size: 0.8rem;
-      cursor: pointer;
-      align-self: flex-start;
-    }
-
-    .locked-notice {
-      text-align: center;
-      padding: 2rem;
-      color: var(--text-sub);
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIN Obfuscator | Advanced Luau Protection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    colors: {
+                        darkBg: '#07090e',
+                        cardBg: '#0f131f',
+                        cardBorder: '#1e263d',
+                        accentRed: '#ef4444',
+                        accentGlow: 'rgba(239, 68, 68, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #07090e; color: #f3f4f6; }
+        .glow-box { box-shadow: 0 0 40px rgba(239, 68, 68, 0.08); }
+        .glow-btn { box-shadow: 0 0 25px rgba(239, 68, 68, 0.3); }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #07090e; }
+        ::-webkit-scrollbar-thumb { background: #1e263d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #ef4444; }
+    </style>
 </head>
-<body>
+<body class="min-h-screen flex flex-col font-sans selection:bg-red-500 selection:text-white">
 
-  <div class="container">
-    <nav class="nav-header">
-      <div class="brand">
-        <h1><span>SIN</span> Obfuscator</h1>
-      </div>
-      <div id="authContainer">
-        <a href="/auth/discord" class="btn-discord">Login with Discord</a>
-      </div>
-    </nav>
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-cardBorder bg-cardBg/60 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-rose-700 flex items-center justify-center glow-btn">
+                    <i class="fa-solid fa-shield-halved text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-wider text-white">SIN <span class="text-red-500">OBFUSCATOR</span></h1>
+                    <p class="text-xs text-gray-400 font-mono tracking-wide">ENTERPRISE LUAU SECURITY</p>
+                </div>
+            </div>
 
-    <!-- Main Workspace -->
-    <main class="card" id="workspaceCard" style="display: none;">
-      <div class="input-group">
-        <input type="text" id="scriptName" placeholder="Script Name (e.g. My Admin Hub)" />
-      </div>
+            <!-- Dynamic Auth Area -->
+            <div id="auth-container" class="flex items-center space-x-4">
+                <a href="/auth/discord" class="flex items-center space-x-2 bg-[#5865F2] hover:bg-[#4752C4] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-lg shadow-indigo-500/20">
+                    <i class="fa-brands fa-discord text-lg"></i>
+                    <span>Login with Discord</span>
+                </a>
+            </div>
+        </div>
+    </header>
 
-      <textarea id="sourceCode" placeholder="-- Paste your raw Luau script here..." spellcheck="false"></textarea>
+    <!-- Main Content Area -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Left 2 Cols: Editor & Controls -->
+        <div class="lg:col-span-2 flex flex-col space-y-6">
+            
+            <!-- Code Editor Panel -->
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-5 glow-box flex flex-col flex-grow">
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-cardBorder">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex space-x-1.5">
+                            <div class="w-3 h-3 rounded-full bg-red-500/80"></div>
+                            <div class="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+                            <div class="w-3 h-3 rounded-full bg-green-500/80"></div>
+                        </div>
+                        <input type="text" id="script-name" placeholder="Script Name (e.g., Aimbot.lua)" class="bg-darkBg border border-cardBorder rounded-lg px-3 py-1 text-xs text-white font-mono focus:outline-none focus:border-red-500 w-48">
+                    </div>
+                    <span class="text-xs font-mono text-gray-500">LUAU / ROBLOX</span>
+                </div>
 
-      <button class="btn-build" onclick="buildCloudLoader()">Obfuscate & Save to Account</button>
+                <div class="relative flex-grow min-h-[350px] flex flex-col">
+                    <textarea id="script-input" placeholder="-- Paste your raw Luau script here..." class="w-full flex-grow bg-darkBg border border-cardBorder rounded-xl p-4 font-mono text-sm text-gray-200 focus:outline-none focus:border-red-500 resize-none leading-relaxed"></textarea>
+                </div>
+
+                <div class="mt-4 flex items-center justify-between pt-2">
+                    <div class="flex items-center space-x-2 text-xs text-gray-400">
+                        <i class="fa-solid fa-lock text-red-500"></i>
+                        <span>Hardened VM + Anti-Tamper Enabled</span>
+                    </div>
+                    <button onclick="obfuscateScript()" id="obfuscate-btn" class="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold px-8 py-3 rounded-xl transition-all glow-btn flex items-center space-x-2 cursor-pointer">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>Protect Script</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Output Box -->
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-sm font-bold text-gray-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-terminal text-red-500"></i>
+                        <span>Generated Loader Output</span>
+                    </span>
+                    <button onclick="copyLoader()" class="bg-cardBorder hover:bg-red-500/20 hover:border-red-500 text-xs font-semibold text-gray-300 px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>Copy Loadstring</span>
+                    </button>
+                </div>
+                <div class="bg-darkBg border border-cardBorder rounded-xl p-4 font-mono text-xs text-red-400 break-all select-all min-h-[60px] flex items-center" id="output-loader">
+                    -- Your secure loadstring will appear here after protection...
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Col: User Dashboard / Script History -->
+        <div class="space-y-6">
+            <div class="bg-cardBg border border-cardBorder rounded-2xl p-5 glow-box flex flex-col h-full max-h-[600px]">
+                <div class="flex items-center justify-between pb-4 border-b border-cardBorder">
+                    <h2 class="font-bold text-white flex items-center space-x-2">
+                        <i class="fa-solid fa-box-archive text-red-500"></i>
+                        <span>Script Vault</span>
+                    </h2>
+                    <span id="script-count" class="text-xs font-mono bg-cardBorder px-2.5 py-1 rounded-full text-gray-300">0 Saved</span>
+                </div>
+
+                <div id="history-container" class="overflow-y-auto flex-grow space-y-3 mt-4 pr-1">
+                    <div class="text-center py-12 text-gray-500 text-sm">
+                        <i class="fa-solid fa-lock-open text-3xl mb-3 block opacity-30"></i>
+                        Login with Discord to view your secure script history.
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </main>
 
-    <!-- Locked Workspace Notice -->
-    <div class="card locked-notice" id="loginNotice">
-      <h2>🔑 Login Required</h2>
-      <p style="margin-top: 0.5rem;">Please log in with your Discord account to obfuscate and save your scripts.</p>
+    <!-- Footer -->
+    <footer class="border-t border-cardBorder py-6 text-center text-xs text-gray-500 font-mono">
+        SIN OBFUSCATOR &copy; 2026 &bull; ALL RIGHTS RESERVED
+    </footer>
+
+    <!-- Toast Notification Popup -->
+    <div id="toast" class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 bg-cardBg border border-cardBorder px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 z-50">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-green-500"></i>
+        <span id="toast-msg" class="text-sm font-medium text-white">Notification message</span>
     </div>
 
-    <!-- Script Vault History -->
-    <div class="card" id="vaultCard" style="display: none;">
-      <h2 class="vault-title">📁 Your Obfuscated Script Vault</h2>
-      <div class="script-list" id="scriptVaultList">
-        <p style="color: var(--text-sub);">No obfuscated scripts saved yet.</p>
-      </div>
-    </div>
-  </div>
+    <!-- Frontend Script Logic -->
+    <script>
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            const msg = document.getElementById('toast-msg');
 
-  <script>
-    let currentUser = null;
+            msg.innerText = message;
+            if(type === 'success') {
+                icon.className = "fa-solid fa-circle-check text-green-500";
+            } else {
+                icon.className = "fa-solid fa-circle-exclamation text-red-500";
+            }
 
-    window.onload = async function() {
-      await checkAuth();
-    };
-
-    async function checkAuth() {
-      try {
-        const res = await fetch('/api/me');
-        const data = await res.json();
-
-        if (data.authenticated) {
-          currentUser = data.user;
-          document.getElementById('authContainer').innerHTML = `
-            <div class="user-profile">
-              <img src="${data.user.avatar}" class="avatar" />
-              <span class="username">${data.user.username}</span>
-              <a href="/auth/logout" class="btn-logout">Logout</a>
-            </div>
-          `;
-          document.getElementById('workspaceCard').style.display = 'flex';
-          document.getElementById('vaultCard').style.display = 'flex';
-          document.getElementById('loginNotice').style.display = 'none';
-
-          loadUserScripts();
-        } else {
-          document.getElementById('workspaceCard').style.display = 'none';
-          document.getElementById('vaultCard').style.display = 'none';
-          document.getElementById('loginNotice').style.display = 'block';
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
         }
-      } catch (err) {
-        console.error("Auth check failed", err);
-      }
-    }
 
-    async function buildCloudLoader() {
-      const script = document.getElementById('sourceCode').value;
-      const scriptName = document.getElementById('scriptName').value;
-
-      if (!script.trim()) {
-        alert("Please enter Luau source code first!");
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/obfuscate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ script, scriptName })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          document.getElementById('sourceCode').value = '';
-          document.getElementById('scriptName').value = '';
-          alert("Script obfuscated and saved to your vault!");
-          loadUserScripts();
-        } else {
-          alert("Error: " + data.error);
+        // Check authentication state on page load
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/me');
+                const data = await res.json();
+                
+                const authContainer = document.getElementById('auth-container');
+                if (data.authenticated) {
+                    authContainer.innerHTML = `
+                        <div class="flex items-center space-x-3 bg-darkBg border border-cardBorder px-3 py-1.5 rounded-xl">
+                            <img src="${data.user.avatar}" class="w-8 h-8 rounded-lg border border-red-500/50">
+                            <span class="text-sm font-bold text-white">${data.user.username}</span>
+                        </div>
+                        <a href="/auth/logout" class="bg-cardBorder hover:bg-red-500/20 hover:text-red-400 text-gray-400 px-3 py-2 rounded-xl text-sm transition-all" title="Logout">
+                            <i class="fa-solid fa-power-off"></i>
+                        </a>
+                    `;
+                    loadHistory();
+                }
+            } catch (err) {
+                console.error("Auth check failed");
+            }
         }
-      } catch (err) {
-        alert("Failed to connect to backend server.");
-      }
-    }
 
-    async function loadUserScripts() {
-      try {
-        const res = await fetch('/api/my-scripts');
-        const data = await res.json();
+        async function obfuscateScript() {
+            const script = document.getElementById('script-input').value;
+            const scriptName = document.getElementById('script-name').value;
+            const btn = document.getElementById('obfuscate-btn');
 
-        const container = document.getElementById('scriptVaultList');
+            if (!script.trim()) {
+                showToast("Please enter a Luau script to protect.", "error");
+                return;
+            }
 
-        if (data.success && data.scripts.length > 0) {
-          container.innerHTML = data.scripts.map(s => `
-            <div class="script-item">
-              <div class="script-header">
-                <span class="script-name">${escapeHtml(s.name)}</span>
-                <span class="script-date">${s.createdAt}</span>
-              </div>
-              <div class="loader-code">${escapeHtml(s.loader)}</div>
-              <button class="btn-copy-small" onclick="copyText('${escapeJs(s.loader)}')">Copy Loader</button>
-            </div>
-          `).join('');
-        } else {
-          container.innerHTML = '<p style="color: var(--text-sub);">No obfuscated scripts saved yet.</p>';
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i><span>Protecting...</span>`;
+
+            try {
+                const res = await fetch('/api/obfuscate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script, scriptName })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('output-loader').innerText = data.loader;
+                    showToast("Script successfully protected!");
+                    loadHistory();
+                } else {
+                    showToast(data.error || "Obfuscation failed.", "error");
+                }
+            } catch (err) {
+                showToast("Network error occurred.", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>Protect Script</span>`;
+            }
         }
-      } catch (err) {
-        console.error("Failed to load scripts history");
-      }
-    }
 
-    function copyText(text) {
-      navigator.clipboard.writeText(text);
-      alert("Loader copied to clipboard!");
-    }
+        async function loadHistory() {
+            try {
+                const res = await fetch('/api/my-scripts');
+                const data = await res.json();
+                if (data.success) {
+                    const container = document.getElementById('history-container');
+                    document.getElementById('script-count').innerText = `${data.scripts.length} Saved`;
+                    
+                    if (data.scripts.length === 0) {
+                        container.innerHTML = `<div class="text-center py-12 text-gray-500 text-sm">No protected scripts yet.</div>`;
+                        return;
+                    }
 
-    function escapeHtml(str) {
-      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    }
+                    container.innerHTML = data.scripts.map(s => `
+                        <div class="bg-darkBg border border-cardBorder hover:border-red-500/50 p-3 rounded-xl transition-all">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-xs font-bold text-white truncate max-w-[160px]">${s.name}</span>
+                                <span class="text-[10px] font-mono text-gray-500">${s.createdAt}</span>
+                            </div>
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="text-[10px] font-mono text-gray-400 truncate max-w-[140px]">${s.id}</span>
+                                <button onclick="navigator.clipboard.writeText('${s.loader}'); showToast('Loadstring copied!');" class="bg-cardBorder hover:bg-red-500 text-gray-300 hover:text-white text-xs px-2.5 py-1 rounded-lg transition-all">
+                                    <i class="fa-regular fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error("Failed to load script history");
+            }
+        }
 
-    function escapeJs(str) {
-      return str.replace(/'/g, "\\'");
-    }
-  </script>
+        function copyLoader() {
+            const text = document.getElementById('output-loader').innerText;
+            if(text.startsWith('--')) {
+                showToast("No loadstring generated yet!", "error");
+                return;
+            }
+            navigator.clipboard.writeText(text);
+            showToast("Loadstring copied to clipboard!");
+        }
 
+        checkAuth();
+    </script>
 </body>
 </html>
