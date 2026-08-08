@@ -12,69 +12,63 @@ app.use(express.static(__dirname));
 
 const scriptStore = new Map();
 
+/**
+ * LIGHTWEIGHT CRASH-PROOF VM ENGINE
+ */
 function compileToHardenedLuauVM(sourceCode, options = {}) {
-    const seedKey = Math.floor(Math.random() * 220) + 20;
+    const key = Math.floor(Math.random() * 200) + 10;
     
-    const bytes = [];
+    // Fast XOR encoding into a single string stream
+    let encoded = '';
     for (let i = 0; i < sourceCode.length; i++) {
-        bytes.push(sourceCode.charCodeAt(i) ^ seedKey);
+        encoded += String.fromCharCode(sourceCode.charCodeAt(i) ^ key);
     }
 
-    const { antiHttpSpy = true } = options;
+    // Escape special characters so string literal doesn't break
+    const safeString = JSON.stringify(encoded);
 
-    return `--[[ SIN Obfuscator v4.0 (Cloud Protection Engine) ]]--
+    return `--[[ SIN Obfuscator v4.0 ]]--
 return (function(...)
-    local _bxor = bit32 and bit32.bxor or function(a, b) return a end
+    local _k = ${key}
+    local _str = ${safeString}
     local _char = string.char
-    local _concat = table.concat
-    local _key = ${seedKey}
+    if type(_str) ~= "string" then return end
 
-    ${antiHttpSpy ? `
-    -- Anti-Hooking Check
-    if hookfunction and (getgenv().httpspy or getgenv().HttpSpy) then
-        error("[SIN Security]: Execution blocked by security policy.", 0)
-    end
-    ` : ''}
+    local _buf = {}
+    local _sub = string.sub
+    local _byte = string.byte
+    local _len = #_str
 
-    local _stream = { ${bytes.join(',')} }
-    local _buffer = {}
-
-    for i = 1, #_stream do
-        _buffer[i] = _char(_bxor(_stream[i], _key))
+    for i = 1, _len do
+        _buf[i] = _char(bit32 and bit32.bxor(_byte(_sub(_str, i, i)), _k) or (_byte(_sub(_str, i, i)) ~ _k))
     end
 
-    local _rawScript = _concat(_buffer)
-    local _load = loadstring or (vExecutionEnvironment and vExecutionEnvironment.loadstring)
-
-    if not _load then
-        error("[SIN Error]: 'loadstring' is not enabled or supported in this environment.", 0)
-    end
-
-    local _exec, _err = _load(_rawScript)
-    if _exec then
-        return _exec(...)
+    local _code = table.concat(_buf)
+    local _f, _e = loadstring(_code)
+    
+    if _f then
+        return _f(...)
     else
-        error("[SIN Runtime Error]: " .. tostring(_err), 0)
+        error("[SIN Runtime Error]: " .. tostring(_e), 0)
     end
 end)(...);`;
 }
 
 app.post('/api/obfuscate', (req, res) => {
     try {
-        const { script, antiHttpSpy } = req.body;
+        const { script } = req.body;
 
         if (!script || typeof script !== 'string' || script.trim() === '') {
             return res.status(400).json({ success: false, error: "No Luau source code provided." });
         }
 
         const loaderId = crypto.randomBytes(6).toString('hex');
-        const vmPayload = compileToHardenedLuauVM(script, { antiHttpSpy });
+        const vmPayload = compileToHardenedLuauVM(script);
 
         scriptStore.set(loaderId, { payload: vmPayload });
 
         const protocol = req.protocol || 'http';
         const host = req.get('host') || `localhost:${PORT}`;
-        
         const loaderScript = `loadstring(game:HttpGet("${protocol}://${host}/v3/loader/${loaderId}"))()`;
 
         return res.json({
@@ -98,14 +92,16 @@ app.get('/v3/loader/:id', (req, res) => {
         return res.status(404).send("LOCKED: Invalid or expired script key.");
     }
 
+    // Browser lockout
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Brave|Firefox/i.test(userAgent);
     if (isBrowser) {
         res.setHeader('Content-Type', 'text/plain');
         return res.status(403).send("LOCKED: Source code access denied.");
     }
 
-    res.setHeader('Content-Type', 'text/plain');
-    res.send(entry.payload);
+    // Explicitly send text/plain so HttpGet doesn't get messed up
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(200).send(entry.payload);
 });
 
 app.get('/', (req, res) => {
