@@ -153,12 +153,24 @@ app.post('/api/obfuscate', (req, res) => {
     }
 });
 
-// RAW SCRIPT EXECUTION ENDPOINT (Roblox game:HttpGet target)
+// RAW SCRIPT EXECUTION ENDPOINT (Roblox game:HttpGet target / Browser Black Screen)
 app.get('/raw/:id', (req, res) => {
     const item = scriptVault.get(req.params.id);
     if (!item) {
         return res.status(404).send('-- Script expired or invalid loader ID.');
     }
+
+    // Check if the request is coming from a web browser vs Roblox executor
+    const userAgent = req.headers['user-agent'] || '';
+    const isRoblox = userAgent.includes('Roblox') || userAgent.includes('Studio');
+
+    if (!isRoblox) {
+        // Show a blank black screen when opened in a browser
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(`<!DOCTYPE html><html><head><title></title><style>body{background:#000;margin:0;height:100vh;}</style></head><body></body></html>`);
+    }
+
+    // Serve raw script code for Roblox game:HttpGet
     res.setHeader('Content-Type', 'text/plain');
     res.send(item.code);
 });
