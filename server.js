@@ -81,10 +81,10 @@ app.get('/api/me', (req, res) => {
     res.json({ authenticated: false });
 });
 
-// SCRIPT VAULT DEPLOYMENT API
+// SCRIPT VAULT DEPLOYMENT & CREATION API
 app.post('/api/obfuscate', (req, res) => {
     try {
-        const { script, scriptName, fileType } = req.body;
+        const { script, scriptName, fileType, editId } = req.body;
 
         if (!script || typeof script !== 'string' || !script.trim()) {
             return res.status(400).json({ success: false, error: 'No script code provided.' });
@@ -92,12 +92,40 @@ app.post('/api/obfuscate', (req, res) => {
 
         const type = (fileType === 'luau') ? 'luau' : 'lua';
         const name = (scriptName && scriptName.trim()) ? scriptName.trim() : `Script_${Date.now().toString().slice(-4)}`;
-
-        const scriptId = crypto.randomBytes(8).toString('hex');
         const domain = process.env.DOMAIN || `${req.protocol}://${req.get('host')}`;
+
+        let scriptId = editId;
+
+        // If editing an existing script, update it instead of creating a new entry
+        if (scriptId && scriptVault.has(scriptId)) {
+            const existingItem = scriptVault.get(scriptId);
+            if (req.isAuthenticated() && existingItem.owner !== req.user.id) {
+                return res.status(403).json({ success: false, error: 'Unauthorized to edit this script.' });
+            }
+
+            existingItem.code = script;
+            scriptVault.set(scriptId, existingItem);
+
+            const loader = `loadstring(game:HttpGet("${domain}/raw/${scriptId}"))()`;
+
+            if (req.isAuthenticated()) {
+                const userId = req.user.id;
+                const userList = userVaults.get(userId) || [];
+                const meta = userList.find(s => s.id === scriptId);
+                if (meta) {
+                    meta.name = name;
+                    meta.loader = loader;
+                }
+                userVaults.set(userId, userList);
+            }
+
+            return res.json({ success: true, loader, scriptId });
+        }
+
+        // Otherwise, create a new script entry
+        scriptId = crypto.randomBytes(8).toString('hex');
         const loader = `loadstring(game:HttpGet("${domain}/raw/${scriptId}"))()`;
 
-        // Store script in vault
         scriptVault.set(scriptId, {
             code: script,
             owner: req.isAuthenticated() ? req.user.id : null,
@@ -112,15 +140,12 @@ app.post('/api/obfuscate', (req, res) => {
                 name: name,
                 fileType: type,
                 loader: loader,
+                code: script,
                 createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
         }
 
-        return res.json({
-            success: true,
-            loader: loader,
-            scriptId: scriptId
-        });
+        return res.json({ success: true, loader, scriptId });
 
     } catch (err) {
         console.error("Vault storage error:", err);
@@ -147,6 +172,7 @@ app.get('/api/vault', (req, res) => {
     res.json({ success: true, scripts: scripts });
 });
 
+// DELETE SCRIPT API
 app.post('/api/delete', (req, res) => {
     if (!req.isAuthenticated()) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
