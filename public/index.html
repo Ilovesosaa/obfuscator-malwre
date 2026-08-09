@@ -835,7 +835,7 @@
         let generatedLoaderUrl = '';
         let activeEditId = null;
         let vaultScriptsStore = {};
-        let isUserAuthenticated = false; // Tracks auth state locally
+        let isUserAuthenticated = false;
 
         // Toast Notification System
         function showToast(message, type = 'success') {
@@ -1008,7 +1008,12 @@
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
 
-        // Obfuscation / Save Update Trigger (Enforces Auth)
+        // Safe Base64 encoder for all Luau/Unicode scripts
+        function safeBase64Encode(str) {
+            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1)));
+        }
+
+        // Obfuscate / Save Update Trigger (Enforces Auth + Safe Encoding)
         obfuscateBtn.addEventListener('click', async () => {
             if (!isUserAuthenticated) {
                 showToast('You must sign in with Discord to obfuscate scripts!', 'error');
@@ -1031,11 +1036,14 @@
             lucide.createIcons();
 
             try {
+                // Encode script to base64 to prevent any parsing/escaping errors on special characters
+                const scriptPayload = safeBase64Encode(scriptContent);
+
                 const response = await fetch('/api/obfuscate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        script: scriptContent, 
+                        scriptPayload: scriptPayload, 
                         scriptName: scriptName, 
                         fileType: 'luau',
                         editId: activeEditId 
