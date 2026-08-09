@@ -81,9 +81,13 @@ app.get('/api/me', (req, res) => {
     res.json({ authenticated: false });
 });
 
-// SCRIPT VAULT DEPLOYMENT & CREATION API
+// SCRIPT VAULT DEPLOYMENT & CREATION API (Requires Authentication)
 app.post('/api/obfuscate', (req, res) => {
     try {
+        if (!req.isAuthenticated()) {
+            return res.status(401).json({ success: false, error: 'You must be signed in with Discord to obfuscate scripts.' });
+        }
+
         const { script, scriptName, fileType, editId } = req.body;
 
         if (!script || typeof script !== 'string' || !script.trim()) {
@@ -99,7 +103,7 @@ app.post('/api/obfuscate', (req, res) => {
         // If editing an existing script, update it instead of creating a new entry
         if (scriptId && scriptVault.has(scriptId)) {
             const existingItem = scriptVault.get(scriptId);
-            if (req.isAuthenticated() && existingItem.owner !== req.user.id) {
+            if (existingItem.owner !== req.user.id) {
                 return res.status(403).json({ success: false, error: 'Unauthorized to edit this script.' });
             }
 
@@ -108,16 +112,14 @@ app.post('/api/obfuscate', (req, res) => {
 
             const loader = `loadstring(game:HttpGet("${domain}/raw/${scriptId}"))()`;
 
-            if (req.isAuthenticated()) {
-                const userId = req.user.id;
-                const userList = userVaults.get(userId) || [];
-                const meta = userList.find(s => s.id === scriptId);
-                if (meta) {
-                    meta.name = name;
-                    meta.loader = loader;
-                }
-                userVaults.set(userId, userList);
+            const userId = req.user.id;
+            const userList = userVaults.get(userId) || [];
+            const meta = userList.find(s => s.id === scriptId);
+            if (meta) {
+                meta.name = name;
+                meta.loader = loader;
             }
+            userVaults.set(userId, userList);
 
             return res.json({ success: true, loader, scriptId });
         }
@@ -128,22 +130,20 @@ app.post('/api/obfuscate', (req, res) => {
 
         scriptVault.set(scriptId, {
             code: script,
-            owner: req.isAuthenticated() ? req.user.id : null,
+            owner: req.user.id,
             createdAt: new Date()
         });
 
-        if (req.isAuthenticated()) {
-            const userId = req.user.id;
-            if (!userVaults.has(userId)) userVaults.set(userId, []);
-            userVaults.get(userId).push({
-                id: scriptId,
-                name: name,
-                fileType: type,
-                loader: loader,
-                code: script,
-                createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            });
-        }
+        const userId = req.user.id;
+        if (!userVaults.has(userId)) userVaults.set(userId, []);
+        userVaults.get(userId).push({
+            id: scriptId,
+            name: name,
+            fileType: type,
+            loader: loader,
+            code: script,
+            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
 
         return res.json({ success: true, loader, scriptId });
 
