@@ -169,24 +169,34 @@ app.post('/api/obfuscate', (req, res) => {
     }
 });
 
-// RAW SCRIPT EXECUTION ENDPOINT (Roblox game:HttpGet target / Browser Black Screen)
+// RAW SCRIPT EXECUTION ENDPOINT (Universal Executor Support & Browser Black Screen)
 app.get('/raw/:id', (req, res) => {
     const item = scriptVault.get(req.params.id);
     if (!item) {
         return res.status(404).send('-- Script expired or invalid loader ID.');
     }
 
-    const userAgent = req.headers['user-agent'] || '';
-    const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Edge');
+    const userAgent = (req.headers['user-agent'] || '').toLowerCase();
+    
+    // Check if it's coming from an actual desktop web browser (Chrome, Firefox, Safari, Edge, Opera)
+    // Mobile browsers, custom tools, and all game executors will bypass this and receive the raw script directly.
+    const isStandardBrowser = 
+        (userAgent.includes('mozilla') || userAgent.includes('chrome') || userAgent.includes('safari') || userAgent.includes('edge')) &&
+        !userAgent.includes('roblox') && 
+        !userAgent.includesCF && 
+        !userAgent.includes('executor') &&
+        !userAgent.includes('dalvik') && // Android internal web view / mobile executor hooks
+        !userAgent.includes('mobile');
 
-    if (isBrowser && !userAgent.includes('Roblox') && !userAgent.includes('Executor')) {
+    if (isStandardBrowser) {
+        // Show a blank black screen only when opened in a standard desktop web browser
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.send(`<!DOCTYPE html><html><head><title></title><style>body{background:#000;margin:0;height:100vh;}</style></head><body></body></html>`);
     }
 
-    // Sanitize script code for Roblox executors:
+    // Sanitize script code for all executors:
     // 1. Strip hidden UTF-8 Byte Order Marks (BOM)
-    // 2. Normalize all Windows (\r\n) and old Mac (\r) line endings to standard Unix (\n)
+    // 2. Normalize Windows (\r\n) line endings to Unix (\n)
     let sanitizedCode = item.code
         .replace(/^\uFEFF/, '')
         .replace(/\r\n/g, '\n')
