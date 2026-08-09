@@ -18,17 +18,24 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// TRUST PROXY (Required for secure cookies behind reverse proxies like Railway)
+app.set('trust proxy', 1);
+
 // SESSION CONFIG
 app.use(session({
     secret: process.env.SESSION_SECRET || 'sin_obfuscator_default_secret_key',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }
+    cookie: { 
+        secure: process.env.NODE_ENV === 'production', // true on production/railway, false locally
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
+    }
 }));
 
 // PASSPORT DISCORD AUTH SETUP
 passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(obj, done));
+passport.deserializeUser((obj, done) => done(null, obj));
 
 passport.use(new DiscordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID,
@@ -61,7 +68,7 @@ app.get('/api/me', (req, res) => {
     if (req.isAuthenticated()) {
         const avatar = req.user.avatar 
             ? `https://cdn.discordapp.com/avatars/${req.user.id}/${req.user.avatar}.png`
-            : `https://cdn.discordapp.com/embed/avatars/${req.user.discriminator % 5}.png`;
+            : `https://cdn.discordapp.com/embed/avatars/${(req.user.discriminator || '0') % 5}.png`;
         return res.json({
             authenticated: true,
             user: {
@@ -78,7 +85,7 @@ app.get('/api/me', (req, res) => {
 function runObfuscationPipeline(code, fileType) {
     const header = `--[[ Protected by SIN Obfuscator v5.0 [Roblox Executor Ready] (${fileType.toUpperCase()}) ]]\n`;
     
-    // Convert source code characters into an escaped byte string array for safe Roblox execution
+    // Convert large scripts safely without hitting call stack limits
     const bytes = [];
     for (let i = 0; i < code.length; i++) {
         bytes.push(code.charCodeAt(i));
@@ -180,7 +187,7 @@ app.post('/api/delete', (req, res) => {
     res.json({ success: true });
 });
 
-// PREVENT API ROUTES FROM FALLING THROUGH TO HTML (Fixes Unexpected token '<' errors)
+// PREVENT API ROUTES FROM FALLING THROUGH TO HTML
 app.use('/api/*', (req, res) => {
     res.status(404).json({ success: false, error: 'API endpoint not found.' });
 });
