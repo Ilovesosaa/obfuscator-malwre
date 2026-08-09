@@ -3,506 +3,710 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIN | Next-Gen Luau Script Protection</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <title>SIN Obfuscator v5.0 | Advanced Roblox Script Protection</title>
+    <!-- Google Fonts & Lucide Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
-            --bg-dark: #030305;
-            --card-bg: rgba(13, 13, 20, 0.65);
-            --card-border: rgba(255, 255, 255, 0.08);
-            --accent-red: #ef4444;
-            --accent-glow: rgba(239, 68, 68, 0.4);
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --text-dark: #64748b;
+            --bg-base: #09090b;
+            --bg-surface: #121216;
+            --bg-card: #18181b;
+            --border: #27272a;
+            --border-focus: #ef4444;
+            --primary: #ef4444;
+            --primary-hover: #dc2626;
+            --primary-glow: rgba(239, 68, 68, 0.15);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --accent-green: #22c55e;
             --font-sans: 'Plus Jakarta Sans', sans-serif;
-            --font-code: 'JetBrains Mono', monospace;
+            --font-mono: 'JetBrains Mono', monospace;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            user-select: none;
         }
 
         body {
-            background-color: var(--bg-dark);
-            color: var(--text-primary);
+            background-color: var(--bg-base);
+            color: var(--text-main);
             font-family: var(--font-sans);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
             overflow-x: hidden;
-            position: relative;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(239, 68, 68, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(18, 18, 22, 0.5) 0%, transparent 50%);
         }
 
-        .ambient-glow-1 {
-            position: absolute;
-            top: -150px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 800px;
-            height: 400px;
-            background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
-            filter: blur(80px);
-            z-index: -1;
-            pointer-events: none;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-                              linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-            background-size: 40px 40px;
-            z-index: -1;
-            pointer-events: none;
-        }
-
+        /* Top Navigation Bar */
         header {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 1.5rem;
+            height: 70px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(9, 9, 11, 0.8);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
             display: flex;
+            align-items: center;
             justify-content: space-between;
-            align-items: center;
+            padding: 0 2rem;
         }
 
-        .brand {
+        .logo-container {
             display: flex;
             align-items: center;
-            gap: 0.8rem;
-            text-decoration: none;
+            gap: 12px;
         }
 
-        .brand-logo {
+        .logo-icon {
             width: 38px;
             height: 38px;
             background: linear-gradient(135deg, #ef4444, #991b1b);
-            border-radius: 10px;
+            border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 800;
-            color: white;
-            font-size: 1.1rem;
-            box-shadow: 0 0 20px var(--accent-glow);
-        }
-
-        .brand-title {
-            font-size: 1.25rem;
-            font-weight: 800;
-            color: var(--text-primary);
-        }
-
-        .brand-badge {
-            background: rgba(239, 68, 68, 0.15);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: var(--accent-red);
-            font-size: 0.65rem;
             font-weight: 700;
-            padding: 0.25rem 0.5rem;
-            border-radius: 20px;
-        }
-
-        .auth-btn {
-            background: #5865F2;
+            font-size: 1.2rem;
             color: white;
-            text-decoration: none;
-            padding: 0.65rem 1.3rem;
-            border-radius: 10px;
-            font-size: 0.88rem;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.6rem;
-            transition: all 0.2s ease;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
         }
 
-        .auth-btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .profile-card {
+        .logo-text {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
             display: flex;
             align-items: center;
-            gap: 0.8rem;
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            padding: 0.4rem 1rem 0.4rem 0.5rem;
+            gap: 8px;
+        }
+
+        .badge {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--primary);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-sans);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--border);
+            border-color: var(--text-muted);
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-card);
+            padding: 6px 12px 6px 6px;
             border-radius: 30px;
+            border: 1px solid var(--border);
         }
 
-        .profile-card img {
-            width: 32px;
-            height: 32px;
+        .user-avatar {
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
-            border: 2px solid var(--accent-red);
+            object-fit: cover;
         }
 
-        .profile-name { font-size: 0.85rem; font-weight: 700; }
-        .logout-link { color: var(--text-dark); text-decoration: none; font-size: 0.75rem; }
-        .logout-link:hover { color: var(--accent-red); }
+        .user-name {
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
 
+        /* Main Workspace Layout */
         main {
+            max-width: 1280px;
             width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .hero-title-area {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .hero-title-area h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .hero-title-area p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .workspace-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
             padding: 1.5rem;
             display: flex;
             flex-direction: column;
-            gap: 2rem;
+            gap: 1.25rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         }
 
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            backdrop-filter: blur(16px);
-            border-radius: 18px;
-            padding: 1.8rem;
-        }
-
-        .card-header { margin-bottom: 1.5rem; }
-        .card-title h2 { font-size: 1.3rem; font-weight: 700; }
-        .card-title p { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.3rem; }
-
-        .input-field-group { margin-bottom: 1.2rem; }
-        .input-label {
+        .input-group {
             display: flex;
-            justify-content: space-between;
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            margin-bottom: 0.5rem;
+            flex-direction: column;
+            gap: 8px;
         }
 
-        input[type="text"] {
-            width: 100%;
-            background: rgba(4, 4, 6, 0.8);
-            border: 1px solid var(--card-border);
-            border-radius: 10px;
-            color: var(--text-primary);
-            padding: 0.85rem 1rem;
+        .input-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .text-input {
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-main);
+            padding: 12px 16px;
+            font-family: var(--font-sans);
+            font-size: 0.95rem;
+            transition: var(--transition);
             outline: none;
         }
 
-        /* FILE DROP ZONE */
-        .file-drop-zone {
-            background: rgba(4, 4, 6, 0.6);
-            border: 2px dashed var(--card-border);
-            border-radius: 12px;
-            padding: 1.5rem;
+        .text-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        /* Drag & Drop Upload Zone */
+        .dropzone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius-md);
+            background: var(--bg-base);
+            padding: 2rem;
             text-align: center;
             cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .file-drop-zone:hover, .file-drop-zone.dragover {
-            border-color: var(--accent-red);
-            background: rgba(239, 68, 68, 0.05);
-        }
-
-        .drop-icon { font-size: 1.8rem; margin-bottom: 0.3rem; }
-        .drop-text { font-size: 0.85rem; color: var(--text-secondary); }
-        .browse-link { color: var(--accent-red); font-weight: 700; text-decoration: underline; }
-
-        .editor-wrapper {
-            background: rgba(4, 4, 6, 0.85);
-            border: 1px solid var(--card-border);
-            border-radius: 12px;
-            overflow: hidden;
-            margin-top: 0.8rem;
-        }
-
-        .editor-toolbar {
-            background: rgba(255, 255, 255, 0.02);
-            border-bottom: 1px solid var(--card-border);
-            padding: 0.6rem 1rem;
+            transition: var(--transition);
+            position: relative;
             display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--primary);
+            background: rgba(239, 68, 68, 0.02);
+        }
+
+        .dropzone i {
+            color: var(--text-muted);
+            transition: var(--transition);
+        }
+
+        .dropzone:hover i {
+            color: var(--primary);
+        }
+
+        .dropzone-text {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .dropzone-text span {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        /* Code Editor Window Styling */
+        .editor-container {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            background: var(--bg-base);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-header {
+            background: var(--bg-card);
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
             justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 600;
         }
 
-        .editor-lang {
-            font-family: var(--font-code);
-            font-size: 0.75rem;
-            color: var(--accent-red);
-            font-weight: 700;
+        .editor-header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .editor-clear-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-dark);
-            font-size: 0.75rem;
-            cursor: pointer;
+        .editor-dots {
+            display: flex;
+            gap: 6px;
         }
 
-        textarea {
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .dot-red { background: #ef4444; }
+        .dot-yellow { background: #f59e0b; }
+        .dot-green { background: #22c55e; }
+
+        .editor-body {
+            position: relative;
+            min-height: 320px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        textarea.code-textarea {
             width: 100%;
-            height: 280px;
+            height: 350px;
             background: transparent;
             border: none;
-            color: #e2e8f0;
-            padding: 1rem;
-            font-family: var(--font-code);
-            font-size: 0.88rem;
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
             line-height: 1.6;
-            outline: none;
+            padding: 16px;
             resize: vertical;
-            user-select: text;
+            outline: none;
+            tab-size: 4;
         }
 
-        .btn-submit {
-            width: 100%;
-            background: linear-gradient(135deg, var(--accent-red), #b91c1c);
-            color: white;
-            border: none;
-            padding: 1rem;
-            border-radius: 12px;
-            font-size: 0.95rem;
+        /* Action Footer */
+        .workspace-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding-top: 0.5rem;
+        }
+
+        .char-counter {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
+        .btn-obfuscate {
+            padding: 14px 32px;
+            font-size: 1rem;
             font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 4px 20px var(--accent-glow);
+            border-radius: var(--radius-md);
+            width: 100%;
+            justify-content: center;
+            letter-spacing: 0.3px;
         }
 
-        .output-panel {
+        /* Output Modal / Drawer Preview Style */
+        .output-container {
             display: none;
             margin-top: 1.5rem;
-            background: rgba(6, 78, 59, 0.15);
-            border: 1px solid rgba(52, 211, 153, 0.3);
-            border-radius: 12px;
-            padding: 1.2rem;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            animation: fadeIn 0.3s ease forwards;
         }
 
-        .output-panel.active { display: block; }
+        .output-container.active {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
         .output-header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 0.8rem;
+            justify-content: space-between;
         }
 
-        .loader-output-code {
-            background: rgba(4, 4, 6, 0.9);
-            border: 1px solid var(--card-border);
-            padding: 0.85rem;
-            border-radius: 8px;
-            font-family: var(--font-code);
-            font-size: 0.82rem;
-            color: #38bdf8;
+        .output-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent-green);
+        }
+
+        .loader-box {
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            color: var(--text-main);
             word-break: break-all;
-            user-select: text;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
         }
 
-        #toastContainer {
+        /* Toast Notifications */
+        #toast-container {
             position: fixed;
-            bottom: 20px; right: 20px;
-            display: flex; flex-direction: column; gap: 10px;
+            bottom: 24px;
+            right: 24px;
             z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
         .toast {
-            background: rgba(13, 13, 20, 0.9);
-            border: 1px solid var(--card-border);
-            color: white; padding: 0.85rem 1.2rem;
-            border-radius: 10px; font-size: 0.85rem;
-            display: flex; align-items: center; gap: 0.8rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 12px 20px;
+            border-radius: var(--radius-sm);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-        .toast-error { border-color: rgba(239, 68, 68, 0.5); }
-        .toast-success { border-color: rgba(52, 211, 153, 0.5); }
+
+        .toast.success { border-left: 4px solid var(--accent-green); }
+        .toast.error { border-left: 4px solid var(--primary); }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(50px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @media (max-width: 768px) {
+            header { padding: 0 1rem; }
+            main { padding: 1rem; margin: 1rem auto; }
+            .workspace-footer { flex-direction: column; align-items: stretch; }
+        }
     </style>
 </head>
 <body>
 
-    <div class="ambient-glow-1"></div>
-    <div id="toastContainer"></div>
-
+    <!-- Top Header -->
     <header>
-        <a href="/" class="brand">
-            <div class="brand-logo">S</div>
-            <span class="brand-title">SIN OBFUSCATOR</span>
-            <span class="brand-badge">v5.0</span>
-        </a>
-        <div id="userNav"></div>
+        <div class="logo-container">
+            <div class="logo-icon">S</div>
+            <div class="logo-text">
+                SIN OBFUSCATOR <span class="badge">v5.0</span>
+            </div>
+        </div>
+        <div class="nav-actions" id="nav-actions">
+            <!-- Dynamic Auth Rendered via JS -->
+            <a href="/auth/discord" class="btn btn-secondary">
+                <i data-lucide="discord" style="width: 18px; height: 18px;"></i>
+                Login with Discord
+            </a>
+        </div>
     </header>
 
+    <!-- Main Workspace -->
     <main>
-        <section class="card">
-            <div class="card-header">
-                <div class="card-title">
-                    <h2>Script Encryption Engine</h2>
-                    <p>Obfuscate .lua and .luau files into protected memory links.</p>
-                </div>
+        <div class="hero-title-area">
+            <h1>Script Encryption Engine</h1>
+            <p>Obfuscate .lua and .luau files into protected memory links instantly.</p>
+        </div>
+
+        <div class="workspace-card">
+            <!-- Script Name Identifier -->
+            <div class="input-group">
+                <label class="input-label" for="scriptNameInput">Script Identifier</label>
+                <input type="text" id="scriptNameInput" class="text-input" placeholder="e.g., Auto Heal GUI" autocomplete="off" />
             </div>
 
-            <div class="input-field-group">
-                <div class="input-label">Script Identifier</div>
-                <input type="text" id="scriptName" placeholder="e.g. MainHub_v2">
+            <!-- Drag and Drop Zone -->
+            <div class="dropzone" id="dropzone">
+                <input type="file" id="fileInput" accept=".lua,.luau" style="display: none;" />
+                <i data-lucide="folder-open" style="width: 32px; height: 32px;"></i>
+                <div class="dropzone-text">Drag & drop your <span>.lua</span> or <span>.luau</span> file here, or <span>browse</span></div>
             </div>
 
-            <div class="input-field-group">
-                <div class="input-label">
-                    <span>Source Code (.lua / .luau)</span>
-                    <span id="charCount" style="color: var(--text-dark);">0 chars</span>
-                </div>
-
-                <div id="dropZone" class="file-drop-zone">
-                    <input type="file" id="fileInput" accept=".lua,.luau,.txt" style="display: none;" />
-                    <div class="drop-icon">📁</div>
-                    <div class="drop-text">Drag & drop your <b>.lua</b> or <b>.luau</b> file here, or <span class="browse-link">browse</span></div>
-                </div>
-
-                <div class="editor-wrapper">
-                    <div class="editor-toolbar">
-                        <span class="editor-lang" id="detectedFileType">LUAU / LUA 5.1</span>
-                        <button class="editor-clear-btn" id="clearBtn">Clear Editor</button>
+            <!-- Code Editor Window -->
+            <div class="editor-container">
+                <div class="editor-header">
+                    <div class="editor-header-left">
+                        <div class="editor-dots">
+                            <div class="dot dot-red"></div>
+                            <div class="dot dot-yellow"></div>
+                            <div class="dot dot-green"></div>
+                        </div>
+                        <span id="fileTypeIndicator" style="margin-left: 8px; font-family: var(--font-mono); color: var(--primary);">LUAU / LUA 5.1</span>
                     </div>
-                    <textarea id="sourceCode" placeholder="-- Paste or drop your .lua / .luau script here..."></textarea>
+                    <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.75rem;" id="clearEditorBtn">Clear Editor</button>
+                </div>
+                <div class="editor-body">
+                    <textarea id="scriptInput" class="code-textarea" placeholder="-- Paste or drop your Roblox Luau script here..."></textarea>
                 </div>
             </div>
 
-            <button id="obfuscateBtn" class="btn-submit">Obfuscate Script</button>
-
-            <div id="outputBox" class="output-panel">
-                <div class="output-header">
-                    <span style="color: #34d399; font-weight: 700;">✅ Compiled & Hosted</span>
-                    <button style="background: rgba(52, 211, 153, 0.2); border: 1px solid rgba(52, 211, 153, 0.4); color: #6ee7b7; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer;" onclick="copyLoader()">Copy Loader Link</button>
-                </div>
-                <div class="loader-output-code" id="loaderOutput"></div>
+            <!-- Footer & Submit Trigger -->
+            <div class="workspace-footer">
+                <div class="char-counter" id="charCounter">0 CHARS</div>
             </div>
-        </section>
+            
+            <button class="btn btn-primary btn-obfuscate" id="obfuscateBtn">
+                <i data-lucide="shield-check" style="width: 20px; height: 20px;"></i>
+                Obfuscate Script
+            </button>
+        </div>
+
+        <!-- Output Result Panel -->
+        <div class="output-container" id="outputContainer">
+            <div class="output-header">
+                <div class="output-title">
+                    <i data-lucide="check-circle-2" style="width: 20px; height: 20px;"></i>
+                    Protection Successful!
+                </div>
+            </div>
+            <div class="input-group">
+                <label class="input-label">Generated Roblox Loader (game:HttpGet)</label>
+                <div class="loader-box">
+                    <span id="loaderOutputText" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+                    <button class="btn btn-primary" id="copyLoaderBtn" style="padding: 6px 12px; font-size: 0.75rem; flex-shrink: 0;">
+                        <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy
+                    </button>
+                </div>
+            </div>
+        </div>
     </main>
 
+    <!-- Toast Notification Container -->
+    <div id="toast-container"></div>
+
+    <!-- Frontend UI Logic & Interactivity -->
     <script>
-        let currentDetectedType = 'luau';
+        // Initialize Lucide Icons
+        lucide.createIcons();
 
-        function showToast(msg, type = 'error') {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.innerHTML = `<span>${type === 'error' ? '⚠️' : '✅'}</span><span>${msg}</span>`;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
-        }
-
-        async function checkAuth() {
-            try {
-                const res = await fetch('/api/me');
-                const data = await res.json();
-                const userNav = document.getElementById('userNav');
-
-                if (data.authenticated) {
-                    userNav.innerHTML = `
-                        <div class="profile-card">
-                            <img src="${data.user.avatar}" alt="Avatar">
-                            <div class="profile-info">
-                                <span class="profile-name">${data.user.username}</span>
-                                <a href="/auth/logout" class="logout-link">Sign Out</a>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    userNav.innerHTML = `<a href="/auth/discord" class="auth-btn">Login with Discord</a>`;
-                }
-            } catch (err) {}
-        }
-
-        // DRAG & DROP / FILE INPUT LOGIC
-        const dropZone = document.getElementById('dropZone');
+        const scriptInput = document.getElementById('scriptInput');
+        const scriptNameInput = document.getElementById('scriptNameInput');
         const fileInput = document.getElementById('fileInput');
-        const sourceInput = document.getElementById('sourceCode');
-        const detectedFileType = document.getElementById('detectedFileType');
+        const dropzone = document.getElementById('dropzone');
+        const clearEditorBtn = document.getElementById('clearEditorBtn');
+        const charCounter = document.getElementById('charCounter');
+        const obfuscateBtn = document.getElementById('obfuscateBtn');
+        const outputContainer = document.getElementById('outputContainer');
+        const loaderOutputText = document.getElementById('loaderOutputText');
+        const copyLoaderBtn = document.getElementById('copyLoaderBtn');
+        const navActions = document.getElementById('nav-actions');
 
-        dropZone.addEventListener('click', () => fileInput.click());
+        let generatedLoaderUrl = '';
 
+        // Toast Notification System
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" style="width: 18px; height: 18px; color: ${type === 'success' ? 'var(--accent-green)' : 'var(--primary);'}"></i>
+                <span>${message}</span>
+            `;
+            container.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(50px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // Live Character Counter & Type Badge Update
+        scriptInput.addEventListener('input', () => {
+            const len = scriptInput.value.length;
+            charCounter.textContent = `${len} CHARS`;
+        });
+
+        // Clear Editor
+        clearEditorBtn.addEventListener('click', () => {
+            scriptInput.value = '';
+            scriptNameInput.value = '';
+            charCounter.textContent = '0 CHARS';
+            outputContainer.classList.remove('active');
+            showToast('Editor cleared.', 'success');
+        });
+
+        // Drag and Drop Handling
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
         fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) handleFile(e.target.files[0]);
-        });
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
         });
 
         function handleFile(file) {
-            const ext = file.name.split('.').pop().toLowerCase();
-            if (ext !== 'lua' && ext !== 'luau' && ext !== 'txt') {
-                showToast("Only .lua and .luau files are supported!");
-                return;
-            }
-
             const reader = new FileReader();
-            reader.onload = (e) => {
-                sourceInput.value = e.target.result;
-                document.getElementById('charCount').innerText = `${sourceInput.value.length} chars`;
-                currentDetectedType = ext === 'txt' ? 'lua' : ext;
-                detectedFileType.innerText = currentDetectedType.toUpperCase();
-                
-                const scriptNameInput = document.getElementById('scriptName');
-                if (!scriptNameInput.value) {
-                    scriptNameInput.value = file.name.replace(/\.[^/.]+$/, "");
-                }
-                showToast(`Loaded ${file.name} successfully!`, "success");
+            reader.onload = function(evt) {
+                scriptInput.value = evt.target.result;
+                scriptNameInput.value = file.name.replace(/\.[^/.]+$/, "");
+                charCounter.textContent = `${scriptInput.value.length} CHARS`;
+                showToast(`Loaded ${file.name} successfully!`, 'success');
             };
             reader.readAsText(file);
         }
 
-        sourceInput.addEventListener('input', () => {
-            document.getElementById('charCount').innerText = `${sourceInput.value.length} chars`;
-        });
+        // Fetch User Auth State on Load
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/me');
+                const data = await res.json();
+                if (data.authenticated) {
+                    navActions.innerHTML = `
+                        <div class="user-profile">
+                            <img src="${data.user.avatar}" class="user-avatar" alt="Avatar" />
+                            <span class="user-name">${data.user.username}</span>
+                        </div>
+                        <a href="/auth/logout" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">Logout</a>
+                    `;
+                }
+            } catch (err) {
+                console.error("Auth check failed:", err);
+            }
+        }
+        checkAuth();
 
-        document.getElementById('clearBtn').addEventListener('click', () => {
-            sourceInput.value = '';
-            document.getElementById('charCount').innerText = '0 chars';
-        });
+        // Obfuscation Trigger
+        obfuscateBtn.addEventListener('click', async () => {
+            const scriptContent = scriptInput.value;
+            const scriptName = scriptNameInput.value;
 
-        document.getElementById('obfuscateBtn').addEventListener('click', async () => {
-            const script = sourceInput.value;
-            const scriptName = document.getElementById('scriptName').value;
-
-            if (!script.trim()) {
-                showToast("Enter or upload code before obfuscating.");
+            if (!scriptContent.trim()) {
+                showToast('Please enter or drop your script code first.', 'error');
                 return;
             }
 
+            obfuscateBtn.disabled = true;
+            obfuscateBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" style="width: 20px; height: 20px;"></i> Encrypting Payload...`;
+            lucide.createIcons();
+
             try {
-                const res = await fetch('/api/obfuscate', {
+                const response = await fetch('/api/obfuscate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ script, scriptName, fileType: currentDetectedType })
+                    body: JSON.stringify({ script: scriptContent, scriptName: scriptName, fileType: 'luau' })
                 });
 
-                const data = await res.json();
-                if (!res.ok || !data.success) throw new Error(data.error || "Obfuscation failed");
+                const result = await response.json();
 
-                document.getElementById('loaderOutput').innerText = data.loader;
-                document.getElementById('outputBox').classList.add('active');
-                showToast("Compiled successfully!", "success");
-
+                if (result.success) {
+                    generatedLoaderUrl = result.loader;
+                    loaderOutputText.textContent = generatedLoaderUrl;
+                    outputContainer.classList.add('active');
+                    outputContainer.scrollIntoView({ behavior: 'smooth' });
+                    showToast('Script encrypted successfully!', 'success');
+                } else {
+                    showToast(result.error || 'Obfuscation failed.', 'error');
+                }
             } catch (err) {
-                showToast(err.message);
+                showToast('Network error or server unavailable.', 'error');
+                console.error(err);
+            } finally {
+                obfuscateBtn.disabled = false;
+                obfuscateBtn.innerHTML = `<i data-lucide="shield-check" style="width: 20px; height: 20px;"></i> Obfuscate Script`;
+                lucide.createIcons();
             }
         });
 
-        function copyLoader() {
-            navigator.clipboard.writeText(document.getElementById('loaderOutput').innerText);
-            showToast("Copied loader to clipboard!", "success");
-        }
-
-        checkAuth();
+        // Copy Loader to Clipboard
+        copyLoaderBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(generatedLoaderUrl).then(() => {
+                showToast('Loader copied to clipboard!', 'success');
+            }).catch(() => {
+                showToast('Failed to copy loader.', 'error');
+            });
+        });
     </script>
 </body>
 </html>
