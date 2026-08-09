@@ -160,18 +160,20 @@ app.get('/raw/:id', (req, res) => {
         return res.status(404).send('-- Script expired or invalid loader ID.');
     }
 
-    // Check if the request is coming from a web browser vs Roblox executor
     const userAgent = req.headers['user-agent'] || '';
-    const isRoblox = userAgent.includes('Roblox') || userAgent.includes('Studio');
+    
+    // Check if the request is coming from a web browser vs Roblox executor/environment
+    const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Edge');
 
-    if (!isRoblox) {
-        // Show a blank black screen when opened in a browser
-        res.setHeader('Content-Type', 'text/html');
+    if (isBrowser && !userAgent.includes('Roblox') && !userAgent.includes('Executor')) {
+        // Show a blank black screen when opened in a standard web browser
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.send(`<!DOCTYPE html><html><head><title></title><style>body{background:#000;margin:0;height:100vh;}</style></head><body></body></html>`);
     }
 
-    // Serve raw script code for Roblox game:HttpGet
-    res.setHeader('Content-Type', 'text/plain');
+    // Force universal plain text delivery with proper CORS headers so all executors can pull it smoothly
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(item.code);
 });
 
