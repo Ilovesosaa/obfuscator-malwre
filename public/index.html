@@ -3,29 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIN Obfuscator v5.0 | Advanced Roblox Script Protection</title>
+    <title>SIN Obfuscator v5.0 | Next-Gen Roblox Script Protection</title>
     <!-- Google Fonts & Lucide Icons -->
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
-            --bg-base: #09090b;
-            --bg-surface: #121216;
-            --bg-card: #18181b;
-            --border: #27272a;
+            --bg-base: #050507;
+            --bg-surface: #0d0d12;
+            --bg-card: #13131a;
+            --bg-card-hover: #1a1a24;
+            --border: #22222e;
             --border-focus: #ef4444;
             --primary: #ef4444;
-            --primary-hover: #dc2626;
-            --primary-glow: rgba(239, 68, 68, 0.15);
-            --text-main: #f4f4f5;
-            --text-muted: #a1a1aa;
-            --accent-green: #22c55e;
+            --primary-hover: #f87171;
+            --primary-glow: rgba(239, 68, 68, 0.25);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-green: #10b981;
+            --accent-cyan: #06b6d4;
             --font-sans: 'Plus Jakarta Sans', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
             --radius-sm: 8px;
             --radius-md: 12px;
             --radius-lg: 16px;
-            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         * {
@@ -43,75 +45,78 @@
             flex-direction: column;
             overflow-x: hidden;
             background-image: 
-                radial-gradient(circle at 50% 0%, rgba(239, 68, 68, 0.08) 0%, transparent 50%),
-                radial-gradient(circle at 100% 100%, rgba(18, 18, 22, 0.5) 0%, transparent 50%);
+                radial-gradient(circle at 50% -20%, rgba(239, 68, 68, 0.15) 0%, transparent 60%),
+                radial-gradient(circle at 100% 100%, rgba(6, 182, 212, 0.05) 0%, transparent 50%),
+                linear-gradient(to bottom, transparent, rgba(5, 5, 7, 0.8));
         }
 
         /* Top Navigation Bar */
         header {
-            height: 70px;
+            height: 76px;
             border-bottom: 1px solid var(--border);
-            background: rgba(9, 9, 11, 0.8);
-            backdrop-filter: blur(12px);
+            background: rgba(5, 5, 7, 0.75);
+            backdrop-filter: blur(16px);
             position: sticky;
             top: 0;
             z-index: 100;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 2rem;
+            padding: 0 2.5rem;
         }
 
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
         }
 
         .logo-icon {
-            width: 38px;
-            height: 38px;
-            background: linear-gradient(135deg, #ef4444, #991b1b);
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, #ef4444, #7f1d1d);
             border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 700;
-            font-size: 1.2rem;
+            font-weight: 800;
+            font-size: 1.25rem;
             color: white;
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .logo-text {
-            font-size: 1.15rem;
-            font-weight: 700;
+            font-size: 1.2rem;
+            font-weight: 800;
             letter-spacing: -0.5px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         .badge {
-            background: rgba(239, 68, 68, 0.1);
+            background: rgba(239, 68, 68, 0.12);
             color: var(--primary);
-            border: 1px solid rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.3);
             font-size: 0.7rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
         }
 
         .nav-actions {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
         }
 
         .btn {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 8px 16px;
+            padding: 10px 20px;
             border-radius: var(--radius-sm);
             font-family: var(--font-sans);
             font-size: 0.875rem;
@@ -123,15 +128,15 @@
         }
 
         .btn-primary {
-            background-color: var(--primary);
+            background: linear-gradient(135deg, #ef4444, #dc2626);
             color: white;
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.35);
         }
 
         .btn-primary:hover {
-            background-color: var(--primary-hover);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+            background: linear-gradient(135deg, #f87171, #ef4444);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(239, 68, 68, 0.5);
         }
 
         .btn-secondary {
@@ -141,70 +146,118 @@
         }
 
         .btn-secondary:hover {
-            background-color: var(--border);
+            background-color: var(--bg-card-hover);
             border-color: var(--text-muted);
+            transform: translateY(-1px);
         }
 
         .user-profile {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             background: var(--bg-card);
-            padding: 6px 12px 6px 6px;
-            border-radius: 30px;
+            padding: 6px 14px 6px 6px;
+            border-radius: 40px;
             border: 1px solid var(--border);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
         .user-avatar {
-            width: 28px;
-            height: 28px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             object-fit: cover;
+            border: 2px solid var(--primary);
         }
 
         .user-name {
             font-size: 0.875rem;
-            font-weight: 600;
+            font-weight: 700;
         }
 
         /* Main Workspace Layout */
         main {
-            max-width: 1280px;
+            max-width: 1400px;
             width: 100%;
-            margin: 2rem auto;
-            padding: 0 1.5rem;
+            margin: 2.5rem auto;
+            padding: 0 2rem;
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
+            gap: 2rem;
         }
 
-        .hero-title-area {
+        .hero-banner {
             display: flex;
-            flex-direction: column;
-            gap: 4px;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1.5rem;
         }
 
         .hero-title-area h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            letter-spacing: -0.5px;
+            font-size: 2.25rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(to right, #fff, var(--text-muted));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .hero-title-area p {
             color: var(--text-muted);
-            font-size: 0.95rem;
+            font-size: 1rem;
+            margin-top: 4px;
+        }
+
+        .stats-pills {
+            display: flex;
+            gap: 12px;
+        }
+
+        .stat-pill {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .stat-label { color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; }
+        .stat-value { color: var(--accent-green); font-weight: 700; }
+
+        .workspace-grid {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .workspace-grid { grid-template-columns: 1fr; }
         }
 
         .workspace-card {
             background-color: var(--bg-surface);
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
-            padding: 1.5rem;
+            padding: 2rem;
             display: flex;
             flex-direction: column;
-            gap: 1.25rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            gap: 1.5rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            position: relative;
+        }
+
+        .workspace-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.5), transparent);
         }
 
         .input-group {
@@ -217,7 +270,7 @@
             font-size: 0.75rem;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
             color: var(--text-muted);
         }
 
@@ -226,7 +279,7 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             color: var(--text-main);
-            padding: 12px 16px;
+            padding: 14px 18px;
             font-family: var(--font-sans);
             font-size: 0.95rem;
             transition: var(--transition);
@@ -235,7 +288,8 @@
 
         .text-input:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-glow);
+            box-shadow: 0 0 0 4px var(--primary-glow);
+            background: var(--bg-card);
         }
 
         /* Drag & Drop Upload Zone */
@@ -251,12 +305,13 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         .dropzone:hover, .dropzone.dragover {
             border-color: var(--primary);
-            background: rgba(239, 68, 68, 0.02);
+            background: rgba(239, 68, 68, 0.03);
+            box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.05);
         }
 
         .dropzone i {
@@ -266,16 +321,17 @@
 
         .dropzone:hover i {
             color: var(--primary);
+            transform: scale(1.1);
         }
 
         .dropzone-text {
-            font-size: 0.9rem;
+            font-size: 0.95rem;
             color: var(--text-muted);
         }
 
         .dropzone-text span {
             color: var(--primary);
-            font-weight: 600;
+            font-weight: 700;
         }
 
         /* Code Editor Window Styling */
@@ -286,11 +342,12 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
         }
 
         .editor-header {
             background: var(--bg-card);
-            padding: 10px 16px;
+            padding: 12px 18px;
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
@@ -303,7 +360,7 @@
         .editor-header-left {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 12px;
         }
 
         .editor-dots {
@@ -319,28 +376,91 @@
 
         .dot-red { background: #ef4444; }
         .dot-yellow { background: #f59e0b; }
-        .dot-green { background: #22c55e; }
-
-        .editor-body {
-            position: relative;
-            min-height: 320px;
-            max-height: 500px;
-            overflow-y: auto;
-        }
+        .dot-green { background: #10b981; }
 
         textarea.code-textarea {
             width: 100%;
-            height: 350px;
+            height: 380px;
             background: transparent;
             border: none;
-            color: var(--text-main);
+            color: #e2e8f0;
             font-family: var(--font-mono);
             font-size: 0.875rem;
-            line-height: 1.6;
-            padding: 16px;
+            line-height: 1.7;
+            padding: 18px;
             resize: vertical;
             outline: none;
             tab-size: 4;
+        }
+
+        /* Sidebar Control Panel */
+        .sidebar-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .config-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .config-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.75rem;
+        }
+
+        .feature-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .toggle-switch {
+            width: 40px;
+            height: 22px;
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 11px;
+            position: relative;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .toggle-switch.active {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: var(--transition);
+        }
+
+        .toggle-switch.active::after {
+            left: 20px;
         }
 
         /* Action Footer */
@@ -349,59 +469,57 @@
             align-items: center;
             justify-content: space-between;
             gap: 1rem;
-            padding-top: 0.5rem;
         }
 
         .char-counter {
             font-size: 0.85rem;
             color: var(--text-muted);
             font-family: var(--font-mono);
+            background: var(--bg-base);
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
         }
 
         .btn-obfuscate {
-            padding: 14px 32px;
-            font-size: 1rem;
-            font-weight: 700;
+            padding: 16px 32px;
+            font-size: 1.05rem;
+            font-weight: 800;
             border-radius: var(--radius-md);
             width: 100%;
             justify-content: center;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.5px;
         }
 
-        /* Output Modal / Drawer Preview Style */
+        /* Output Result Panel */
         .output-container {
             display: none;
             margin-top: 1.5rem;
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), var(--bg-surface));
+            border: 1px solid rgba(16, 185, 129, 0.3);
             border-radius: var(--radius-lg);
-            padding: 1.5rem;
-            animation: fadeIn 0.3s ease forwards;
+            padding: 2rem;
+            animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
         }
 
         .output-container.active {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 1.25rem;
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(15px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        .output-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
         .output-title {
-            font-weight: 700;
-            font-size: 1.1rem;
+            font-weight: 800;
+            font-size: 1.2rem;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             color: var(--accent-green);
         }
 
@@ -409,55 +527,57 @@
             background: var(--bg-base);
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
-            padding: 12px 16px;
+            padding: 14px 18px;
             font-family: var(--font-mono);
-            font-size: 0.875rem;
+            font-size: 0.9rem;
             color: var(--text-main);
-            word-break: break-all;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
+            gap: 16px;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.6);
         }
 
         /* Toast Notifications */
         #toast-container {
             position: fixed;
-            bottom: 24px;
-            right: 24px;
+            bottom: 30px;
+            right: 30px;
             z-index: 9999;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 12px;
         }
 
         .toast {
             background: var(--bg-card);
             border: 1px solid var(--border);
             color: var(--text-main);
-            padding: 12px 20px;
-            border-radius: var(--radius-sm);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            padding: 14px 22px;
+            border-radius: var(--radius-md);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
             font-size: 0.875rem;
-            font-weight: 500;
+            font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 10px;
-            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            gap: 12px;
+            animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            backdrop-filter: blur(10px);
         }
 
         .toast.success { border-left: 4px solid var(--accent-green); }
         .toast.error { border-left: 4px solid var(--primary); }
 
         @keyframes slideIn {
-            from { opacity: 0; transform: translateX(50px); }
+            from { opacity: 0; transform: translateX(60px); }
             to { opacity: 1; transform: translateX(0); }
         }
 
         @media (max-width: 768px) {
             header { padding: 0 1rem; }
-            main { padding: 1rem; margin: 1rem auto; }
+            main { padding: 1rem; margin: 1.5rem auto; }
             .workspace-footer { flex-direction: column; align-items: stretch; }
+            .hero-banner { flex-direction: column; align-items: flex-start; gap: 1rem; }
         }
     </style>
 </head>
@@ -468,7 +588,7 @@
         <div class="logo-container">
             <div class="logo-icon">S</div>
             <div class="logo-text">
-                SIN OBFUSCATOR <span class="badge">v5.0</span>
+                SIN OBFUSCATOR <span class="badge">PRO v5.0</span>
             </div>
         </div>
         <div class="nav-actions" id="nav-actions">
@@ -482,68 +602,117 @@
 
     <!-- Main Workspace -->
     <main>
-        <div class="hero-title-area">
-            <h1>Script Encryption Engine</h1>
-            <p>Obfuscate .lua and .luau files into protected memory links instantly.</p>
+        <div class="hero-banner">
+            <div class="hero-title-area">
+                <h1>Script Protection Engine</h1>
+                <p>Enterprise-grade Lua & Luau obfuscation built specifically for Roblox exploit executors.</p>
+            </div>
+            <div class="stats-pills">
+                <div class="stat-pill">
+                    <span class="stat-label">Pipeline Status</span>
+                    <span class="stat-value">ONLINE</span>
+                </div>
+                <div class="stat-pill">
+                    <span class="stat-label">VM Compatibility</span>
+                    <span class="stat-value">100% LUAU</span>
+                </div>
+            </div>
         </div>
 
-        <div class="workspace-card">
-            <!-- Script Name Identifier -->
-            <div class="input-group">
-                <label class="input-label" for="scriptNameInput">Script Identifier</label>
-                <input type="text" id="scriptNameInput" class="text-input" placeholder="e.g., Auto Heal GUI" autocomplete="off" />
-            </div>
+        <div class="workspace-grid">
+            <!-- Left Primary Column -->
+            <div class="workspace-card">
+                <!-- Script Name Identifier -->
+                <div class="input-group">
+                    <label class="input-label" for="scriptNameInput">Script Identification Label</label>
+                    <input type="text" id="scriptNameInput" class="text-input" placeholder="e.g., Rayfield Admin Hub v2" autocomplete="off" />
+                </div>
 
-            <!-- Drag and Drop Zone -->
-            <div class="dropzone" id="dropzone">
-                <input type="file" id="fileInput" accept=".lua,.luau" style="display: none;" />
-                <i data-lucide="folder-open" style="width: 32px; height: 32px;"></i>
-                <div class="dropzone-text">Drag & drop your <span>.lua</span> or <span>.luau</span> file here, or <span>browse</span></div>
-            </div>
+                <!-- Drag and Drop Zone -->
+                <div class="dropzone" id="dropzone">
+                    <input type="file" id="fileInput" accept=".lua,.luau" style="display: none;" />
+                    <i data-lucide="upload-cloud" style="width: 36px; height: 36px;"></i>
+                    <div class="dropzone-text">Drag & drop your <span>.lua</span> or <span>.luau</span> script, or <span>browse files</span></div>
+                </div>
 
-            <!-- Code Editor Window -->
-            <div class="editor-container">
-                <div class="editor-header">
-                    <div class="editor-header-left">
-                        <div class="editor-dots">
-                            <div class="dot dot-red"></div>
-                            <div class="dot dot-yellow"></div>
-                            <div class="dot dot-green"></div>
+                <!-- Code Editor Window -->
+                <div class="editor-container">
+                    <div class="editor-header">
+                        <div class="editor-header-left">
+                            <div class="editor-dots">
+                                <div class="dot dot-red"></div>
+                                <div class="dot dot-yellow"></div>
+                                <div class="dot dot-green"></div>
+                            </div>
+                            <span id="fileTypeIndicator" style="margin-left: 8px; font-family: var(--font-mono); color: var(--primary); font-weight: 700;">LUAU / LUA 5.1</span>
                         </div>
-                        <span id="fileTypeIndicator" style="margin-left: 8px; font-family: var(--font-mono); color: var(--primary);">LUAU / LUA 5.1</span>
+                        <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;" id="clearEditorBtn">Clear Editor</button>
                     </div>
-                    <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.75rem;" id="clearEditorBtn">Clear Editor</button>
+                    <div class="editor-body">
+                        <textarea id="scriptInput" class="code-textarea" placeholder="-- Paste or drop your Roblox Luau script code here..."></textarea>
+                    </div>
                 </div>
-                <div class="editor-body">
-                    <textarea id="scriptInput" class="code-textarea" placeholder="-- Paste or drop your Roblox Luau script here..."></textarea>
+
+                <!-- Footer & Submit Trigger -->
+                <div class="workspace-footer">
+                    <div class="char-counter" id="charCounter">0 CHARS</div>
                 </div>
+                
+                <button class="btn btn-primary btn-obfuscate" id="obfuscateBtn">
+                    <i data-lucide="shield-check" style="width: 20px; height: 20px;"></i>
+                    Obfuscate & Protect Payload
+                </button>
             </div>
 
-            <!-- Footer & Submit Trigger -->
-            <div class="workspace-footer">
-                <div class="char-counter" id="charCounter">0 CHARS</div>
+            <!-- Right Sidebar Panel -->
+            <div class="sidebar-panel">
+                <div class="config-card">
+                    <div class="config-title">
+                        <i data-lucide="sliders" style="width: 16px; height: 16px; color: var(--primary);"></i>
+                        Protection Settings
+                    </div>
+                    <div class="feature-toggle">
+                        <span>Bytecode Virtualization</span>
+                        <div class="toggle-switch active" onclick="this.classList.toggle('active')"></div>
+                    </div>
+                    <div class="feature-toggle">
+                        <span>String Encryption</span>
+                        <div class="toggle-switch active" onclick="this.classList.toggle('active')"></div>
+                    </div>
+                    <div class="feature-toggle">
+                        <span>Anti-Tamper Hooks</span>
+                        <div class="toggle-switch active" onclick="this.classList.toggle('active')"></div>
+                    </div>
+                    <div class="feature-toggle">
+                        <span>Constant Flattening</span>
+                        <div class="toggle-switch" onclick="this.classList.toggle('active')"></div>
+                    </div>
+                </div>
+
+                <div class="config-card">
+                    <div class="config-title">
+                        <i data-lucide="zap" style="width: 16px; height: 16px; color: var(--accent-green);"></i>
+                        Quick Links
+                    </div>
+                    <p style="font-size: 0.825rem; color: var(--text-muted); line-height: 1.5;">
+                        Protected raw links automatically use high-speed in-memory caching compatible with standard executor environments.
+                    </p>
+                </div>
             </div>
-            
-            <button class="btn btn-primary btn-obfuscate" id="obfuscateBtn">
-                <i data-lucide="shield-check" style="width: 20px; height: 20px;"></i>
-                Obfuscate Script
-            </button>
         </div>
 
         <!-- Output Result Panel -->
         <div class="output-container" id="outputContainer">
-            <div class="output-header">
-                <div class="output-title">
-                    <i data-lucide="check-circle-2" style="width: 20px; height: 20px;"></i>
-                    Protection Successful!
-                </div>
+            <div class="output-title">
+                <i data-lucide="check-circle-2" style="width: 22px; height: 22px;"></i>
+                Script Successfully Protected & Deployed!
             </div>
             <div class="input-group">
-                <label class="input-label">Generated Roblox Loader (game:HttpGet)</label>
+                <label class="input-label">Roblox game:HttpGet Loader Execution String</label>
                 <div class="loader-box">
                     <span id="loaderOutputText" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
-                    <button class="btn btn-primary" id="copyLoaderBtn" style="padding: 6px 12px; font-size: 0.75rem; flex-shrink: 0;">
-                        <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy
+                    <button class="btn btn-primary" id="copyLoaderBtn" style="padding: 8px 14px; font-size: 0.8rem; flex-shrink: 0;">
+                        <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy Loader
                     </button>
                 </div>
             </div>
@@ -578,20 +747,20 @@
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
             toast.innerHTML = `
-                <i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" style="width: 18px; height: 18px; color: ${type === 'success' ? 'var(--accent-green)' : 'var(--primary);'}"></i>
+                <i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" style="width: 20px; height: 20px; color: ${type === 'success' ? 'var(--accent-green)' : 'var(--primary);'}"></i>
                 <span>${message}</span>
             `;
             container.appendChild(toast);
             lucide.createIcons();
             setTimeout(() => {
                 toast.style.opacity = '0';
-                toast.style.transform = 'translateX(50px)';
-                toast.style.transition = 'all 0.3s ease';
-                setTimeout(() => toast.remove(), 300);
+                toast.style.transform = 'translateX(60px)';
+                toast.style.transition = 'all 0.35s ease';
+                setTimeout(() => toast.remove(), 350);
             }, 3500);
         }
 
-        // Live Character Counter & Type Badge Update
+        // Live Character Counter Update
         scriptInput.addEventListener('input', () => {
             const len = scriptInput.value.length;
             charCounter.textContent = `${len} CHARS`;
@@ -603,7 +772,7 @@
             scriptNameInput.value = '';
             charCounter.textContent = '0 CHARS';
             outputContainer.classList.remove('active');
-            showToast('Editor cleared.', 'success');
+            showToast('Editor workspace cleared.', 'success');
         });
 
         // Drag and Drop Handling
@@ -648,7 +817,7 @@
                             <img src="${data.user.avatar}" class="user-avatar" alt="Avatar" />
                             <span class="user-name">${data.user.username}</span>
                         </div>
-                        <a href="/auth/logout" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">Logout</a>
+                        <a href="/auth/logout" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.8rem;">Logout</a>
                     `;
                 }
             } catch (err) {
@@ -668,7 +837,7 @@
             }
 
             obfuscateBtn.disabled = true;
-            obfuscateBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" style="width: 20px; height: 20px;"></i> Encrypting Payload...`;
+            obfuscateBtn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" style="width: 20px; height: 20px;"></i> Processing Virtualization...`;
             lucide.createIcons();
 
             try {
@@ -685,7 +854,7 @@
                     loaderOutputText.textContent = generatedLoaderUrl;
                     outputContainer.classList.add('active');
                     outputContainer.scrollIntoView({ behavior: 'smooth' });
-                    showToast('Script encrypted successfully!', 'success');
+                    showToast('Payload encrypted and stored successfully!', 'success');
                 } else {
                     showToast(result.error || 'Obfuscation failed.', 'error');
                 }
@@ -694,7 +863,7 @@
                 console.error(err);
             } finally {
                 obfuscateBtn.disabled = false;
-                obfuscateBtn.innerHTML = `<i data-lucide="shield-check" style="width: 20px; height: 20px;"></i> Obfuscate Script`;
+                obfuscateBtn.innerHTML = `<i data-lucide="shield-check" style="width: 20px; height: 20px;"></i> Obfuscate & Protect Payload`;
                 lucide.createIcons();
             }
         });
@@ -702,9 +871,9 @@
         // Copy Loader to Clipboard
         copyLoaderBtn.addEventListener('click', () => {
             navigator.clipboard.writeText(generatedLoaderUrl).then(() => {
-                showToast('Loader copied to clipboard!', 'success');
+                showToast('Loader string copied to clipboard!', 'success');
             }).catch(() => {
-                showToast('Failed to copy loader.', 'error');
+                showToast('Failed to copy loader string.', 'error');
             });
         });
     </script>
