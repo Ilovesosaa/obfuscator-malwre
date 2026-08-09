@@ -27,7 +27,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: { 
-        secure: process.env.NODE_ENV === 'production', // true on production/railway, false locally
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000 // 1 day
     }
@@ -85,13 +85,11 @@ app.get('/api/me', (req, res) => {
 function runObfuscationPipeline(code, fileType) {
     const header = `--[[ Protected by SIN Obfuscator v5.0 [Roblox Executor Ready] (${fileType.toUpperCase()}) ]]\n`;
     
-    // Convert large scripts safely without hitting call stack limits
     const bytes = [];
     for (let i = 0; i < code.length; i++) {
         bytes.push(code.charCodeAt(i));
     }
 
-    // Generates a self-decoding runner fully compatible with Luau VMs in Roblox executors
     const obfuscatedWrapper = `
 ${header}
 local _b = {${bytes.join(',')}}
@@ -105,7 +103,7 @@ return loadstring(_s)()
     return obfuscatedWrapper;
 }
 
-// OBFUSCATE API
+// OBFUSCATE API (Open to both logged-in and guest users)
 app.post('/api/obfuscate', (req, res) => {
     try {
         const { script, scriptName, fileType } = req.body;
@@ -129,6 +127,7 @@ app.post('/api/obfuscate', (req, res) => {
             createdAt: new Date()
         });
 
+        // Only save to user vault if authenticated
         if (req.isAuthenticated()) {
             const userId = req.user.id;
             if (!userVaults.has(userId)) userVaults.set(userId, []);
