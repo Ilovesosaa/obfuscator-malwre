@@ -21,7 +21,6 @@
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --accent-green: #10b981;
-            --accent-cyan: #06b6d4;
             --font-sans: 'Plus Jakarta Sans', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
             --radius-sm: 8px;
@@ -149,6 +148,17 @@
             background-color: var(--bg-card-hover);
             border-color: var(--text-muted);
             transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--primary);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: var(--primary);
+            color: white;
         }
 
         .user-profile {
@@ -463,6 +473,62 @@
             left: 20px;
         }
 
+        /* User Vault Section */
+        .vault-section {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            display: none;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .vault-section.active {
+            display: flex;
+        }
+
+        .vault-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .vault-item {
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .vault-item-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow: hidden;
+        }
+
+        .vault-item-name {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .vault-item-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
         /* Action Footer */
         .workspace-footer {
             display: flex;
@@ -666,6 +732,17 @@
 
             <!-- Right Sidebar Panel -->
             <div class="sidebar-panel">
+                <!-- User Saved Vault Section -->
+                <div class="vault-section" id="vaultSection">
+                    <div class="config-title">
+                        <i data-lucide="database" style="width: 16px; height: 16px; color: var(--primary);"></i>
+                        My Script Vault
+                    </div>
+                    <div class="vault-list" id="vaultList">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+
                 <div class="config-card">
                     <div class="config-title">
                         <i data-lucide="sliders" style="width: 16px; height: 16px; color: var(--primary);"></i>
@@ -687,16 +764,6 @@
                         <span>Constant Flattening</span>
                         <div class="toggle-switch" onclick="this.classList.toggle('active')"></div>
                     </div>
-                </div>
-
-                <div class="config-card">
-                    <div class="config-title">
-                        <i data-lucide="zap" style="width: 16px; height: 16px; color: var(--accent-green);"></i>
-                        Quick Links
-                    </div>
-                    <p style="font-size: 0.825rem; color: var(--text-muted); line-height: 1.5;">
-                        Protected raw links automatically use high-speed in-memory caching compatible with standard executor environments.
-                    </p>
                 </div>
             </div>
         </div>
@@ -738,6 +805,8 @@
         const loaderOutputText = document.getElementById('loaderOutputText');
         const copyLoaderBtn = document.getElementById('copyLoaderBtn');
         const navActions = document.getElementById('nav-actions');
+        const vaultSection = document.getElementById('vaultSection');
+        const vaultList = document.getElementById('vaultList');
 
         let generatedLoaderUrl = '';
 
@@ -806,7 +875,7 @@
             reader.readAsText(file);
         }
 
-        // Fetch User Auth State on Load
+        // Fetch User Auth State & Vault on Load
         async function checkAuth() {
             try {
                 const res = await fetch('/api/me');
@@ -819,12 +888,63 @@
                         </div>
                         <a href="/auth/logout" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.8rem;">Logout</a>
                     `;
+                    fetchVault();
                 }
             } catch (err) {
                 console.error("Auth check failed:", err);
             }
         }
         checkAuth();
+
+        async function fetchVault() {
+            try {
+                const res = await fetch('/api/vault');
+                const data = await res.json();
+                if (data.success && data.scripts.length > 0) {
+                    vaultSection.classList.add('active');
+                    vaultList.innerHTML = data.scripts.map(s => `
+                        <div class="vault-item">
+                            <div class="vault-item-info">
+                                <span class="vault-item-name">${escapeHtml(s.name)}</span>
+                                <span class="vault-item-meta">${s.createdAt}</span>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.7rem;" onclick="navigator.clipboard.writeText('${s.loader}'); showToast('Loader copied!', 'success');">Copy</button>
+                                <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.7rem;" onclick="deleteScript('${s.id}')"><i data-lucide="trash-2" style="width: 12px; height: 12px;"></i></button>
+                            </div>
+                        </div>
+                    `).join('');
+                    lucide.createIcons();
+                } else {
+                    vaultSection.classList.remove('active');
+                }
+            } catch (err) {
+                console.error("Failed to load vault:", err);
+            }
+        }
+
+        async function deleteScript(id) {
+            try {
+                const res = await fetch('/api/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Script removed from vault.', 'success');
+                    fetchVault();
+                } else {
+                    showToast(data.error || 'Failed to delete script.', 'error');
+                }
+            } catch (err) {
+                showToast('Network error while deleting.', 'error');
+            }
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
 
         // Obfuscation Trigger
         obfuscateBtn.addEventListener('click', async () => {
@@ -855,6 +975,7 @@
                     outputContainer.classList.add('active');
                     outputContainer.scrollIntoView({ behavior: 'smooth' });
                     showToast('Payload encrypted and stored successfully!', 'success');
+                    fetchVault(); // Refresh vault view if logged in
                 } else {
                     showToast(result.error || 'Obfuscation failed.', 'error');
                 }
