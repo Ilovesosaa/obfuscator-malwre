@@ -833,8 +833,9 @@
         const editingBanner = document.getElementById('editingBanner');
 
         let generatedLoaderUrl = '';
-        let activeEditId = null; // Tracks script ID if we are editing an existing vault script
-        let vaultScriptsStore = {}; // Store raw data by ID for editing
+        let activeEditId = null;
+        let vaultScriptsStore = {};
+        let isUserAuthenticated = false; // Tracks auth state locally
 
         // Toast Notification System
         function showToast(message, type = 'success') {
@@ -915,6 +916,7 @@
                 const res = await fetch('/api/me');
                 const data = await res.json();
                 if (data.authenticated) {
+                    isUserAuthenticated = true;
                     navActions.innerHTML = `
                         <div class="user-profile">
                             <img src="${data.user.avatar}" class="user-avatar" alt="Avatar" />
@@ -923,9 +925,12 @@
                         <a href="/auth/logout" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.8rem;">Logout</a>
                     `;
                     fetchVault();
+                } else {
+                    isUserAuthenticated = false;
                 }
             } catch (err) {
                 console.error("Auth check failed:", err);
+                isUserAuthenticated = false;
             }
         }
         checkAuth();
@@ -1003,8 +1008,16 @@
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
 
-        // Obfuscation / Save Update Trigger
+        // Obfuscation / Save Update Trigger (Enforces Auth)
         obfuscateBtn.addEventListener('click', async () => {
+            if (!isUserAuthenticated) {
+                showToast('You must sign in with Discord to obfuscate scripts!', 'error');
+                setTimeout(() => {
+                    window.location.href = '/auth/discord';
+                }, 1500);
+                return;
+            }
+
             const scriptContent = scriptInput.value;
             const scriptName = scriptNameInput.value;
 
@@ -1043,7 +1056,7 @@
                     } else {
                         showToast('Payload encrypted and stored successfully!', 'success');
                     }
-                    fetchVault(); // Refresh vault view
+                    fetchVault();
                 } else {
                     showToast(result.error || 'Operation failed.', 'error');
                 }
