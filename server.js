@@ -10,7 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // IN-MEMORY STORAGE (RAM VAULT)
-const scriptVault = new Map(); // Stores obfuscated raw code
+const scriptVault = new Map(); // Stores raw/obfuscated script code
 const userVaults = new Map();  // Maps userId -> array of script meta
 
 // EXPRESS CONFIG
@@ -18,7 +18,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// TRUST PROXY (Required for secure cookies behind reverse proxies like Railway)
+// TRUST PROXY
 app.set('trust proxy', 1);
 
 // SESSION CONFIG
@@ -29,13 +29,13 @@ app.use(session({
     cookie: { 
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000 // 1 day
+        maxAge: 24 * 60 * 60 * 1000
     }
 }));
 
 // PASSPORT DISCORD AUTH SETUP
 passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
+passport.deserializeUser((obj, done) => done(obj, done));
 
 passport.use(new DiscordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID,
@@ -81,53 +81,29 @@ app.get('/api/me', (req, res) => {
     res.json({ authenticated: false });
 });
 
-// ROBLOX-COMPATIBLE OBFUSCATION PIPELINE (.lua & .luau)
-function runObfuscationPipeline(code, fileType) {
-    const header = `--[[ Protected by SIN Obfuscator v5.0 [Roblox Executor Ready] (${fileType.toUpperCase()}) ]]\n`;
-    
-    const bytes = [];
-    for (let i = 0; i < code.length; i++) {
-        bytes.push(code.charCodeAt(i));
-    }
-
-    const obfuscatedWrapper = `
-${header}
-local _b = {${bytes.join(',')}}
-local _s = ""
-for i = 1, #_b do
-    _s = _s .. string.char(_b[i])
-end
-return loadstring(_s)()
-`.trim();
-
-    return obfuscatedWrapper;
-}
-
-// OBFUSCATE API (Open to both logged-in and guest users)
+// SCRIPT VAULT DEPLOYMENT API (Stores external/WeAreDevs obfuscated code for game:HttpGet loaders)
 app.post('/api/obfuscate', (req, res) => {
     try {
         const { script, scriptName, fileType } = req.body;
 
         if (!script || typeof script !== 'string' || !script.trim()) {
-            return res.status(400).json({ success: false, error: 'No code provided.' });
+            return res.status(400).json({ success: false, error: 'No script code provided.' });
         }
 
-        const type = (fileType === 'luau' || script.includes('type ') || script.includes('continue')) ? 'luau' : 'lua';
+        const type = (fileType === 'luau') ? 'luau' : 'lua';
         const name = (scriptName && scriptName.trim()) ? scriptName.trim() : `Script_${Date.now().toString().slice(-4)}`;
 
-        const obfuscatedCode = runObfuscationPipeline(script, type);
         const scriptId = crypto.randomBytes(8).toString('hex');
-        
         const domain = process.env.DOMAIN || `${req.protocol}://${req.get('host')}`;
         const loader = `loadstring(game:HttpGet("${domain}/raw/${scriptId}"))()`;
 
+        // Store the obfuscated script directly in the vault
         scriptVault.set(scriptId, {
-            code: obfuscatedCode,
+            code: script,
             owner: req.isAuthenticated() ? req.user.id : null,
             createdAt: new Date()
         });
 
-        // Only save to user vault if authenticated
         if (req.isAuthenticated()) {
             const userId = req.user.id;
             if (!userVaults.has(userId)) userVaults.set(userId, []);
@@ -147,8 +123,8 @@ app.post('/api/obfuscate', (req, res) => {
         });
 
     } catch (err) {
-        console.error("Obfuscation error:", err);
-        return res.status(500).json({ success: false, error: 'Obfuscation error: ' + err.message });
+        console.error("Vault storage error:", err);
+        return res.status(500).json({ success: false, error: 'Server error: ' + err.message });
     }
 });
 
@@ -177,7 +153,7 @@ app.post('/api/delete', (req, res) => {
     }
 
     const { id } = req.body;
-    scriptVault.delete(id);
+    script.delete(id);
 
     const userList = userVaults.get(req.user.id) || [];
     const updated = userList.filter(s => s.id !== id);
@@ -186,22 +162,19 @@ app.post('/api/delete', (req, res) => {
     res.json({ success: true });
 });
 
-// PREVENT API ROUTES FROM FALLING THROUGH TO HTML
 app.use('/api/*', (req, res) => {
     res.status(404).json({ success: false, error: 'API endpoint not found.' });
 });
 
-// GLOBAL JSON ERROR HANDLER
 app.use((err, req, res, next) => {
     console.error("Server Error:", err);
     res.status(500).json({ success: false, error: err.message || 'Internal server error.' });
 });
 
-// SERVE FRONTEND INDEX.HTML
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`[SIN] Roblox-compatible Engine operational on port ${PORT}`);
+    console.log(`[SIN] Loader Host Engine operational on port ${PORT}`);
 });
