@@ -88,7 +88,6 @@ function decodeBase64Script(base64Str) {
         const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));
         return new TextDecoder().decode(bytes);
     } catch (e) {
-        // Fallback to direct ascii decode if needed
         return Buffer.from(base64Str, 'base64').toString('utf8');
     }
 }
@@ -106,7 +105,6 @@ app.post('/api/obfuscate', (req, res) => {
             return res.status(400).json({ success: false, error: 'No script payload provided.' });
         }
 
-        // Decode the safely transmitted base64 script content
         const script = decodeBase64Script(scriptPayload);
 
         if (!script || !script.trim()) {
@@ -119,7 +117,6 @@ app.post('/api/obfuscate', (req, res) => {
 
         let scriptId = editId;
 
-        // If editing an existing script, update it instead of creating a new entry
         if (scriptId && scriptVault.has(scriptId)) {
             const existingItem = scriptVault.get(scriptId);
             if (existingItem.owner !== req.user.id) {
@@ -144,7 +141,6 @@ app.post('/api/obfuscate', (req, res) => {
             return res.json({ success: true, loader, scriptId });
         }
 
-        // Otherwise, create a new script entry
         scriptId = crypto.randomBytes(8).toString('hex');
         const loader = `loadstring(game:HttpGet("${domain}/raw/${scriptId}"))()`;
 
@@ -188,9 +184,17 @@ app.get('/raw/:id', (req, res) => {
         return res.send(`<!DOCTYPE html><html><head><title></title><style>body{background:#000;margin:0;height:100vh;}</style></head><body></body></html>`);
     }
 
+    // Sanitize script code for Roblox executors:
+    // 1. Strip hidden UTF-8 Byte Order Marks (BOM)
+    // 2. Normalize all Windows (\r\n) and old Mac (\r) line endings to standard Unix (\n)
+    let sanitizedCode = item.code
+        .replace(/^\uFEFF/, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n');
+
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.send(item.code);
+    res.send(sanitizedCode);
 });
 
 // USER VAULT API
