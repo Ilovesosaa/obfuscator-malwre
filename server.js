@@ -35,7 +35,7 @@ app.use(session({
 
 // PASSPORT DISCORD AUTH SETUP
 passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(obj, done));
+passport.deserializeUser((obj, done) => done(null, obj));
 
 passport.use(new DiscordStrategy({
     clientID: process.env.DISCORD_CLIENT_ID,
@@ -81,7 +81,7 @@ app.get('/api/me', (req, res) => {
     res.json({ authenticated: false });
 });
 
-// SCRIPT VAULT DEPLOYMENT API (Stores external/WeAreDevs obfuscated code for game:HttpGet loaders)
+// SCRIPT VAULT DEPLOYMENT API
 app.post('/api/obfuscate', (req, res) => {
     try {
         const { script, scriptName, fileType } = req.body;
@@ -97,7 +97,7 @@ app.post('/api/obfuscate', (req, res) => {
         const domain = process.env.DOMAIN || `${req.protocol}://${req.get('host')}`;
         const loader = `loadstring(game:HttpGet("${domain}/raw/${scriptId}"))()`;
 
-        // Store the obfuscated script directly in the vault
+        // Store script in vault
         scriptVault.set(scriptId, {
             code: script,
             owner: req.isAuthenticated() ? req.user.id : null,
@@ -153,7 +153,7 @@ app.post('/api/delete', (req, res) => {
     }
 
     const { id } = req.body;
-    script.delete(id);
+    scriptVault.delete(id);
 
     const userList = userVaults.get(req.user.id) || [];
     const updated = userList.filter(s => s.id !== id);
