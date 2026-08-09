@@ -302,6 +302,23 @@
             background: var(--bg-card);
         }
 
+        /* Editing Mode Indicator Banner */
+        #editingBanner {
+            display: none;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #f59e0b;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 600;
+            align-items: center;
+            justify-content: space-between;
+        }
+        #editingBanner.active {
+            display: flex;
+        }
+
         /* Drag & Drop Upload Zone */
         .dropzone {
             border: 2px dashed var(--border);
@@ -688,6 +705,12 @@
         <div class="workspace-grid">
             <!-- Left Primary Column -->
             <div class="workspace-card">
+                <!-- Editing Mode Banner -->
+                <div id="editingBanner">
+                    <span id="editingBannerText"><i data-lucide="edit-3" style="width: 14px; height: 14px; vertical-align: middle;"></i> Editing Mode Active</span>
+                    <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 0.75rem;" onclick="cancelEdit()">Cancel</button>
+                </div>
+
                 <!-- Script Name Identifier -->
                 <div class="input-group">
                     <label class="input-label" for="scriptNameInput">Script Identification Label</label>
@@ -807,8 +830,11 @@
         const navActions = document.getElementById('nav-actions');
         const vaultSection = document.getElementById('vaultSection');
         const vaultList = document.getElementById('vaultList');
+        const editingBanner = document.getElementById('editingBanner');
 
         let generatedLoaderUrl = '';
+        let activeEditId = null; // Tracks script ID if we are editing an existing vault script
+        let vaultScriptsStore = {}; // Store raw data by ID for editing
 
         // Toast Notification System
         function showToast(message, type = 'success') {
@@ -835,14 +861,22 @@
             charCounter.textContent = `${len} CHARS`;
         });
 
-        // Clear Editor
+        // Clear Editor & Reset Edit Mode
         clearEditorBtn.addEventListener('click', () => {
+            cancelEdit();
             scriptInput.value = '';
             scriptNameInput.value = '';
             charCounter.textContent = '0 CHARS';
             outputContainer.classList.remove('active');
             showToast('Editor workspace cleared.', 'success');
         });
+
+        function cancelEdit() {
+            activeEditId = null;
+            editingBanner.classList.remove('active');
+            obfuscateBtn.innerHTML = `<i data-lucide="shield-check" style="width: 20px; height: 20px;"></i> Obfuscate & Protect Payload`;
+            lucide.createIcons();
+        }
 
         // Drag and Drop Handling
         dropzone.addEventListener('click', () => fileInput.click());
@@ -902,18 +936,23 @@
                 const data = await res.json();
                 if (data.success && data.scripts.length > 0) {
                     vaultSection.classList.add('active');
-                    vaultList.innerHTML = data.scripts.map(s => `
-                        <div class="vault-item">
-                            <div class="vault-item-info">
-                                <span class="vault-item-name">${escapeHtml(s.name)}</span>
-                                <span class="vault-item-meta">${s.createdAt}</span>
+                    vaultScriptsStore = {};
+                    vaultList.innerHTML = data.scripts.map(s => {
+                        vaultScriptsStore[s.id] = s;
+                        return `
+                            <div class="vault-item">
+                                <div class="vault-item-info">
+                                    <span class="vault-item-name">${escapeHtml(s.name)}</span>
+                                    <span class="vault-item-meta">${s.createdAt}</span>
+                                </div>
+                                <div style="display: flex; gap: 6px;">
+                                    <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.7rem;" onclick="editScript('${s.id}')">Edit</button>
+                                    <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.7rem;" onclick="navigator.clipboard.writeText('${s.loader}'); showToast('Loader copied!', 'success');">Copy</button>
+                                    <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.7rem;" onclick="deleteScript('${s.id}')"><i data-lucide="trash-2" style="width: 12px; height: 12px;"></i></button>
+                                </div>
                             </div>
-                            <div style="display: flex; gap: 6px;">
-                                <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.7rem;" onclick="navigator.clipboard.writeText('${s.loader}'); showToast('Loader copied!', 'success');">Copy</button>
-                                <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.7rem;" onclick="deleteScript('${s.id}')"><i data-lucide="trash-2" style="width: 12px; height: 12px;"></i></button>
-                            </div>
-                        </div>
-                    `).join('');
+                        `;
+                    }).join('');
                     lucide.createIcons();
                 } else {
                     vaultSection.classList.remove('active');
@@ -921,6 +960,23 @@
             } catch (err) {
                 console.error("Failed to load vault:", err);
             }
+        }
+
+        function editScript(id) {
+            const scriptData = vaultScriptsStore[id];
+            if (!scriptData) return;
+
+            activeEditId = id;
+            scriptInput.value = scriptData.code;
+            scriptNameInput.value = scriptData.name;
+            charCounter.textContent = `${scriptData.code.length} CHARS`;
+
+            editingBanner.classList.add('active');
+            obfuscateBtn.innerHTML = `<i data-lucide="save" style="width: 20px; height: 20px;"></i> Save Changes & Update Loader`;
+            lucide.createIcons();
+
+            scriptInput.scrollIntoView({ behavior: 'smooth' });
+            showToast(`Loaded "${scriptData.name}" into editor for editing.`, 'success');
         }
 
         async function deleteScript(id) {
@@ -932,6 +988,7 @@
                 });
                 const data = await res.json();
                 if (data.success) {
+                    if (activeEditId === id) cancelEdit();
                     showToast('Script removed from vault.', 'success');
                     fetchVault();
                 } else {
@@ -946,7 +1003,7 @@
             return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
 
-        // Obfuscation Trigger
+        // Obfuscation / Save Update Trigger
         obfuscateBtn.addEventListener('click', async () => {
             const scriptContent = scriptInput.value;
             const scriptName = scriptNameInput.value;
@@ -964,7 +1021,12 @@
                 const response = await fetch('/api/obfuscate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ script: scriptContent, scriptName: scriptName, fileType: 'luau' })
+                    body: JSON.stringify({ 
+                        script: scriptContent, 
+                        scriptName: scriptName, 
+                        fileType: 'luau',
+                        editId: activeEditId 
+                    })
                 });
 
                 const result = await response.json();
@@ -974,17 +1036,25 @@
                     loaderOutputText.textContent = generatedLoaderUrl;
                     outputContainer.classList.add('active');
                     outputContainer.scrollIntoView({ behavior: 'smooth' });
-                    showToast('Payload encrypted and stored successfully!', 'success');
-                    fetchVault(); // Refresh vault view if logged in
+                    
+                    if (activeEditId) {
+                        showToast('Vault script updated successfully!', 'success');
+                        cancelEdit();
+                    } else {
+                        showToast('Payload encrypted and stored successfully!', 'success');
+                    }
+                    fetchVault(); // Refresh vault view
                 } else {
-                    showToast(result.error || 'Obfuscation failed.', 'error');
+                    showToast(result.error || 'Operation failed.', 'error');
                 }
             } catch (err) {
                 showToast('Network error or server unavailable.', 'error');
                 console.error(err);
             } finally {
                 obfuscateBtn.disabled = false;
-                obfuscateBtn.innerHTML = `<i data-lucide="shield-check" style="width: 20px; height: 20px;"></i> Obfuscate & Protect Payload`;
+                obfuscateBtn.innerHTML = activeEditId 
+                    ? `<i data-lucide="save" style="width: 20px; height: 20px;"></i> Save Changes & Update Loader`
+                    : `<i data-lucide="shield-check" style="width: 20px; height: 20px;"></i> Obfuscate & Protect Payload`;
                 lucide.createIcons();
             }
         });
