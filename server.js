@@ -14,8 +14,8 @@ const scriptVault = new Map(); // Stores raw/obfuscated script code
 const userVaults = new Map();  // Maps userId -> array of script meta
 
 // EXPRESS CONFIG
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // TRUST PROXY
@@ -81,6 +81,18 @@ app.get('/api/me', (req, res) => {
     res.json({ authenticated: false });
 });
 
+// Helper to decode base64 safely supporting all UTF-8 characters
+function decodeBase64Script(base64Str) {
+    try {
+        const binString = Buffer.from(base64Str, 'base64').toString('binary');
+        const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));
+        return new TextDecoder().decode(bytes);
+    } catch (e) {
+        // Fallback to direct ascii decode if needed
+        return Buffer.from(base64Str, 'base64').toString('utf8');
+    }
+}
+
 // SCRIPT VAULT DEPLOYMENT & CREATION API (Requires Authentication)
 app.post('/api/obfuscate', (req, res) => {
     try {
@@ -88,10 +100,17 @@ app.post('/api/obfuscate', (req, res) => {
             return res.status(401).json({ success: false, error: 'You must be signed in with Discord to obfuscate scripts.' });
         }
 
-        const { script, scriptName, fileType, editId } = req.body;
+        const { scriptPayload, scriptName, fileType, editId } = req.body;
 
-        if (!script || typeof script !== 'string' || !script.trim()) {
-            return res.status(400).json({ success: false, error: 'No script code provided.' });
+        if (!scriptPayload || typeof scriptPayload !== 'string') {
+            return res.status(400).json({ success: false, error: 'No script payload provided.' });
+        }
+
+        // Decode the safely transmitted base64 script content
+        const script = decodeBase64Script(scriptPayload);
+
+        if (!script || !script.trim()) {
+            return res.status(400).json({ success: false, error: 'Decoded script is empty.' });
         }
 
         const type = (fileType === 'luau') ? 'luau' : 'lua';
@@ -118,6 +137,7 @@ app.post('/api/obfuscate', (req, res) => {
             if (meta) {
                 meta.name = name;
                 meta.loader = loader;
+                meta.code = script;
             }
             userVaults.set(userId, userList);
 
@@ -161,17 +181,13 @@ app.get('/raw/:id', (req, res) => {
     }
 
     const userAgent = req.headers['user-agent'] || '';
-    
-    // Check if the request is coming from a web browser vs Roblox executor/environment
     const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Edge');
 
     if (isBrowser && !userAgent.includes('Roblox') && !userAgent.includes('Executor')) {
-        // Show a blank black screen when opened in a standard web browser
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.send(`<!DOCTYPE html><html><head><title></title><style>body{background:#000;margin:0;height:100vh;}</style></head><body></body></html>`);
     }
 
-    // Force universal plain text delivery with proper CORS headers so all executors can pull it smoothly
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(item.code);
