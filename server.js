@@ -1,8 +1,8 @@
-const fetch = require('node-fetch'); // <-- ADD THIS LINE
 const express = require('express');
 const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
+const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,7 +10,6 @@ const PORT = process.env.PORT || 3000;
 // Discord OAuth2 Configuration (Replace with your actual Discord Bot/App credentials or environment variables)
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID || 'YOUR_DISCORD_CLIENT_ID';
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'YOUR_DISCORD_CLIENT_SECRET';
-const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || 'http://localhost:3000/auth/discord/callback';
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -23,22 +22,34 @@ app.use(session({
 }));
 
 // In-memory Database for scripts
-// Structure: { id, ownerId, ownerName, name, fileType, code, loader, createdAt }
 let vaultDatabase = [];
 
-// Serve static frontend files
+// --- STATIC FILES & ROOT ROUTE ---
+
+// 1. Explicit root route comes FIRST to fix "Cannot GET /"
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// 2. Static middleware comes AFTER
 app.use(express.static(path.join(__dirname)));
 
-// --- AUTHENTICATION ROUTES ---
+// --- AUTHENTICATION ROUTES (DYNAMIC REDIRECT URI) ---
 
 app.get('/auth/discord', (req, res) => {
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
+    const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const redirectUri = `${hostProtocol}://${req.get('host')}/auth/discord/callback`;
+    
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify`;
     res.redirect(discordAuthUrl);
 });
 
 app.get('/auth/discord/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.status(400).send('No code provided from Discord.');
+
+    const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const redirectUri = `${hostProtocol}://${req.get('host')}/auth/discord/callback`;
 
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -49,12 +60,12 @@ app.get('/auth/discord/callback', async (req, res) => {
                 client_secret: CLIENT_SECRET,
                 grant_type: 'authorization_code',
                 code: code,
-                redirect_uri: REDIRECT_URI,
+                redirect_uri: redirectUri,
             }),
         });
 
         const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) return res.status(400).send('Failed to obtain access token from Discord.');
+        if (!tokenData.access_token) return res.status(400).send('Failed to obtain access token from Discord: ' + JSON.stringify(tokenData));
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
@@ -104,7 +115,6 @@ app.post('/api/obfuscate', (req, res) => {
     }
 
     try {
-        // Decode base64 payload safely
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
         const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
         const hostUrl = `${hostProtocol}://${req.get('host')}`;
@@ -113,7 +123,6 @@ app.post('/api/obfuscate', (req, res) => {
         let loaderString;
 
         if (editId) {
-            // Edit existing script if owned by user
             const existingScript = vaultDatabase.find(s => s.id === editId && s.ownerId === req.session.user.id);
             if (!existingScript) {
                 return res.status(403).json({ success: false, error: 'Script not found or unauthorized to edit.' });
@@ -124,7 +133,6 @@ app.post('/api/obfuscate', (req, res) => {
             scriptId = existingScript.id;
             loaderString = existingScript.loader;
         } else {
-            // Create new script entry
             scriptId = crypto.randomBytes(6).toString('hex');
             const rawLink = `${hostUrl}/raw/${scriptId}`;
             loaderString = `loadstring(game:HttpGet("${rawLink}"))()`;
@@ -152,7 +160,6 @@ app.get('/api/vault', (req, res) => {
     if (!req.session.user) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
-    // Return only scripts owned by the logged-in user
     const userScripts = vaultDatabase.filter(s => s.ownerId === req.session.user.id);
     res.json({ success: true, scripts: userScripts });
 });
@@ -180,12 +187,9 @@ app.get('/raw/:id', (req, res) => {
     if (!script) return res.status(404).send('Script not found.');
 
     const userAgent = req.headers['user-agent'] || '';
-    
-    // Check if the request is from a standard web browser vs a Roblox exploit executor client
     const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Edge');
 
     if (isBrowser) {
-        // Return a secure black screen / access restricted panel for web visitors
         res.setHeader('Content-Type', 'text/html');
         return res.send(`
             <!DOCTYPE html>
@@ -228,7 +232,6 @@ app.get('/raw/:id', (req, res) => {
         `);
     }
 
-    // Serve clean raw code for Roblox executors
     res.setHeader('Content-Type', 'text/plain');
     res.send(script.code);
 });
