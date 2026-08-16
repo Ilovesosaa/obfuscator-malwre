@@ -1,42 +1,35 @@
 const express = require('express');
 const session = require('express-session');
+const crypto = require('crypto');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CRITICAL FIX: Trust proxy for Railway / HTTPS environments
-app.set('trust proxy', 1);
-
-const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const DOMAIN = process.env.DOMAIN || 'https://error404obfuscator.up.railway.app';
-const REDIRECT_URI = `${DOMAIN}/auth/discord/callback`;
-
-if (!CLIENT_ID || !CLIENT_SECRET) {
-    console.error("CRITICAL: DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET environment variables are missing!");
-}
+// Discord OAuth2 Configuration (Replace with your actual Discord Bot/App credentials or environment variables)
+const CLIENT_ID = process.env.DISCORD_CLIENT_ID || 'YOUR_DISCORD_CLIENT_ID';
+const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'YOUR_DISCORD_CLIENT_SECRET';
+const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || 'http://localhost:3000/auth/discord/callback';
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'error404_super_secret_key',
+    secret: crypto.randomBytes(32).toString('hex'),
     resave: false,
     saveUninitialized: false,
-    cookie: { 
-        secure: true, 
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000 
-    }
+    cookie: { secure: false } // Set to true if using HTTPS in production
 }));
 
-app.use(express.static(path.join(__dirname, 'public')));
+// In-memory Database for scripts
+// Structure: { id, ownerId, ownerName, name, fileType, code, loader, createdAt }
+let vaultDatabase = [];
 
-let scriptVault = {};
+// Serve static frontend files
+app.use(express.static(path.join(__dirname)));
 
-// Auth Routes
+// --- AUTHENTICATION ROUTES ---
+
 app.get('/auth/discord', (req, res) => {
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
     res.redirect(discordAuthUrl);
@@ -49,6 +42,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
                 client_id: CLIENT_ID,
                 client_secret: CLIENT_SECRET,
@@ -56,11 +50,10 @@ app.get('/auth/discord/callback', async (req, res) => {
                 code: code,
                 redirect_uri: REDIRECT_URI,
             }),
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
 
         const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) return res.status(400).send('Failed to acquire Discord access token.');
+        if (!tokenData.access_token) return res.status(400).send('Failed to obtain access token from Discord.');
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
@@ -76,13 +69,10 @@ app.get('/auth/discord/callback', async (req, res) => {
                 : 'https://cdn.discordapp.com/embed/avatars/0.png'
         };
 
-        req.session.save((err) => {
-            if (err) console.error('Session save error:', err);
-            res.redirect('/');
-        });
+        res.redirect('/');
     } catch (error) {
-        console.error('OAuth Error:', error);
-        res.status(500).send('Authentication failed.');
+        console.error('Auth Error:', error);
+        res.status(500).send('Internal Authentication Error');
     }
 });
 
@@ -93,118 +83,155 @@ app.get('/auth/logout', (req, res) => {
 });
 
 app.get('/api/me', (req, res) => {
-    if (req.session && req.session.user) {
+    if (req.session.user) {
         res.json({ authenticated: true, user: req.session.user });
     } else {
         res.json({ authenticated: false });
     }
 });
 
-// Obfuscate / Deploy API
+// --- API & SCRIPT MANAGEMENT ROUTES ---
+
 app.post('/api/obfuscate', (req, res) => {
-    if (!req.session || !req.session.user) {
-        return res.json({ success: false, error: 'Unauthorized. Please login with Discord.' });
+    if (!req.session.user) {
+        return res.status(401).json({ success: false, error: 'Unauthorized. Please login with Discord.' });
     }
 
     const { scriptPayload, scriptName, fileType, editId } = req.body;
     if (!scriptPayload) {
-        return res.json({ success: false, error: 'Empty script payload.' });
+        return res.status(400).json({ success: false, error: 'Script payload is missing.' });
     }
 
     try {
+        // Decode base64 payload safely
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
-        
-        // Robust Luau wrapper safe for Roblox loadstring execution using Base64
-        const encodedBase64 = Buffer.from(decodedCode).toString('base64');
-        const obfuscatedCode = `-- [ Error404 Obfuscator Protected ]
--- Type: ${fileType || 'luau'}
--- Generated for: ${req.session.user.username}
+        const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const hostUrl = `${hostProtocol}://${req.get('host')}`;
 
-local encoded = "${encodedBase64}"
-local function decode(b)
-    local chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-    b = string.gsub(b, '[^'..chars..'=]', '')
-    return (b:gsub('.', function(x)
-        if x == '=' then return '' end
-        local r,f='',(chars:find(x)-1)
-        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
-        return r
-    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
-        if #x ~= 8 then return '' end
-        local c=0
-        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
-        return string.char(c)
-    end))
-end
+        let scriptId;
+        let loaderString;
 
-local success, result = pcall(function()
-    return loadstring(decode(encoded))()
-end)
+        if (editId) {
+            // Edit existing script if owned by user
+            const existingScript = vaultDatabase.find(s => s.id === editId && s.ownerId === req.session.user.id);
+            if (!existingScript) {
+                return res.status(403).json({ success: false, error: 'Script not found or unauthorized to edit.' });
+            }
+            existingScript.name = scriptName || 'Untitled Script';
+            existingScript.fileType = fileType || 'luau';
+            existingScript.code = decodedCode;
+            scriptId = existingScript.id;
+            loaderString = existingScript.loader;
+        } else {
+            // Create new script entry
+            scriptId = crypto.randomBytes(6).toString('hex');
+            const rawLink = `${hostUrl}/raw/${scriptId}`;
+            loaderString = `loadstring(game:HttpGet("${rawLink}"))()`;
 
-if not success then
-    warn("[Error404 Execution Error]: " + tostring(result))
-end
-`;
-
-        const scriptId = editId || Math.random().toString(36).substring(2, 9);
-        
-        if (!scriptVault[req.session.user.id]) {
-            scriptVault[req.session.user.id] = {};
+            vaultDatabase.push({
+                id: scriptId,
+                ownerId: req.session.user.id,
+                ownerName: req.session.user.username,
+                name: scriptName || 'Untitled Script',
+                fileType: fileType || 'luau',
+                code: decodedCode,
+                loader: loaderString,
+                createdAt: new Date().toLocaleDateString()
+            });
         }
 
-        scriptVault[req.session.user.id][scriptId] = {
-            id: scriptId,
-            name: scriptName || 'Untitled Script',
-            fileType: fileType || 'luau',
-            code: obfuscatedCode,
-            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-
-        const loader = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
-
-        res.json({ success: true, loader, scriptId });
+        res.json({ success: true, loader: loaderString, id: scriptId });
     } catch (err) {
-        console.error(err);
-        res.json({ success: false, error: 'Obfuscation processing failed.' });
+        console.error('Obfuscation Error:', err);
+        res.status(500).json({ success: false, error: 'Failed to process script deployment.' });
     }
 });
 
-// Vault API
 app.get('/api/vault', (req, res) => {
-    if (!req.session || !req.session.user) return res.json({ success: false, scripts: [] });
-    const userScripts = scriptVault[req.session.user.id] ? Object.values(scriptVault[req.session.user.id]) : [];
+    if (!req.session.user) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+    // Return only scripts owned by the logged-in user
+    const userScripts = vaultDatabase.filter(s => s.ownerId === req.session.user.id);
     res.json({ success: true, scripts: userScripts });
 });
 
 app.post('/api/delete', (req, res) => {
-    if (!req.session || !req.session.user) return res.json({ success: false });
-    const { id } = req.body;
-    if (scriptVault[req.session.user.id] && scriptVault[req.session.user.id][id]) {
-        delete scriptVault[req.session.user.id][id];
+    if (!req.session.user) {
+        return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
-    res.json({ success: true });
+
+    const { id } = req.body;
+    const index = vaultDatabase.findIndex(s => s.id === id && s.ownerId === req.session.user.id);
+    
+    if (index !== -1) {
+        vaultDatabase.splice(index, 1);
+        res.json({ success: true });
+    } else {
+        res.status(403).json({ success: false, error: 'Script not found or unauthorized.' });
+    }
 });
 
-// Raw Loader Endpoint for Roblox `game:HttpGet`
+// --- SECURE RAW HOSTING ENDPOINT ---
+
 app.get('/raw/:id', (req, res) => {
-    const scriptId = req.params.id;
-    let foundScript = null;
+    const script = vaultDatabase.find(s => s.id === req.params.id);
+    if (!script) return res.status(404).send('Script not found.');
 
-    for (let userId in scriptVault) {
-        if (scriptVault[userId][scriptId]) {
-            foundScript = scriptVault[userId][scriptId];
-            break;
-        }
+    const userAgent = req.headers['user-agent'] || '';
+    
+    // Check if the request is from a standard web browser vs a Roblox exploit executor client
+    const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Edge');
+
+    if (isBrowser) {
+        // Return a secure black screen / access restricted panel for web visitors
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <title>Error404 | Secured Loadstring</title>
+                <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+                <style>
+                    body {
+                        background-color: #050805;
+                        color: #00ff66;
+                        font-family: 'JetBrains Mono', monospace;
+                        height: 100vh;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        margin: 0;
+                        overflow: hidden;
+                    }
+                    .vault-box {
+                        border: 1px dashed #00ff6655;
+                        padding: 30px;
+                        border-radius: 8px;
+                        background: #0a120a;
+                        text-align: center;
+                        box-shadow: 0 0 30px rgba(0, 255, 102, 0.1);
+                    }
+                    h1 { font-size: 1.1rem; margin-bottom: 10px; letter-spacing: 2px; }
+                    p { font-size: 0.8rem; color: #609060; }
+                </style>
+            </head>
+            <body>
+                <div class="vault-box">
+                    <h1>// ACCESS RESTRICTED //</h1>
+                    <p>This loadstring source is protected and unlisted.</p>
+                </div>
+            </body>
+            </html>
+        `);
     }
 
-    if (foundScript) {
-        res.setHeader('Content-Type', 'text/plain');
-        res.send(foundScript.code);
-    } else {
-        res.status(404).send('-- Error404: Script not found or removed.');
-    }
+    // Serve clean raw code for Roblox executors
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(script.code);
 });
 
 app.listen(PORT, () => {
-    console.log(`Error404 Obfuscator running on port ${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
 });
