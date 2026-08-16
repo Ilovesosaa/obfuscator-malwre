@@ -5,12 +5,17 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CRITICAL FIX: Trust proxy for Railway / HTTPS environments
+// Trust proxy for Railway / HTTPS environments
 app.set('trust proxy', 1);
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || 'https://error404obfuscator.up.railway.app/auth/discord/callback';
+const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const DOMAIN = process.env.DOMAIN || 'https://error404obfuscator.up.railway.app';
+const REDIRECT_URI = `${DOMAIN}/auth/discord/callback`;
+
+if (!CLIENT_ID || !CLIENT_SECRET) {
+    console.error("CRITICAL: DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET environment variables are missing!");
+}
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -63,7 +68,6 @@ app.get('/auth/discord/callback', async (req, res) => {
 
         const userData = await userResponse.json();
         
-        // Save user to session
         req.session.user = {
             id: userData.id,
             username: userData.username,
@@ -72,7 +76,6 @@ app.get('/auth/discord/callback', async (req, res) => {
                 : 'https://cdn.discordapp.com/embed/avatars/0.png'
         };
 
-        // Force save session before redirecting back home
         req.session.save((err) => {
             if (err) console.error('Session save error:', err);
             res.redirect('/');
@@ -127,7 +130,7 @@ app.post('/api/obfuscate', (req, res) => {
             createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
 
-        const loader = `loadstring(game:HttpGet("https://error404obfuscator.up.railway.app/raw/${scriptId}"))()`;
+        const loader = `loadstring(game:HttpGet("${DOMAIN}/raw/${scriptId}"))()`;
 
         res.json({ success: true, loader, scriptId });
     } catch (err) {
