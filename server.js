@@ -1,12 +1,10 @@
 const express = require('express');
 const session = require('express-session');
-const fetch = require('node-fetch');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Replace these with your Discord Developer Portal credentials or use environment variables
 const CLIENT_ID = process.env.CLIENT_ID || 'YOUR_DISCORD_CLIENT_ID';
 const CLIENT_SECRET = process.env.CLIENT_SECRET || 'YOUR_DISCORD_CLIENT_SECRET';
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://error404obfuscator.up.railway.app/auth/discord/callback';
@@ -23,7 +21,6 @@ app.use(session({
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory script vault database (or replace with your DB logic)
 let scriptVault = {};
 
 // Auth Routes
@@ -100,10 +97,9 @@ app.post('/api/obfuscate', (req, res) => {
     try {
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
         
-        // Simple mock / actual obfuscation step wrapper
         const obfuscatedCode = `-- [ Error404 Obfuscator Protected ]\n-- Type: ${fileType || 'luau'}\n\nreturn (function(...) local _={...};return _[1];end)("${Buffer.from(decodedCode).toString('base64')}")`;
 
-        const scriptId = editId || Math.random().toString(36.substring(2, 9));
+        const scriptId = editId || Math.random().toString(36).substring(2, 9);
         
         if (!scriptVault[req.session.user.id]) {
             scriptVault[req.session.user.id] = {};
@@ -113,8 +109,8 @@ app.post('/api/obfuscate', (req, res) => {
             id: scriptId,
             name: scriptName || 'Untitled Script',
             fileType: fileType || 'luau',
-            code: decodedCode,
-            createdAt: new Date().toISOString().split('T')[0]
+            code: obfuscatedCode,
+            createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
 
         const loader = `loadstring(game:HttpGet("https://error404obfuscator.up.railway.app/raw/${scriptId}"))()`;
@@ -156,7 +152,7 @@ app.get('/raw/:id', (req, res) => {
 
     if (foundScript) {
         res.setHeader('Content-Type', 'text/plain');
-        res.send(`-- Error404 Protected Script: ${foundScript.name}\nprint("Loaded Error404 script successfully!")`);
+        res.send(foundScript.code);
     } else {
         res.status(404).send('-- Error404: Script not found or removed.');
     }
