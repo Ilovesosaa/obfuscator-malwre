@@ -5,7 +5,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CRITICAL FIX: Trust proxy for Railway / HTTPS environments
+// Trust proxy for Railway / HTTPS environments
 app.set('trust proxy', 1);
 
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
@@ -32,6 +32,7 @@ app.use(session({
     }
 }));
 
+// Serves the public folder explicitly so CSS, JS, and HTML load correctly
 app.use(express.static(path.join(__dirname, 'public')));
 
 let scriptVault = {};
@@ -100,7 +101,7 @@ app.get('/api/me', (req, res) => {
     }
 });
 
-// Obfuscate / Deploy API
+// Obfuscate / Deploy API with robust Base64 execution wrapper for Roblox loadstring
 app.post('/api/obfuscate', (req, res) => {
     if (!req.session || !req.session.user) {
         return res.json({ success: false, error: 'Unauthorized. Please login with Discord.' });
@@ -114,7 +115,6 @@ app.post('/api/obfuscate', (req, res) => {
     try {
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
         
-        // Robust Luau wrapper safe for Roblox loadstring execution using Base64
         const encodedBase64 = Buffer.from(decodedCode).toString('base64');
         const obfuscatedCode = `-- [ Error404 Obfuscator Protected ]
 -- Type: ${fileType || 'luau'}
@@ -142,7 +142,7 @@ local success, result = pcall(function()
 end)
 
 if not success then
-    warn("[Error404 Execution Error]: " + tostring(result))
+    warn("[Error404 Execution Error]: " .. tostring(result))
 end
 `;
 
