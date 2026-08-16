@@ -5,8 +5,11 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const CLIENT_ID = process.env.CLIENT_ID || '1535568167223562350';
-const CLIENT_SECRET = process.env.CLIENT_SECRET || 'hy24Onue6bVnXFZww2WY5_L1eNtbriem';
+// CRITICAL FIX: Trust proxy for Railway / HTTPS environments
+app.set('trust proxy', 1);
+
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://error404obfuscator.up.railway.app/auth/discord/callback';
 
 app.use(express.json({ limit: '10mb' }));
@@ -16,7 +19,12 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'error404_super_secret_key',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000 }
+    cookie: { 
+        secure: true, 
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000 
+    }
 }));
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -54,6 +62,8 @@ app.get('/auth/discord/callback', async (req, res) => {
         });
 
         const userData = await userResponse.json();
+        
+        // Save user to session
         req.session.user = {
             id: userData.id,
             username: userData.username,
@@ -62,7 +72,11 @@ app.get('/auth/discord/callback', async (req, res) => {
                 : 'https://cdn.discordapp.com/embed/avatars/0.png'
         };
 
-        res.redirect('/');
+        // Force save session before redirecting back home
+        req.session.save((err) => {
+            if (err) console.error('Session save error:', err);
+            res.redirect('/');
+        });
     } catch (error) {
         console.error('OAuth Error:', error);
         res.status(500).send('Authentication failed.');
@@ -76,7 +90,7 @@ app.get('/auth/logout', (req, res) => {
 });
 
 app.get('/api/me', (req, res) => {
-    if (req.session.user) {
+    if (req.session && req.session.user) {
         res.json({ authenticated: true, user: req.session.user });
     } else {
         res.json({ authenticated: false });
@@ -85,7 +99,7 @@ app.get('/api/me', (req, res) => {
 
 // Obfuscate / Deploy API
 app.post('/api/obfuscate', (req, res) => {
-    if (!req.session.user) {
+    if (!req.session || !req.session.user) {
         return res.json({ success: false, error: 'Unauthorized. Please login with Discord.' });
     }
 
@@ -124,13 +138,13 @@ app.post('/api/obfuscate', (req, res) => {
 
 // Vault API
 app.get('/api/vault', (req, res) => {
-    if (!req.session.user) return res.json({ success: false, scripts: [] });
+    if (!req.session || !req.session.user) return res.json({ success: false, scripts: [] });
     const userScripts = scriptVault[req.session.user.id] ? Object.values(scriptVault[req.session.user.id]) : [];
     res.json({ success: true, scripts: userScripts });
 });
 
 app.post('/api/delete', (req, res) => {
-    if (!req.session.user) return res.json({ success: false });
+    if (!req.session || !req.session.user) return res.json({ success: false });
     const { id } = req.body;
     if (scriptVault[req.session.user.id] && scriptVault[req.session.user.id][id]) {
         delete scriptVault[req.session.user.id][id];
