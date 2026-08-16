@@ -5,7 +5,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Trust proxy for Railway / HTTPS environments
+// CRITICAL FIX: Trust proxy for Railway / HTTPS environments
 app.set('trust proxy', 1);
 
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
@@ -114,7 +114,37 @@ app.post('/api/obfuscate', (req, res) => {
     try {
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
         
-        const obfuscatedCode = `-- [ Error404 Obfuscator Protected ]\n-- Type: ${fileType || 'luau'}\n\nreturn (function(...) local _={...};return _[1];end)("${Buffer.from(decodedCode).toString('base64')}")`;
+        // Robust Luau wrapper safe for Roblox loadstring execution using Base64
+        const encodedBase64 = Buffer.from(decodedCode).toString('base64');
+        const obfuscatedCode = `-- [ Error404 Obfuscator Protected ]
+-- Type: ${fileType || 'luau'}
+-- Generated for: ${req.session.user.username}
+
+local encoded = "${encodedBase64}"
+local function decode(b)
+    local chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    b = string.gsub(b, '[^'..chars..'=]', '')
+    return (b:gsub('.', function(x)
+        if x == '=' then return '' end
+        local r,f='',(chars:find(x)-1)
+        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
+        return r
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+        if #x ~= 8 then return '' end
+        local c=0
+        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
+        return string.char(c)
+    end))
+end
+
+local success, result = pcall(function()
+    return loadstring(decode(encoded))()
+end)
+
+if not success then
+    warn("[Error404 Execution Error]: " + tostring(result))
+end
+`;
 
         const scriptId = editId || Math.random().toString(36).substring(2, 9);
         
