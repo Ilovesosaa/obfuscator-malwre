@@ -17,23 +17,18 @@
             <div class="logo-icon"><i class="fa-solid fa-terminal"></i></div>
             <span class="logo-text">ERROR<span class="accent">404</span></span>
         </div>
-        
         <div class="nav-actions" id="authSection">
-            <!-- Dynamically populated by JS -->
             <div class="skeleton-auth"></div>
         </div>
     </header>
 
     <main class="main-container">
-        <!-- Hero Section -->
         <section class="hero">
             <h1>Military-Grade <span class="gradient-text">Luau Obfuscation</span></h1>
             <p>Protect your Roblox scripts from decompilers with advanced AST wrapping and secure remote deployment.</p>
         </section>
 
-        <!-- Workspace Grid -->
         <div class="workspace">
-            <!-- Editor Card -->
             <div class="card editor-card">
                 <div class="card-header">
                     <div class="tab-title"><i class="fa-regular fa-file-code"></i> Input Script</div>
@@ -55,7 +50,6 @@
                 </div>
             </div>
 
-            <!-- Output / Results Card -->
             <div class="card output-card">
                 <div class="card-header">
                     <div class="tab-title"><i class="fa-solid fa-lock"></i> Protected Loader</div>
@@ -71,7 +65,6 @@
             </div>
         </div>
 
-        <!-- Vault Section -->
         <section class="vault-section">
             <div class="section-header">
                 <h2><i class="fa-solid fa-vault"></i> Script Vault</h2>
@@ -79,15 +72,14 @@
             </div>
             <div class="vault-grid" id="vaultGrid">
                 <div class="vault-empty">
-                    <i class="fa-solid fa-box-open"><span>Login with Discord to view your protected script vault.</span></i>
+                    <i class="fa-solid fa-box-open"></i>
+                    <span>Login with Discord to view your protected script vault.</span>
                 </div>
             </div>
         </section>
     </main>
 
-    <!-- Toast Notification Container -->
     <div id="toastContainer"></div>
-
     <script src="script.js"></script>
 </body>
 </html>
