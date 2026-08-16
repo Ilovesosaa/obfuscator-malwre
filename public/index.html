@@ -246,18 +246,33 @@
         }
 
         .loader-link {
-            color: var(--accent-green);
+            color: transparent;
+            background-color: #000;
+            text-shadow: 0 0 8px rgba(0, 255, 102, 0.2);
+            user-select: none;
+            cursor: pointer;
             word-break: break-all;
             font-size: 0.85rem;
-            margin-bottom: 10px;
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px dashed var(--border-green);
+            border-radius: 4px;
             display: block;
+            transition: all 0.2s ease;
+        }
+
+        .loader-link:hover, .loader-link.revealed {
+            color: var(--accent-green);
+            background-color: #050805;
+            text-shadow: none;
+            user-select: text;
         }
 
         .vault-list {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            max-height: 480px;
+            gap: 12px;
+            max-height: 520px;
             overflow-y: auto;
         }
 
@@ -267,13 +282,19 @@
             padding: 12px;
             border-radius: 6px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 10px;
             transition: border-color 0.2s;
         }
 
         .vault-item:hover {
             border-color: var(--accent-green);
+        }
+
+        .vault-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .vault-info {
@@ -364,16 +385,19 @@
                 </div>
 
                 <div class="output-box" id="outputBox">
-                    <label>GENERATED LOADSTRING:</label>
-                    <code class="loader-link" id="loaderOutput"></code>
-                    <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
+                    <label>GENERATED LOADSTRING (Click to Reveal):</label>
+                    <code class="loader-link" id="loaderOutput" onclick="toggleReveal(this)" title="Click to reveal"></code>
+                    <div style="margin-top: 10px; display: flex; gap: 10px;">
+                        <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
+                        <button class="icon-btn" onclick="toggleRevealManual()">Toggle Visibility</button>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Script Vault Section -->
         <div class="card">
-            <h2>// SCRIPT VAULT</h2>
+            <h2>// SCRIPT VAULT (OWNER ONLY)</h2>
             <div class="vault-list" id="vaultList">
                 <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 20px;">
                     Sign in with Discord to view your deployed scripts.
@@ -475,14 +499,20 @@
 
                 vaultList.innerHTML = data.scripts.map(s => `
                     <div class="vault-item">
-                        <div class="vault-info">
-                            <span class="vault-name">${s.name}</span>
-                            <span class="vault-date">${s.fileType.toUpperCase()} • ${s.createdAt}</span>
+                        <div class="vault-header">
+                            <div class="vault-info">
+                                <span class="vault-name">${s.name}</span>
+                                <span class="vault-date">${s.fileType.toUpperCase()} • ${s.createdAt}</span>
+                            </div>
+                            <div class="vault-actions">
+                                <button class="icon-btn" onclick="copyVaultLoader(this)">Copy</button>
+                                <button class="icon-btn" onclick="editScript('${s.id}', '${s.name}', '${s.fileType}', ` + encodeURIComponent(JSON.stringify(s.code)) + `)">Edit</button>
+                                <button class="icon-btn delete" onclick="deleteScript('${s.id}')">Del</button>
+                            </div>
                         </div>
-                        <div class="vault-actions">
-                            <button class="icon-btn" onclick="navigator.clipboard.writeText('${s.loader}')">Copy</button>
-                            <button class="icon-btn" onclick="editScript('${s.id}', '${s.name}', '${s.fileType}', ` + encodeURIComponent(JSON.stringify(s.code)) + `)">Edit</button>
-                            <button class="icon-btn delete" onclick="deleteScript('${s.id}')">Del</button>
+                        <div>
+                            <label style="font-size: 0.7rem; color: var(--text-dim);">LOADSTRING (Click to Reveal):</label>
+                            <code class="loader-link" onclick="toggleReveal(this)">${s.loader}</code>
                         </div>
                     </div>
                 `).join('');
@@ -513,6 +543,21 @@
             const text = document.getElementById('loaderOutput').innerText;
             navigator.clipboard.writeText(text);
             alert('Loadstring copied to clipboard!');
+        }
+
+        function copyVaultLoader(btn) {
+            const codeEl = btn.closest('.vault-item').querySelector('.loader-link');
+            navigator.clipboard.writeText(codeEl.innerText);
+            alert('Loadstring copied to clipboard!');
+        }
+
+        function toggleReveal(element) {
+            element.classList.toggle('revealed');
+        }
+
+        function toggleRevealManual() {
+            const output = document.getElementById('loaderOutput');
+            output.classList.toggle('revealed');
         }
 
         checkUser();
