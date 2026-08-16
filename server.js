@@ -5,8 +5,8 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const CLIENT_ID = process.env.CLIENT_ID || 'YOUR_DISCORD_CLIENT_ID';
-const CLIENT_SECRET = process.env.CLIENT_SECRET || 'YOUR_DISCORD_CLIENT_SECRET';
+const CLIENT_ID = process.env.CLIENT_ID || '1535568167223562350';
+const CLIENT_SECRET = process.env.CLIENT_SECRET || 'hy24Onue6bVnXFZww2WY5_L1eNtbriem';
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://error404obfuscator.up.railway.app/auth/discord/callback';
 
 app.use(express.json({ limit: '10mb' }));
