@@ -50,8 +50,6 @@ async function handleObfuscate() {
         return;
     }
 
-    const payload = b56Encode(rawCode); // Or standard btoa
-
     try {
         const btn = document.getElementById('obfuscateBtn');
         btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Protecting...`;
