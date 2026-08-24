@@ -17,8 +17,6 @@
             --accent: #00ff66;
             --accent-dim: #008033;
             --accent-glow: rgba(0, 255, 102, 0.25);
-            --accent-blue: #00bfff;
-            --accent-purple: #9d00ff;
             --text-main: #e0f8e0;
             --text-dim: #4d7a54;
             --text-muted: #243d28;
@@ -47,9 +45,9 @@
             background-size: 100% 100%, 20px 20px, 20px 20px;
         }
 
-        /* Top Bar */
+        /* Header Navigation */
         header {
-            height: 48px;
+            height: 52px;
             background: rgba(2, 5, 3, 0.95);
             border-bottom: 1px solid var(--border);
             display: flex;
@@ -59,10 +57,13 @@
             z-index: 100;
         }
 
-        .brand {
+        .brand-group {
             display: flex;
             align-items: center;
             gap: 12px;
+        }
+
+        .brand {
             font-weight: 800;
             letter-spacing: 2px;
             color: var(--accent);
@@ -96,7 +97,52 @@
             font-weight: 700;
         }
 
-        /* App Layout */
+        /* User & Auth Buttons */
+        .user-widget {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .discord-btn {
+            background: linear-gradient(135deg, #5865F2, #4752C4);
+            color: #fff;
+            padding: 7px 14px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 10px rgba(88, 101, 242, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .discord-btn:hover {
+            box-shadow: 0 0 18px rgba(88, 101, 242, 0.6);
+            transform: translateY(-1px);
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: 4px 10px;
+            border-radius: 5px;
+        }
+
+        .user-profile img {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 1px solid var(--accent);
+        }
+
+        /* Workspace */
         .workspace {
             flex: 1;
             display: grid;
@@ -104,7 +150,6 @@
             overflow: hidden;
         }
 
-        /* Sidebar - Vault & Files */
         .sidebar {
             background: var(--bg-surface);
             border-right: 1px solid var(--border);
@@ -248,7 +293,7 @@
             pointer-events: none;
         }
 
-        /* Console Output Section */
+        /* Console */
         .console-panel {
             height: 180px;
             background: var(--bg-surface);
@@ -287,7 +332,7 @@
         .log-success { color: var(--accent); }
         .log-warn { color: var(--warning); }
 
-        /* Control Config Panel */
+        /* Controls */
         .config-panel {
             background: var(--bg-surface);
             padding: 16px;
@@ -366,7 +411,6 @@
             transform: translateY(-1px);
         }
 
-        /* Status Footer */
         footer {
             height: 24px;
             background: #000;
@@ -383,19 +427,25 @@
 <body>
 
     <header>
-        <div class="brand">
-            <span>ERROR404</span>
-            <span class="brand-badge">ENTERPRISE v5.0</span>
+        <div class="brand-group">
+            <span class="brand">ERROR404</span>
+            <span class="brand-badge">v5.0 PRO</span>
         </div>
+
         <div class="top-stats">
-            <div class="stat-item">ENGINE: <span class="stat-val">LUAU V2</span></div>
-            <div class="stat-item">SECURITY: <span class="stat-val">VIRTUALIZED</span></div>
-            <div class="stat-item">LATENCY: <span class="stat-val">1.2ms</span></div>
+            <div class="stat-item">ENGINE: <span class="stat-val">LUAU JIT</span></div>
+            <div class="stat-item">SECURITY: <span class="stat-val">MAXIMUM</span></div>
+        </div>
+
+        <!-- Discord Login Container -->
+        <div class="user-widget" id="userWidget">
+            <a href="/auth/discord" class="discord-btn">
+                <span>Login with Discord</span>
+            </a>
         </div>
     </header>
 
     <div class="workspace">
-        <!-- Left Sidebar -->
         <div class="sidebar">
             <div class="section-title">
                 <span>DEPLOYED VAULT</span>
@@ -412,7 +462,6 @@
             </div>
         </div>
 
-        <!-- Center IDE -->
         <div class="editor-container">
             <div class="editor-tabs">
                 <div class="tab active">// main.luau</div>
@@ -436,7 +485,6 @@
             </div>
         </div>
 
-        <!-- Right Controls -->
         <div class="config-panel">
             <div class="config-group">
                 <label>SCRIPT NAME</label>
@@ -504,6 +552,31 @@
             lineNumbers.scrollTop = scriptInput.scrollTop;
         }
 
+        async function checkUser() {
+            try {
+                const res = await fetch('/api/me');
+                const data = await res.json();
+                const widget = document.getElementById('userWidget');
+                if (data.authenticated) {
+                    widget.innerHTML = `
+                        <div class="user-profile">
+                            <img src="${data.user.avatar}" alt="Avatar">
+                            <span style="font-size: 0.75rem; font-weight: 600;">${data.user.username}</span>
+                            <a href="/auth/logout" style="color: var(--danger); font-size: 0.68rem; text-decoration: none; margin-left: 4px;">[LOGOUT]</a>
+                        </div>
+                    `;
+                } else {
+                    widget.innerHTML = `
+                        <a href="/auth/discord" class="discord-btn">
+                            <span>Login with Discord</span>
+                        </a>
+                    `;
+                }
+            } catch (e) {
+                console.log("Auth endpoint unavailable (running offline/preview)");
+            }
+        }
+
         function logConsole(msg, type = 'info') {
             const logs = document.getElementById('consoleLogs');
             const time = new Date().toLocaleTimeString();
@@ -521,7 +594,7 @@
         function clearEditor() {
             scriptInput.value = '';
             updateEditor();
-            logConsole('Editor reset.', 'warn');
+            logConsole('Editor cleared.', 'warn');
         }
 
         scriptInput.addEventListener('input', updateEditor);
@@ -542,6 +615,7 @@
             }, 600);
         }
 
+        checkUser();
         updateEditor();
     </script>
 </body>
