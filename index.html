@@ -22,12 +22,7 @@
             --danger-glow: rgba(255, 51, 102, 0.4);
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Fira Code', monospace;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Fira Code', monospace; }
 
         body {
             background-color: var(--bg-base);
@@ -39,7 +34,6 @@
             position: relative;
         }
 
-        /* Ambient Glow & Grid Backdrop */
         body::before {
             content: "";
             position: fixed;
@@ -54,18 +48,6 @@
             z-index: 0;
         }
 
-        /* Scanline Overlay */
-        body::after {
-            content: "";
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
-            background-size: 100% 4px;
-            pointer-events: none;
-            z-index: 999;
-            opacity: 0.6;
-        }
-
         header {
             display: flex;
             justify-content: space-between;
@@ -74,11 +56,9 @@
             border-bottom: 1px solid var(--border-glow);
             background: rgba(3, 6, 4, 0.85);
             backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
             position: sticky;
             top: 0;
             z-index: 100;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.8);
         }
 
         .logo {
@@ -92,34 +72,18 @@
             gap: 12px;
         }
 
-        .logo-highlight {
-            color: var(--accent-green);
-            text-shadow: 0 0 15px var(--accent-glow);
-        }
-
+        .logo-highlight { color: var(--accent-green); text-shadow: 0 0 15px var(--accent-glow); }
         .logo-badge {
-            font-family: 'Fira Code', monospace;
             font-size: 0.65rem;
             color: var(--accent-green);
             background: rgba(0, 255, 128, 0.1);
             border: 1px solid var(--accent-green);
             padding: 4px 10px;
             border-radius: 20px;
-            letter-spacing: 1px;
-            box-shadow: 0 0 10px var(--accent-glow);
         }
 
-        .user-widget {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .auth-btn-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        .user-widget { display: flex; align-items: center; gap: 12px; }
+        .auth-btn-group { display: flex; align-items: center; gap: 10px; }
 
         .discord-btn {
             background: linear-gradient(135deg, #5865F2 0%, #3b42cc 100%);
@@ -133,15 +97,6 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: 0 0 20px rgba(88, 101, 242, 0.35);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .discord-btn:hover {
-            transform: translateY(-2px) scale(1.02);
-            box-shadow: 0 0 30px rgba(88, 101, 242, 0.6);
-            filter: brightness(1.15);
         }
 
         .key-auth-btn {
@@ -154,15 +109,6 @@
             font-weight: 700;
             font-size: 0.82rem;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 0 15px var(--accent-glow);
-        }
-
-        .key-auth-btn:hover {
-            background: var(--accent-green);
-            color: #020603;
-            box-shadow: 0 0 25px var(--accent-glow);
-            transform: translateY(-2px);
         }
 
         .user-profile {
@@ -173,8 +119,6 @@
             border: 1px solid var(--border-glow);
             padding: 6px 18px;
             border-radius: 40px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
         }
 
         .user-profile img, .user-avatar-key {
@@ -182,7 +126,6 @@
             height: 30px;
             border-radius: 50%;
             border: 2px solid var(--accent-green);
-            box-shadow: 0 0 10px var(--accent-glow);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -192,19 +135,7 @@
             font-size: 0.75rem;
         }
 
-        .logout-btn {
-            color: var(--danger);
-            text-decoration: none;
-            font-size: 0.75rem;
-            font-weight: 700;
-            margin-left: 6px;
-            cursor: pointer;
-            transition: opacity 0.2s, text-shadow 0.2s;
-        }
-
-        .logout-btn:hover {
-            text-shadow: 0 0 8px var(--danger-glow);
-        }
+        .logout-btn { color: var(--danger); text-decoration: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; margin-left: 6px; }
 
         main {
             flex: 1;
@@ -219,26 +150,14 @@
             z-index: 1;
         }
 
-        @media(max-width: 960px) {
-            main {
-                grid-template-columns: 1fr;
-            }
-        }
-
         .card {
             background: var(--bg-surface);
             border: 1px solid var(--border-glow);
             border-radius: 16px;
             padding: 32px;
             backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .card:hover {
-            border-color: var(--border-hover);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 255, 128, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            margin-bottom: 24px;
         }
 
         h2 {
@@ -246,35 +165,15 @@
             font-size: 1rem;
             font-weight: 800;
             color: var(--accent-green);
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             letter-spacing: 2px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
             text-shadow: 0 0 10px var(--accent-glow);
         }
 
-        .editor-container {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
+        .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+        label { font-size: 0.75rem; color: var(--text-secondary); letter-spacing: 1px; font-weight: 600; text-transform: uppercase; }
 
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        label {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            letter-spacing: 1px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        input[type="text"], input[type="password"], select {
+        input[type="text"], input[type="password"], select, textarea {
             background: var(--bg-input);
             border: 1px solid var(--border-glow);
             color: var(--text-primary);
@@ -282,42 +181,9 @@
             border-radius: 10px;
             outline: none;
             font-size: 0.88rem;
-            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        input[type="text"]:focus, input[type="password"]:focus, select:focus {
-            border-color: var(--accent-green);
-            box-shadow: 0 0 20px var(--accent-glow);
-            background: rgba(4, 12, 7, 0.95);
-        }
-
-        textarea {
-            background: var(--bg-input);
-            border: 1px solid var(--border-glow);
-            color: #00ffaa;
-            padding: 18px;
-            border-radius: 10px;
-            min-height: 340px;
-            resize: vertical;
-            outline: none;
-            font-size: 0.88rem;
-            line-height: 1.6;
-            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.8);
-        }
-
-        textarea:focus {
-            border-color: var(--accent-green);
-            box-shadow: 0 0 25px var(--accent-glow), inset 0 2px 10px rgba(0, 0, 0, 0.8);
-            background: rgba(4, 12, 7, 0.95);
-        }
-
-        .action-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 8px;
-        }
+        textarea { min-height: 280px; color: #00ffaa; resize: vertical; }
 
         .btn-primary {
             background: linear-gradient(135deg, #00ff80 0%, #00b359 100%);
@@ -329,37 +195,21 @@
             font-weight: 800;
             font-size: 0.88rem;
             cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: 0 0 25px var(--accent-glow);
-            letter-spacing: 1.5px;
             text-transform: uppercase;
         }
 
-        .btn-primary:hover {
-            transform: translateY(-2px) scale(1.02);
-            box-shadow: 0 0 35px rgba(0, 255, 128, 0.7);
-            filter: brightness(1.1);
-        }
-
-        .output-box {
-            margin-top: 12px;
-            background: rgba(2, 6, 3, 0.95);
+        .icon-btn {
+            background: rgba(0, 255, 128, 0.06);
             border: 1px solid var(--border-glow);
-            padding: 20px;
-            border-radius: 12px;
-            display: none;
-            animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            color: var(--text-primary);
+            padding: 7px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 600;
         }
 
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .output-box.active {
-            display: block;
-        }
+        .icon-btn.delete { background: rgba(255, 51, 102, 0.06); border-color: rgba(255, 51, 102, 0.25); color: var(--danger); }
 
         .loader-link {
             color: transparent;
@@ -374,140 +224,32 @@
             border: 1px dashed var(--border-glow);
             border-radius: 8px;
             display: block;
-            transition: all 0.25s ease;
         }
 
-        .loader-link:hover, .loader-link.revealed {
-            color: var(--accent-green);
-            background-color: rgba(0, 255, 128, 0.05);
-            text-shadow: none;
-            user-select: text;
-            border-style: solid;
-            border-color: var(--accent-green);
-            box-shadow: 0 0 15px rgba(0, 255, 128, 0.15);
-        }
+        .loader-link.revealed { color: var(--accent-green); text-shadow: none; user-select: text; border-style: solid; }
 
-        .vault-list {
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-            max-height: 580px;
-            overflow-y: auto;
-            padding-right: 6px;
-        }
+        .vault-list { display: flex; flex-direction: column; gap: 14px; max-height: 500px; overflow-y: auto; }
+        .vault-item { background: rgba(2, 6, 3, 0.8); border: 1px solid var(--border-glow); padding: 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 12px; }
 
-        .vault-item {
-            background: rgba(2, 6, 3, 0.8);
-            border: 1px solid var(--border-glow);
-            padding: 16px;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .vault-item:hover {
-            border-color: var(--accent-green);
-            transform: translateX(4px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5), 0 0 15px rgba(0, 255, 128, 0.15);
-        }
-
-        .vault-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .vault-info {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            overflow: hidden;
-        }
-
-        .vault-name {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            font-weight: 700;
-            font-size: 0.9rem;
-            color: #ffffff;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .vault-date {
-            font-size: 0.72rem;
-            color: var(--text-dim);
-        }
-
-        .vault-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .icon-btn {
-            background: rgba(0, 255, 128, 0.06);
-            border: 1px solid var(--border-glow);
-            color: var(--text-primary);
-            padding: 7px 14px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.78rem;
-            font-weight: 600;
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .icon-btn:hover {
-            background: var(--accent-green);
-            color: #020603;
-            border-color: var(--accent-green);
-            box-shadow: 0 0 15px var(--accent-glow);
-            transform: translateY(-1px);
-        }
-
-        .icon-btn.delete {
-            background: rgba(255, 51, 102, 0.06);
-            border-color: rgba(255, 51, 102, 0.25);
-            color: var(--danger);
-        }
-
-        .icon-btn.delete:hover {
-            background: var(--danger);
-            color: #ffffff;
-            border-color: var(--danger);
-            box-shadow: 0 0 15px var(--danger-glow);
-        }
-
-        /* Key Auth Modal */
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(12px);
+        /* Owner Control Panel Styling */
+        .owner-panel {
+            grid-column: 1 / -1;
+            background: rgba(12, 6, 20, 0.8);
+            border: 1px solid var(--accent-cyan);
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
             display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
         }
 
-        .modal-overlay.active {
-            display: flex;
-        }
+        .owner-panel.active { display: block; }
+        .owner-panel h2 { color: var(--accent-cyan); text-shadow: 0 0 10px rgba(0, 240, 255, 0.5); }
 
-        .modal-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--accent-green);
-            border-radius: 16px;
-            padding: 32px;
-            width: 100%;
-            max-width: 440px;
-            box-shadow: 0 0 40px var(--accent-glow);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(12px);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
         }
+        .modal-overlay.active { display: flex; }
+        .modal-card { background: var(--bg-surface); border: 1px solid var(--accent-green); border-radius: 16px; padding: 32px; width: 100%; max-width: 440px; }
     </style>
 </head>
 <body>
@@ -517,12 +259,37 @@
             ERROR<span class="logo-highlight">404</span> 
             <span class="logo-badge">OBFUSCATOR</span>
         </div>
-        <div class="user-widget" id="userWidget">
-            <!-- Populated dynamically via Auth check -->
-        </div>
+        <div class="user-widget" id="userWidget"></div>
     </header>
 
     <main>
+        <!-- Owner Admin Section (Only displays for Discord ID: 1257596807857569793) -->
+        <div class="card owner-panel" id="ownerPanel">
+            <h2>// OWNER ADMIN PANEL (KEY GENERATOR)</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <div class="input-group">
+                        <label>ASSIGN USERNAME / CLIENT LABEL</label>
+                        <input type="text" id="targetUsername" placeholder="e.g. VIP_Buyer_01">
+                    </div>
+                    <button class="btn-primary" style="background: linear-gradient(135deg, #00f0ff 0%, #0080ff 100%); color: #000;" onclick="adminGenerateKey()">Generate API Key</button>
+                </div>
+                <div>
+                    <label>GENERATED API KEY</label>
+                    <input type="text" id="generatedKeyOutput" readonly placeholder="Key will appear here..." style="width: 100%; margin-top: 8px;">
+                    <button class="icon-btn" style="margin-top: 10px;" onclick="copyGeneratedKey()">Copy Key</button>
+                </div>
+            </div>
+            
+            <div style="margin-top: 24px;">
+                <label>ACTIVE KEYS IN SYSTEM</label>
+                <div id="activeKeysList" style="margin-top: 10px; max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                    <!-- Active keys populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Script Deployment Card -->
         <div class="card">
             <h2>// SCRIPT DEPLOYMENT ENGINE</h2>
             <div class="editor-container">
@@ -540,38 +307,36 @@
                 </div>
                 <div class="input-group">
                     <label>SOURCE CODE & UI LIBRARIES</label>
-                    <textarea id="scriptInput" placeholder="Paste your script, Rayfield, or Orion UI library code here..."></textarea>
+                    <textarea id="scriptInput" placeholder="Paste your script code here..."></textarea>
                 </div>
-                <div class="action-row">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span id="statusMsg" style="font-size: 0.8rem; color: var(--accent-green);"></span>
                     <button class="btn-primary" onclick="deployScript()">Obfuscate & Host</button>
                 </div>
 
-                <div class="output-box" id="outputBox">
-                    <label>GENERATED LOADSTRING (Click to Reveal):</label>
-                    <code class="loader-link" id="loaderOutput" onclick="toggleReveal(this)" title="Click to reveal"></code>
-                    <div style="margin-top: 10px; display: flex; gap: 10px;">
-                        <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
-                        <button class="icon-btn" onclick="toggleRevealManual()">Toggle Visibility</button>
-                    </div>
+                <div class="output-box" id="outputBox" style="display:none; margin-top: 15px;">
+                    <label>GENERATED LOADSTRING:</label>
+                    <code class="loader-link" id="loaderOutput" onclick="toggleReveal(this)"></code>
+                    <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
                 </div>
             </div>
         </div>
 
+        <!-- Vault Card -->
         <div class="card">
-            <h2>// SCRIPT VAULT (OWNER ONLY)</h2>
+            <h2>// SCRIPT VAULT</h2>
             <div class="vault-list" id="vaultList">
                 <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 20px;">
-                    Authenticate with Discord or API Key to view your vault.
+                    Authenticate to view your vault.
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- Modal for API Key Authentication -->
+    <!-- Key Login Modal -->
     <div class="modal-overlay" id="keyModal">
         <div class="modal-card">
-            <h2 style="margin-bottom: 0;">// ENTER API KEY</h2>
+            <h2>// ENTER API KEY</h2>
             <div class="input-group">
                 <label>AUTHENTICATION KEY</label>
                 <input type="password" id="apiKeyInput" placeholder="err404_key_xxxxxxxxxxxxx">
@@ -584,15 +349,14 @@
     </div>
 
     <script>
+        const OWNER_DISCORD_ID = "1257596807857569793";
         let currentApiKey = localStorage.getItem('err404_api_key') || null;
 
         async function checkUser() {
             try {
-                // If API Key stored, validate key
+                // Check stored API Key authentication
                 if (currentApiKey) {
-                    const res = await fetch('/api/verify-key', {
-                        headers: { 'X-API-Key': currentApiKey }
-                    });
+                    const res = await fetch('/api/verify-key', { headers: { 'X-API-Key': currentApiKey } });
                     const data = await res.json();
                     if (data.authenticated) {
                         renderUserWidget({ username: data.username || 'API User', type: 'key' });
@@ -609,12 +373,17 @@
                 const data = await res.json();
                 if (data.authenticated) {
                     renderUserWidget({ ...data.user, type: 'discord' });
+                    
+                    // Show Owner Control Panel if Discord ID matches Owner ID
+                    if (data.user.id === OWNER_DISCORD_ID) {
+                        document.getElementById('ownerPanel').classList.add('active');
+                        loadAdminKeys();
+                    }
                     loadVault();
                 } else {
                     renderLoggedOutWidget();
                 }
             } catch (e) {
-                console.error("Auth check failed", e);
                 renderLoggedOutWidget();
             }
         }
@@ -635,25 +404,65 @@
         }
 
         function renderLoggedOutWidget() {
-            const widget = document.getElementById('userWidget');
-            widget.innerHTML = `
+            document.getElementById('userWidget').innerHTML = `
                 <div class="auth-btn-group">
                     <button class="key-auth-btn" onclick="openKeyModal()">API Key</button>
-                    <a href="/auth/discord" class="discord-btn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.011c3.927 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-                        Discord Login
-                    </a>
+                    <a href="/auth/discord" class="discord-btn">Discord Login</a>
                 </div>
             `;
         }
 
-        function openKeyModal() {
-            document.getElementById('keyModal').classList.add('active');
+        // Owner API Key Generator Function
+        async function adminGenerateKey() {
+            const targetUsername = document.getElementById('targetUsername').value.trim() || "User_Key";
+            const res = await fetch('/api/admin/generate-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: targetUsername })
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('generatedKeyOutput').value = data.apiKey;
+                loadAdminKeys();
+            } else {
+                alert('Error generating key: ' + data.error);
+            }
         }
 
-        function closeKeyModal() {
-            document.getElementById('keyModal').classList.remove('active');
+        async function loadAdminKeys() {
+            const res = await fetch('/api/admin/keys');
+            const data = await res.json();
+            if (data.success) {
+                const list = document.getElementById('activeKeysList');
+                list.innerHTML = data.keys.map(k => `
+                    <div style="background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px; display: flex; justify-content: space-between; font-size: 0.75rem;">
+                        <span><strong>${k.username}:</strong> <code>${k.key}</code></span>
+                        <button class="icon-btn delete" onclick="revokeKey('${k.key}')">Revoke</button>
+                    </div>
+                `).join('');
+            }
         }
+
+        async function revokeKey(key) {
+            if (!confirm("Revoke this API Key?")) return;
+            await fetch('/api/admin/revoke-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key })
+            });
+            loadAdminKeys();
+        }
+
+        function copyGeneratedKey() {
+            const val = document.getElementById('generatedKeyOutput').value;
+            if (val) {
+                navigator.clipboard.writeText(val);
+                alert("Key copied to clipboard!");
+            }
+        }
+
+        function openKeyModal() { document.getElementById('keyModal').classList.add('active'); }
+        function closeKeyModal() { document.getElementById('keyModal').classList.remove('active'); }
 
         function saveApiKey() {
             const key = document.getElementById('apiKeyInput').value.trim();
@@ -680,9 +489,7 @@
         function safeBase64Encode(str) {
             const bytes = new TextEncoder().encode(str);
             let binString = "";
-            for (let i = 0; i < bytes.length; i++) {
-                binString += String.fromCharCode(bytes[i]);
-            }
+            for (let i = 0; i < bytes.length; i++) binString += String.fromCharCode(bytes[i]);
             return btoa(binString);
         }
 
@@ -693,15 +500,9 @@
             const editId = document.getElementById('editId').value;
             const statusMsg = document.getElementById('statusMsg');
 
-            if (!scriptInput.trim()) {
-                statusMsg.style.color = 'var(--danger)';
-                statusMsg.innerText = 'Error: Script input is empty.';
-                return;
-            }
+            if (!scriptInput.trim()) return alert('Script source cannot be empty');
 
-            statusMsg.style.color = 'var(--accent-green)';
-            statusMsg.innerText = 'Obfuscating and deploying...';
-
+            statusMsg.innerText = 'Obfuscating...';
             try {
                 const payload = safeBase64Encode(scriptInput);
                 const res = await fetch('/api/obfuscate', {
@@ -709,21 +510,17 @@
                     headers: getAuthHeaders(),
                     body: JSON.stringify({ scriptPayload: payload, scriptName, fileType, editId })
                 });
-
                 const data = await res.json();
                 if (data.success) {
-                    statusMsg.innerText = 'Successfully obfuscated & hosted!';
-                    document.getElementById('outputBox').classList.add('active');
+                    statusMsg.innerText = 'Deployed!';
+                    document.getElementById('outputBox').style.display = 'block';
                     document.getElementById('loaderOutput').innerText = data.loader;
-                    document.getElementById('editId').value = '';
                     loadVault();
                 } else {
-                    statusMsg.style.color = 'var(--danger)';
                     statusMsg.innerText = 'Error: ' + data.error;
                 }
             } catch (err) {
-                statusMsg.style.color = 'var(--danger)';
-                statusMsg.innerText = 'Network error during deployment.';
+                statusMsg.innerText = 'Network error.';
             }
         }
 
@@ -732,74 +529,35 @@
                 const res = await fetch('/api/vault', { headers: getAuthHeaders() });
                 const data = await res.json();
                 const vaultList = document.getElementById('vaultList');
-                
                 if (!data.success || !data.scripts || data.scripts.length === 0) {
                     vaultList.innerHTML = `<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 20px;">No deployed scripts in vault.</div>`;
                     return;
                 }
-
                 vaultList.innerHTML = data.scripts.map(s => `
                     <div class="vault-item">
-                        <div class="vault-header">
-                            <div class="vault-info">
-                                <span class="vault-name">${s.name}</span>
-                                <span class="vault-date">${s.fileType.toUpperCase()} • ${s.createdAt}</span>
+                        <div style="display:flex; justify-shadow: space-between; align-items: center;">
+                            <div>
+                                <strong style="color:#fff;">${s.name}</strong>
+                                <div style="font-size:0.7rem; color:var(--text-dim);">${s.fileType.toUpperCase()}</div>
                             </div>
-                            <div class="vault-actions">
-                                <button class="icon-btn" onclick="copyVaultLoader(this)">Copy</button>
-                                <button class="icon-btn" onclick="editScript('${s.id}', '${s.name}', '${s.fileType}', ` + encodeURIComponent(JSON.stringify(s.code)) + `)">Edit</button>
+                            <div>
                                 <button class="icon-btn delete" onclick="deleteScript('${s.id}')">Del</button>
                             </div>
                         </div>
-                        <div>
-                            <label style="font-size: 0.7rem; color: var(--text-dim);">LOADSTRING (Click to Reveal):</label>
-                            <code class="loader-link" onclick="toggleReveal(this)">${s.loader}</code>
-                        </div>
+                        <code class="loader-link" onclick="toggleReveal(this)">${s.loader}</code>
                     </div>
                 `).join('');
-            } catch (e) {
-                console.error("Failed to load vault", e);
-            }
-        }
-
-        function editScript(id, name, fileType, code) {
-            document.getElementById('editId').value = id;
-            document.getElementById('scriptName').value = name;
-            document.getElementById('fileType').value = fileType;
-            document.getElementById('scriptInput').value = decodeURIComponent(code);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (e) {}
         }
 
         async function deleteScript(id) {
-            if (!confirm('Are you sure you want to delete this script?')) return;
-            await fetch('/api/delete', {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({ id })
-            });
+            if (!confirm('Delete script?')) return;
+            await fetch('/api/delete', { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id }) });
             loadVault();
         }
 
-        function copyLoader() {
-            const text = document.getElementById('loaderOutput').innerText;
-            navigator.clipboard.writeText(text);
-            alert('Loadstring copied to clipboard!');
-        }
-
-        function copyVaultLoader(btn) {
-            const codeEl = btn.closest('.vault-item').querySelector('.loader-link');
-            navigator.clipboard.writeText(codeEl.innerText);
-            alert('Loadstring copied to clipboard!');
-        }
-
-        function toggleReveal(element) {
-            element.classList.toggle('revealed');
-        }
-
-        function toggleRevealManual() {
-            const output = document.getElementById('loaderOutput');
-            output.classList.toggle('revealed');
-        }
+        function toggleReveal(el) { el.classList.toggle('revealed'); }
+        function copyLoader() { navigator.clipboard.writeText(document.getElementById('loaderOutput').innerText); alert('Copied!'); }
 
         checkUser();
     </script>
