@@ -8,10 +8,10 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <style>
         :root {
-            --bg-base: #010302;
-            --bg-surface: #050a06;
-            --bg-card: rgba(8, 16, 10, 0.85);
-            --bg-input: #020503;
+            --bg-base: #000000;
+            --bg-surface: #030704;
+            --bg-card: rgba(5, 12, 7, 0.85);
+            --bg-input: #000000;
             --border: rgba(0, 255, 102, 0.15);
             --border-bright: #00ff66;
             --accent: #00ff66;
@@ -48,7 +48,7 @@
         /* Header Navigation */
         header {
             height: 52px;
-            background: rgba(2, 5, 3, 0.95);
+            background: #000000;
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
@@ -97,7 +97,6 @@
             font-weight: 700;
         }
 
-        /* User & Auth Buttons */
         .user-widget {
             display: flex;
             align-items: center;
@@ -142,7 +141,7 @@
             border: 1px solid var(--accent);
         }
 
-        /* Workspace */
+        /* Workspace Layout */
         .workspace {
             flex: 1;
             display: grid;
@@ -210,7 +209,7 @@
         .editor-container {
             display: flex;
             flex-direction: column;
-            background: var(--bg-base);
+            background: #000000;
             border-right: 1px solid var(--border);
         }
 
@@ -231,12 +230,12 @@
             font-size: 0.75rem;
             color: var(--text-dim);
             border-right: 1px solid var(--border);
-            background: rgba(0, 0, 0, 0.2);
+            background: rgba(0, 0, 0, 0.4);
             cursor: pointer;
         }
 
         .tab.active {
-            background: var(--bg-base);
+            background: #000000;
             color: var(--accent);
             border-bottom: 2px solid var(--accent);
         }
@@ -246,12 +245,13 @@
             position: relative;
             display: flex;
             overflow: hidden;
+            background: #000000;
         }
 
         .line-numbers {
             width: 48px;
             padding: 14px 0;
-            background: rgba(0, 0, 0, 0.4);
+            background: #000000;
             border-right: 1px solid var(--border);
             color: var(--text-muted);
             font-size: 0.8rem;
@@ -264,21 +264,23 @@
         .code-view {
             position: relative;
             flex: 1;
+            background: #000000;
         }
 
-        textarea, pre {
+        textarea, pre, pre[class*="language-"] {
             position: absolute;
             inset: 0;
-            margin: 0;
-            padding: 14px;
+            margin: 0 !important;
+            padding: 14px !important;
             font-size: 0.82rem;
             line-height: 1.5;
             tab-size: 4;
             white-space: pre;
             overflow: auto;
-            border: none;
+            border: none !important;
             outline: none;
-            background: transparent;
+            background: transparent !important;
+            text-shadow: none !important;
         }
 
         textarea {
@@ -305,7 +307,7 @@
         .console-header {
             padding: 6px 12px;
             font-size: 0.68rem;
-            background: rgba(0, 0, 0, 0.4);
+            background: #000000;
             border-bottom: 1px solid var(--border);
             color: var(--text-dim);
             display: flex;
@@ -320,6 +322,7 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
+            background: #000000;
         }
 
         .log-entry {
@@ -413,7 +416,7 @@
 
         footer {
             height: 24px;
-            background: #000;
+            background: #000000;
             border-top: 1px solid var(--border);
             display: flex;
             align-items: center;
@@ -437,7 +440,6 @@
             <div class="stat-item">SECURITY: <span class="stat-val">MAXIMUM</span></div>
         </div>
 
-        <!-- Discord Login Container -->
         <div class="user-widget" id="userWidget">
             <a href="/auth/discord" class="discord-btn">
                 <span>Login with Discord</span>
@@ -573,7 +575,7 @@
                     `;
                 }
             } catch (e) {
-                console.log("Auth endpoint unavailable (running offline/preview)");
+                console.log("Auth endpoint preview mode");
             }
         }
 
