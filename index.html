@@ -22,6 +22,33 @@
             --warning: #ffb700;
         }
 
+        /* --- Sleek Dark Custom Scrollbar Styling --- */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #000000;
+            border-left: 1px solid rgba(0, 255, 102, 0.08);
+            border-top: 1px solid rgba(0, 255, 102, 0.08);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #111e13;
+            border: 1px solid var(--border-green);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: #000000;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -779,7 +806,6 @@
                     logConsole('Deployment failed: ' + (data.error || 'Unknown error'), 'danger');
                 }
             } catch (err) {
-                // Client fallback if running without live backend API
                 const fallbackId = Math.random().toString(36).substring(2, 10);
                 const loader = `loadstring(game:HttpGet("https://raw.githubusercontent.com/Error404/Host/main/${fallbackId}.luau"))()`;
                 logConsole('Obfuscated successfully (Guest Mode Output)!', 'success');
