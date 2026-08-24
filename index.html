@@ -4,86 +4,109 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Error404 | Secure Luau Obfuscator & Host</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;0,800;1,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-deep: #030704;
-            --bg-card: rgba(10, 20, 12, 0.65);
-            --bg-input: #020503;
-            --border-green: rgba(0, 255, 102, 0.18);
-            --border-green-hover: rgba(0, 255, 102, 0.5);
-            --accent-green: #00ff66;
-            --accent-glow: rgba(0, 255, 102, 0.35);
-            --text-main: #d1fae5;
-            --text-dim: #4ade8099;
-            --danger: #ff4757;
-            --danger-glow: rgba(255, 71, 87, 0.35);
+            --bg-base: #030604;
+            --bg-surface: rgba(10, 18, 12, 0.7);
+            --bg-input: rgba(4, 10, 6, 0.85);
+            --border-glow: rgba(0, 255, 128, 0.25);
+            --border-hover: rgba(0, 255, 128, 0.6);
+            --accent-green: #00ff80;
+            --accent-cyan: #00f0ff;
+            --accent-glow: rgba(0, 255, 128, 0.4);
+            --text-primary: #ecfdf5;
+            --text-secondary: #6ee7b7;
+            --text-dim: #34d39988;
+            --danger: #ff3366;
+            --danger-glow: rgba(255, 51, 102, 0.4);
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Fira Code', monospace;
         }
 
         body {
-            background-color: var(--bg-deep);
-            color: var(--text-main);
+            background-color: var(--bg-base);
+            color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             overflow-x: hidden;
-            background-image: 
-                radial-gradient(circle at 50% 0%, rgba(0, 255, 102, 0.08) 0%, transparent 60%),
-                radial-gradient(circle at 100% 100%, rgba(0, 255, 102, 0.03) 0%, transparent 40%);
+            position: relative;
         }
 
-        /* Subtle cyber grid background */
+        /* Ambient Glow & Grid Backdrop */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 10%, rgba(0, 255, 128, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 80% 90%, rgba(0, 240, 255, 0.05) 0%, transparent 40%),
+                linear-gradient(rgba(0, 255, 128, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 128, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Scanline Overlay */
         body::after {
             content: "";
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-image: linear-gradient(rgba(0, 255, 102, 0.03) 1px, transparent 1px),
-                              linear-gradient(90deg, rgba(0, 255, 102, 0.03) 1px, transparent 1px);
-            background-size: 32px 32px;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
+            background-size: 100% 4px;
             pointer-events: none;
-            z-index: 0;
+            z-index: 999;
+            opacity: 0.6;
         }
 
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px 48px;
-            border-bottom: 1px solid var(--border-green);
-            background: rgba(3, 7, 4, 0.85);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            padding: 18px 48px;
+            border-bottom: 1px solid var(--border-glow);
+            background: rgba(3, 6, 4, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             position: sticky;
             top: 0;
             z-index: 100;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.8);
         }
 
         .logo {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 1.4rem;
-            font-weight: 700;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
             color: #fff;
-            letter-spacing: 1.5px;
+            letter-spacing: 2px;
             display: flex;
             align-items: center;
             gap: 12px;
         }
 
-        .logo-tag {
+        .logo-highlight {
+            color: var(--accent-green);
+            text-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .logo-badge {
+            font-family: 'Fira Code', monospace;
             font-size: 0.65rem;
             color: var(--accent-green);
-            background: rgba(0, 255, 102, 0.08);
-            border: 1px solid var(--border-green);
-            padding: 3px 8px;
+            background: rgba(0, 255, 128, 0.1);
+            border: 1px solid var(--accent-green);
+            padding: 4px 10px;
             border-radius: 20px;
             letter-spacing: 1px;
+            box-shadow: 0 0 10px var(--accent-glow);
         }
 
         .user-widget {
@@ -93,43 +116,46 @@
         }
 
         .discord-btn {
-            background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+            background: linear-gradient(135deg, #5865F2 0%, #3b42cc 100%);
             color: #fff;
-            padding: 10px 20px;
+            padding: 10px 22px;
             border-radius: 8px;
             text-decoration: none;
-            font-weight: 600;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 700;
             font-size: 0.85rem;
             display: flex;
             align-items: center;
-            gap: 8px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            gap: 10px;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 0 20px rgba(88, 101, 242, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .discord-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5);
-            filter: brightness(1.1);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 0 30px rgba(88, 101, 242, 0.6);
+            filter: brightness(1.15);
         }
 
         .user-profile {
             display: flex;
             align-items: center;
             gap: 12px;
-            background: rgba(10, 20, 12, 0.8);
-            border: 1px solid var(--border-green);
-            padding: 6px 16px;
-            border-radius: 30px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-glow);
+            padding: 6px 18px;
+            border-radius: 40px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
         }
 
         .user-profile img {
-            width: 28px;
-            height: 28px;
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
-            border: 1px solid var(--accent-green);
+            border: 2px solid var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-glow);
         }
 
         .logout-btn {
@@ -138,21 +164,21 @@
             font-size: 0.75rem;
             font-weight: 700;
             margin-left: 6px;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s, text-shadow 0.2s;
         }
 
         .logout-btn:hover {
-            opacity: 0.8;
+            text-shadow: 0 0 8px var(--danger-glow);
         }
 
         main {
             flex: 1;
-            max-width: 1280px;
+            max-width: 1320px;
             width: 100%;
             margin: 0 auto;
             padding: 40px 24px;
             display: grid;
-            grid-template-columns: 1fr 380px;
+            grid-template-columns: 1fr 400px;
             gap: 32px;
             position: relative;
             z-index: 1;
@@ -165,32 +191,38 @@
         }
 
         .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-green);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-glow);
             border-radius: 16px;
-            padding: 28px;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-            transition: border-color 0.3s ease;
+            padding: 32px;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--border-hover);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 255, 128, 0.1);
         }
 
         h2 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 0.95rem;
-            font-weight: 700;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1rem;
+            font-weight: 800;
             color: var(--accent-green);
-            margin-bottom: 20px;
-            letter-spacing: 1.5px;
+            margin-bottom: 24px;
+            letter-spacing: 2px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            text-shadow: 0 0 10px var(--accent-glow);
         }
 
         .editor-container {
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            gap: 20px;
         }
 
         .input-group {
@@ -201,90 +233,96 @@
 
         label {
             font-size: 0.75rem;
-            color: var(--text-dim);
-            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
             font-weight: 600;
+            text-transform: uppercase;
         }
 
         input[type="text"], select {
             background: var(--bg-input);
-            border: 1px solid var(--border-green);
-            color: var(--text-main);
-            padding: 12px 16px;
-            border-radius: 8px;
+            border: 1px solid var(--border-glow);
+            color: var(--text-primary);
+            padding: 14px 18px;
+            border-radius: 10px;
             outline: none;
-            font-size: 0.85rem;
-            transition: all 0.25s ease;
+            font-size: 0.88rem;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         input[type="text"]:focus, select:focus {
             border-color: var(--accent-green);
-            box-shadow: 0 0 15px var(--accent-glow);
+            box-shadow: 0 0 20px var(--accent-glow);
+            background: rgba(4, 12, 7, 0.95);
         }
 
         textarea {
             background: var(--bg-input);
-            border: 1px solid var(--border-green);
+            border: 1px solid var(--border-glow);
             color: #00ffaa;
-            padding: 16px;
-            border-radius: 8px;
-            min-height: 320px;
+            padding: 18px;
+            border-radius: 10px;
+            min-height: 340px;
             resize: vertical;
             outline: none;
-            font-size: 0.85rem;
+            font-size: 0.88rem;
             line-height: 1.6;
-            transition: all 0.25s ease;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.8);
         }
 
         textarea:focus {
             border-color: var(--accent-green);
-            box-shadow: 0 0 20px var(--accent-glow);
+            box-shadow: 0 0 25px var(--accent-glow), inset 0 2px 10px rgba(0, 0, 0, 0.8);
+            background: rgba(4, 12, 7, 0.95);
         }
 
         .action-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-top: 6px;
+            margin-top: 8px;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #00ff66 0%, #00b347 100%);
-            color: #020503;
+            background: linear-gradient(135deg, #00ff80 0%, #00b359 100%);
+            color: #020603;
             border: none;
-            padding: 12px 28px;
-            border-radius: 8px;
+            padding: 14px 32px;
+            border-radius: 10px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
             font-weight: 800;
-            font-size: 0.85rem;
+            font-size: 0.88rem;
             cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 20px var(--accent-glow);
-            letter-spacing: 1px;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 0 25px var(--accent-glow);
+            letter-spacing: 1.5px;
             text-transform: uppercase;
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 25px rgba(0, 255, 102, 0.6);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 0 35px rgba(0, 255, 128, 0.7);
             filter: brightness(1.1);
         }
 
         .btn-primary:active {
-            transform: translateY(0);
+            transform: translateY(0) scale(0.98);
         }
 
         .output-box {
-            margin-top: 10px;
-            background: rgba(2, 5, 3, 0.9);
-            border: 1px solid var(--border-green);
-            padding: 18px;
-            border-radius: 10px;
+            margin-top: 12px;
+            background: rgba(2, 6, 3, 0.95);
+            border: 1px solid var(--border-glow);
+            padding: 20px;
+            border-radius: 12px;
             display: none;
-            animation: fadeIn 0.3s ease;
+            animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(6px); }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(12px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -295,59 +333,68 @@
         .loader-link {
             color: transparent;
             background-color: #020503;
-            text-shadow: 0 0 10px rgba(0, 255, 102, 0.25);
+            text-shadow: 0 0 12px rgba(0, 255, 128, 0.3);
             user-select: none;
             cursor: pointer;
             word-break: break-all;
-            font-size: 0.8rem;
-            margin: 10px 0;
-            padding: 12px;
-            border: 1px dashed var(--border-green);
-            border-radius: 6px;
+            font-size: 0.82rem;
+            margin: 12px 0;
+            padding: 14px;
+            border: 1px dashed var(--border-glow);
+            border-radius: 8px;
             display: block;
             transition: all 0.25s ease;
         }
 
         .loader-link:hover, .loader-link.revealed {
             color: var(--accent-green);
-            background-color: rgba(0, 255, 102, 0.04);
+            background-color: rgba(0, 255, 128, 0.05);
             text-shadow: none;
             user-select: text;
             border-style: solid;
+            border-color: var(--accent-green);
+            box-shadow: 0 0 15px rgba(0, 255, 128, 0.15);
         }
 
         .vault-list {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            max-height: 560px;
+            gap: 14px;
+            max-height: 580px;
             overflow-y: auto;
-            padding-right: 4px;
+            padding-right: 6px;
         }
 
         .vault-list::-webkit-scrollbar {
-            width: 4px;
+            width: 5px;
+        }
+        .vault-list::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
         }
         .vault-list::-webkit-scrollbar-thumb {
-            background: var(--border-green);
+            background: var(--border-glow);
             border-radius: 4px;
+        }
+        .vault-list::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-green);
         }
 
         .vault-item {
-            background: rgba(2, 5, 3, 0.7);
-            border: 1px solid var(--border-green);
-            padding: 14px;
-            border-radius: 10px;
+            background: rgba(2, 6, 3, 0.8);
+            border: 1px solid var(--border-glow);
+            padding: 16px;
+            border-radius: 12px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            transition: all 0.25s ease;
+            gap: 12px;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .vault-item:hover {
-            border-color: var(--border-green-hover);
-            transform: translateX(2px);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            border-color: var(--accent-green);
+            transform: translateX(4px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5), 0 0 15px rgba(0, 255, 128, 0.15);
         }
 
         .vault-header {
@@ -359,13 +406,14 @@
         .vault-info {
             display: flex;
             flex-direction: column;
-            gap: 3px;
+            gap: 4px;
             overflow: hidden;
         }
 
         .vault-name {
+            font-family: 'Plus Jakarta Sans', sans-serif;
             font-weight: 700;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             color: #ffffff;
             white-space: nowrap;
             overflow: hidden;
@@ -373,36 +421,38 @@
         }
 
         .vault-date {
-            font-size: 0.7rem;
+            font-size: 0.72rem;
             color: var(--text-dim);
         }
 
         .vault-actions {
             display: flex;
-            gap: 6px;
+            gap: 8px;
         }
 
         .icon-btn {
-            background: rgba(0, 255, 102, 0.05);
-            border: 1px solid var(--border-green);
-            color: var(--text-main);
-            padding: 6px 12px;
-            border-radius: 6px;
+            background: rgba(0, 255, 128, 0.06);
+            border: 1px solid var(--border-glow);
+            color: var(--text-primary);
+            padding: 7px 14px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 0.75rem;
+            font-size: 0.78rem;
             font-weight: 600;
-            transition: all 0.2s ease;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .icon-btn:hover {
             background: var(--accent-green);
-            color: #020503;
-            box-shadow: 0 0 10px var(--accent-glow);
+            color: #020603;
+            border-color: var(--accent-green);
+            box-shadow: 0 0 15px var(--accent-glow);
+            transform: translateY(-1px);
         }
 
         .icon-btn.delete {
-            background: rgba(255, 71, 87, 0.05);
-            border-color: rgba(255, 71, 87, 0.2);
+            background: rgba(255, 51, 102, 0.06);
+            border-color: rgba(255, 51, 102, 0.25);
             color: var(--danger);
         }
 
@@ -410,7 +460,7 @@
             background: var(--danger);
             color: #ffffff;
             border-color: var(--danger);
-            box-shadow: 0 0 10px var(--danger-glow);
+            box-shadow: 0 0 15px var(--danger-glow);
         }
     </style>
 </head>
@@ -418,8 +468,8 @@
 
     <header>
         <div class="logo">
-            ERROR<span style="color: var(--accent-green); text-shadow: 0 0 10px var(--accent-glow);">404</span> 
-            <span class="logo-tag">OBFUSCATOR</span>
+            ERROR<span class="logo-highlight">404</span> 
+            <span class="logo-badge">OBFUSCATOR</span>
         </div>
         <div class="user-widget" id="userWidget">
             <!-- Dynamically populated via auth API -->
