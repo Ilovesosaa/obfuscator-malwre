@@ -2,12 +2,37 @@ const express = require('express');
 const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Discord OAuth2 Configuration (Replace with your actual Discord Bot/App credentials or environment variables)
+// Owner Discord ID (Only this account gets Admin Key Gen access)
+const OWNER_DISCORD_ID = "1257596807857569793";
+
+// File path for persistent API key storage
+const KEYS_FILE = path.join(__dirname, 'keys.json');
+
+// Helper to load keys from file
+function loadKeys() {
+    if (!fs.existsSync(KEYS_FILE)) {
+        fs.writeFileSync(KEYS_FILE, JSON.stringify([]));
+        return [];
+    }
+    try {
+        return JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
+    } catch (e) {
+        return [];
+    }
+}
+
+// Helper to save keys to file
+function saveKeys(keys) {
+    fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+}
+
+// Discord OAuth2 Configuration
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID || 'YOUR_DISCORD_CLIENT_ID';
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'YOUR_DISCORD_CLIENT_SECRET';
 
@@ -24,17 +49,46 @@ app.use(session({
 // In-memory Database for scripts
 let vaultDatabase = [];
 
+// --- MIDDLEWARE ---
+
+// Middleware to protect Owner routes
+function requireOwner(req, res, next) {
+    if (req.session && req.session.user && req.session.user.id === OWNER_DISCORD_ID) {
+        return next();
+    }
+    return res.status(403).json({ success: false, error: 'Forbidden: Owner access required.' });
+}
+
+// Helper middleware to authenticate via Discord Session OR API Key
+function getAuthUser(req) {
+    if (req.session && req.session.user) {
+        return req.session.user;
+    }
+    
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey) {
+        const keys = loadKeys();
+        const foundKey = keys.find(k => k.key === apiKey);
+        if (foundKey) {
+            return {
+                id: 'key_' + foundKey.username,
+                username: foundKey.username,
+                isApiKeyUser: true
+            };
+        }
+    }
+    return null;
+}
+
 // --- STATIC FILES & ROOT ROUTE ---
 
-// 1. Explicit root route comes FIRST to fix "Cannot GET /"
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 2. Static middleware comes AFTER
 app.use(express.static(path.join(__dirname)));
 
-// --- AUTHENTICATION ROUTES (DYNAMIC REDIRECT URI) ---
+// --- AUTHENTICATION ROUTES ---
 
 app.get('/auth/discord', (req, res) => {
     const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -102,11 +156,60 @@ app.get('/api/me', (req, res) => {
     }
 });
 
-// --- API & SCRIPT MANAGEMENT ROUTES ---
+// --- OWNER ADMIN & API KEY MANAGEMENT ENDPOINTS ---
+
+// 1. Generate new API Key (Owner Only)
+app.post('/api/admin/generate-key', requireOwner, (req, res) => {
+    const username = req.body.username || "Client_User";
+    const keys = loadKeys();
+    
+    const newApiKey = "err404_key_" + crypto.randomBytes(16).toString('hex');
+    const keyData = { key: newApiKey, username: username, createdAt: new Date().toISOString() };
+    
+    keys.push(keyData);
+    saveKeys(keys);
+
+    res.json({ success: true, apiKey: newApiKey });
+});
+
+// 2. Fetch list of all active keys (Owner Only)
+app.get('/api/admin/keys', requireOwner, (req, res) => {
+    const keys = loadKeys();
+    res.json({ success: true, keys });
+});
+
+// 3. Revoke/Delete an API Key (Owner Only)
+app.post('/api/admin/revoke-key', requireOwner, (req, res) => {
+    const { key } = req.body;
+    let keys = loadKeys();
+    
+    keys = keys.filter(k => k.key !== key);
+    saveKeys(keys);
+
+    res.json({ success: true, message: 'Key revoked.' });
+});
+
+// 4. Verify API Key Login (Public Header Route)
+app.get('/api/verify-key', (req, res) => {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey) return res.json({ authenticated: false });
+
+    const keys = loadKeys();
+    const foundKey = keys.find(k => k.key === apiKey);
+
+    if (foundKey) {
+        res.json({ authenticated: true, username: foundKey.username });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
+
+// --- SCRIPT MANAGEMENT ROUTES ---
 
 app.post('/api/obfuscate', (req, res) => {
-    if (!req.session.user) {
-        return res.status(401).json({ success: false, error: 'Unauthorized. Please login with Discord.' });
+    const user = getAuthUser(req);
+    if (!user) {
+        return res.status(401).json({ success: false, error: 'Unauthorized. Please login with Discord or API Key.' });
     }
 
     const { scriptPayload, scriptName, fileType, editId } = req.body;
@@ -123,7 +226,7 @@ app.post('/api/obfuscate', (req, res) => {
         let loaderString;
 
         if (editId) {
-            const existingScript = vaultDatabase.find(s => s.id === editId && s.ownerId === req.session.user.id);
+            const existingScript = vaultDatabase.find(s => s.id === editId && s.ownerId === user.id);
             if (!existingScript) {
                 return res.status(403).json({ success: false, error: 'Script not found or unauthorized to edit.' });
             }
@@ -139,8 +242,8 @@ app.post('/api/obfuscate', (req, res) => {
 
             vaultDatabase.push({
                 id: scriptId,
-                ownerId: req.session.user.id,
-                ownerName: req.session.user.username,
+                ownerId: user.id,
+                ownerName: user.username,
                 name: scriptName || 'Untitled Script',
                 fileType: fileType || 'luau',
                 code: decodedCode,
@@ -157,20 +260,22 @@ app.post('/api/obfuscate', (req, res) => {
 });
 
 app.get('/api/vault', (req, res) => {
-    if (!req.session.user) {
+    const user = getAuthUser(req);
+    if (!user) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
-    const userScripts = vaultDatabase.filter(s => s.ownerId === req.session.user.id);
+    const userScripts = vaultDatabase.filter(s => s.ownerId === user.id);
     res.json({ success: true, scripts: userScripts });
 });
 
 app.post('/api/delete', (req, res) => {
-    if (!req.session.user) {
+    const user = getAuthUser(req);
+    if (!user) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
     const { id } = req.body;
-    const index = vaultDatabase.findIndex(s => s.id === id && s.ownerId === req.session.user.id);
+    const index = vaultDatabase.findIndex(s => s.id === id && s.ownerId === user.id);
     
     if (index !== -1) {
         vaultDatabase.splice(index, 1);
@@ -180,7 +285,7 @@ app.post('/api/delete', (req, res) => {
     }
 });
 
-// --- SECURE RAW HOSTING ENDPOINT ---
+// --- RAW HOSTING ENDPOINT ---
 
 app.get('/raw/:id', (req, res) => {
     const script = vaultDatabase.find(s => s.id === req.params.id);
