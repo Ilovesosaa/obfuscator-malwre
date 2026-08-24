@@ -4,18 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Error404 | Secure Luau Obfuscator & Host</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;0,800;1,400&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-deep: #050805;
-            --bg-card: #0a120a;
-            --border-green: #00ff6633;
-            --border-green-hover: #00ff6688;
+            --bg-deep: #030704;
+            --bg-card: rgba(10, 20, 12, 0.65);
+            --bg-input: #020503;
+            --border-green: rgba(0, 255, 102, 0.18);
+            --border-green-hover: rgba(0, 255, 102, 0.5);
             --accent-green: #00ff66;
-            --accent-glow: rgba(0, 255, 102, 0.25);
-            --text-main: #c0f0c0;
-            --text-dim: #609060;
-            --danger: #ff4444;
+            --accent-glow: rgba(0, 255, 102, 0.35);
+            --text-main: #d1fae5;
+            --text-dim: #4ade8099;
+            --danger: #ff4757;
+            --danger-glow: rgba(255, 71, 87, 0.35);
         }
 
         * {
@@ -32,46 +34,56 @@
             display: flex;
             flex-direction: column;
             overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(0, 255, 102, 0.08) 0%, transparent 60%),
+                radial-gradient(circle at 100% 100%, rgba(0, 255, 102, 0.03) 0%, transparent 40%);
         }
 
-        /* Scanline background effect */
-        body::before {
-            content: " ";
-            display: block;
+        /* Subtle cyber grid background */
+        body::after {
+            content: "";
             position: fixed;
-            top: 0; left: 0; bottom: 0; right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-            z-index: 999;
-            background-size: 100% 3px, 3px 100%;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: linear-gradient(rgba(0, 255, 102, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(0, 255, 102, 0.03) 1px, transparent 1px);
+            background-size: 32px 32px;
             pointer-events: none;
+            z-index: 0;
         }
 
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 40px;
+            padding: 16px 48px;
             border-bottom: 1px solid var(--border-green);
-            background: rgba(5, 8, 5, 0.95);
-            backdrop-filter: blur(10px);
+            background: rgba(3, 7, 4, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             position: sticky;
             top: 0;
             z-index: 100;
         }
 
         .logo {
-            font-size: 1.5rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.4rem;
             font-weight: 700;
-            color: var(--accent-green);
-            text-shadow: 0 0 10px var(--accent-green);
-            letter-spacing: 2px;
+            color: #fff;
+            letter-spacing: 1.5px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
 
-        .logo span {
-            color: #fff;
+        .logo-tag {
+            font-size: 0.65rem;
+            color: var(--accent-green);
+            background: rgba(0, 255, 102, 0.08);
+            border: 1px solid var(--border-green);
+            padding: 3px 8px;
+            border-radius: 20px;
+            letter-spacing: 1px;
         }
 
         .user-widget {
@@ -81,38 +93,41 @@
         }
 
         .discord-btn {
-            background-color: #5865F2;
+            background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
             color: #fff;
             padding: 10px 20px;
-            border-radius: 6px;
+            border-radius: 8px;
             text-decoration: none;
             font-weight: 600;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: all 0.2s ease;
-            box-shadow: 0 0 15px rgba(88, 101, 242, 0.4);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .discord-btn:hover {
-            background-color: #4752C4;
-            box-shadow: 0 0 20px rgba(88, 101, 242, 0.7);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5);
+            filter: brightness(1.1);
         }
 
         .user-profile {
             display: flex;
             align-items: center;
-            gap: 10px;
-            background: var(--bg-card);
+            gap: 12px;
+            background: rgba(10, 20, 12, 0.8);
             border: 1px solid var(--border-green);
-            padding: 6px 14px;
-            border-radius: 6px;
+            padding: 6px 16px;
+            border-radius: 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         .user-profile img {
-            width: 32px;
-            height: 32px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             border: 1px solid var(--accent-green);
         }
@@ -120,22 +135,30 @@
         .logout-btn {
             color: var(--danger);
             text-decoration: none;
-            font-size: 0.8rem;
-            margin-left: 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            margin-left: 6px;
+            transition: opacity 0.2s;
+        }
+
+        .logout-btn:hover {
+            opacity: 0.8;
         }
 
         main {
             flex: 1;
-            max-width: 1200px;
+            max-width: 1280px;
             width: 100%;
             margin: 0 auto;
-            padding: 40px 20px;
+            padding: 40px 24px;
             display: grid;
             grid-template-columns: 1fr 380px;
-            gap: 30px;
+            gap: 32px;
+            position: relative;
+            z-index: 1;
         }
 
-        @media(max-width: 900px) {
+        @media(max-width: 960px) {
             main {
                 grid-template-columns: 1fr;
             }
@@ -144,101 +167,125 @@
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-green);
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 0 20px rgba(0, 255, 102, 0.03);
+            border-radius: 16px;
+            padding: 28px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: border-color 0.3s ease;
         }
 
         h2 {
-            font-size: 1.1rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 700;
             color: var(--accent-green);
-            margin-bottom: 15px;
-            letter-spacing: 1px;
-            text-transform: uppercase;
+            margin-bottom: 20px;
+            letter-spacing: 1.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .editor-container {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 18px;
         }
 
         .input-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
         }
 
         label {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             color: var(--text-dim);
+            letter-spacing: 0.5px;
+            font-weight: 600;
         }
 
         input[type="text"], select {
-            background: #030503;
+            background: var(--bg-input);
             border: 1px solid var(--border-green);
             color: var(--text-main);
-            padding: 12px;
-            border-radius: 6px;
+            padding: 12px 16px;
+            border-radius: 8px;
             outline: none;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
+            transition: all 0.25s ease;
         }
 
         input[type="text"]:focus, select:focus {
             border-color: var(--accent-green);
-            box-shadow: 0 0 10px var(--accent-glow);
+            box-shadow: 0 0 15px var(--accent-glow);
         }
 
         textarea {
-            background: #030503;
+            background: var(--bg-input);
             border: 1px solid var(--border-green);
-            color: var(--accent-green);
-            padding: 15px;
-            border-radius: 6px;
-            min-height: 280px;
+            color: #00ffaa;
+            padding: 16px;
+            border-radius: 8px;
+            min-height: 320px;
             resize: vertical;
             outline: none;
-            font-size: 0.9rem;
-            line-height: 1.5;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            transition: all 0.25s ease;
         }
 
         textarea:focus {
             border-color: var(--accent-green);
-            box-shadow: 0 0 15px var(--accent-glow);
+            box-shadow: 0 0 20px var(--accent-glow);
         }
 
         .action-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-top: 6px;
         }
 
         .btn-primary {
-            background-color: var(--accent-green);
-            color: #000;
+            background: linear-gradient(135deg, #00ff66 0%, #00b347 100%);
+            color: #020503;
             border: none;
-            padding: 12px 25px;
-            border-radius: 6px;
-            font-weight: 700;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-weight: 800;
+            font-size: 0.85rem;
             cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 0 15px var(--accent-glow);
-            text-transform: uppercase;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px var(--accent-glow);
             letter-spacing: 1px;
+            text-transform: uppercase;
         }
 
         .btn-primary:hover {
-            background-color: #00cc52;
-            box-shadow: 0 0 25px rgba(0, 255, 102, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(0, 255, 102, 0.6);
+            filter: brightness(1.1);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
         }
 
         .output-box {
-            margin-top: 20px;
-            background: #020302;
+            margin-top: 10px;
+            background: rgba(2, 5, 3, 0.9);
             border: 1px solid var(--border-green);
-            padding: 15px;
-            border-radius: 6px;
+            padding: 18px;
+            border-radius: 10px;
             display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .output-box.active {
@@ -247,48 +294,60 @@
 
         .loader-link {
             color: transparent;
-            background-color: #000;
-            text-shadow: 0 0 8px rgba(0, 255, 102, 0.2);
+            background-color: #020503;
+            text-shadow: 0 0 10px rgba(0, 255, 102, 0.25);
             user-select: none;
             cursor: pointer;
             word-break: break-all;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             margin: 10px 0;
-            padding: 8px;
+            padding: 12px;
             border: 1px dashed var(--border-green);
-            border-radius: 4px;
+            border-radius: 6px;
             display: block;
-            transition: all 0.2s ease;
+            transition: all 0.25s ease;
         }
 
         .loader-link:hover, .loader-link.revealed {
             color: var(--accent-green);
-            background-color: #050805;
+            background-color: rgba(0, 255, 102, 0.04);
             text-shadow: none;
             user-select: text;
+            border-style: solid;
         }
 
         .vault-list {
             display: flex;
             flex-direction: column;
             gap: 12px;
-            max-height: 520px;
+            max-height: 560px;
             overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .vault-list::-webkit-scrollbar {
+            width: 4px;
+        }
+        .vault-list::-webkit-scrollbar-thumb {
+            background: var(--border-green);
+            border-radius: 4px;
         }
 
         .vault-item {
-            background: #030503;
+            background: rgba(2, 5, 3, 0.7);
             border: 1px solid var(--border-green);
-            padding: 12px;
-            border-radius: 6px;
+            padding: 14px;
+            border-radius: 10px;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            transition: border-color 0.2s;
+            transition: all 0.25s ease;
         }
 
         .vault-item:hover {
-            border-color: var(--accent-green);
+            border-color: var(--border-green-hover);
+            transform: translateX(2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
 
         .vault-header {
@@ -300,50 +359,58 @@
         .vault-info {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 3px;
             overflow: hidden;
         }
 
         .vault-name {
             font-weight: 700;
-            font-size: 0.9rem;
-            color: #fff;
+            font-size: 0.85rem;
+            color: #ffffff;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
         .vault-date {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: var(--text-dim);
         }
 
         .vault-actions {
             display: flex;
-            gap: 8px;
+            gap: 6px;
         }
 
         .icon-btn {
-            background: none;
+            background: rgba(0, 255, 102, 0.05);
             border: 1px solid var(--border-green);
             color: var(--text-main);
-            padding: 6px 10px;
-            border-radius: 4px;
+            padding: 6px 12px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 0.75rem;
-            transition: all 0.2s;
+            font-weight: 600;
+            transition: all 0.2s ease;
         }
 
         .icon-btn:hover {
             background: var(--accent-green);
-            color: #000;
-            border-color: var(--accent-green);
+            color: #020503;
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .icon-btn.delete {
+            background: rgba(255, 71, 87, 0.05);
+            border-color: rgba(255, 71, 87, 0.2);
+            color: var(--danger);
         }
 
         .icon-btn.delete:hover {
             background: var(--danger);
-            color: #fff;
+            color: #ffffff;
             border-color: var(--danger);
+            box-shadow: 0 0 10px var(--danger-glow);
         }
     </style>
 </head>
@@ -351,7 +418,8 @@
 
     <header>
         <div class="logo">
-            ERROR<span>404</span> <span style="font-size: 0.7rem; color: var(--text-dim); border: 1px solid var(--border-green); padding: 2px 6px; border-radius: 4px;">OBFUSCATOR</span>
+            ERROR<span style="color: var(--accent-green); text-shadow: 0 0 10px var(--accent-glow);">404</span> 
+            <span class="logo-tag">OBFUSCATOR</span>
         </div>
         <div class="user-widget" id="userWidget">
             <!-- Dynamically populated via auth API -->
@@ -445,46 +513,6 @@
             return btoa(binString);
         }
 
-        // Lua/Luau Byte-Array & Bitwise XOR Obfuscator Engine
-        function obfuscateLua(source) {
-            const encoder = new TextEncoder();
-            const bytes = encoder.encode(source);
-            const key = Math.floor(Math.random() * 253) + 1; // Random non-zero XOR key
-            
-            const xorBytes = [];
-            for (let i = 0; i < bytes.length; i++) {
-                xorBytes.push(bytes[i] ^ key);
-            }
-
-            // Generate junk variable names to disguise execution flow
-            const randVar = (prefix) => prefix + '_' + Math.random().toString(36).substring(2, 8);
-            const vData = randVar('_0xdata');
-            const vKey = randVar('_0xkey');
-            const vRes = randVar('_0xres');
-            const vByte = randVar('_0xb');
-            const vChar = randVar('_0xc');
-            const vEnv = randVar('_0xenv');
-
-            // Construct self-unpacking Lua/Luau wrapper script
-            const wrappedScript = [
-                `local ${vData} = {${xorBytes.join(',')}}`,
-                `local ${vKey} = ${key}`,
-                `local ${vRes} = {}`,
-                `for i = 1, #${vData} do`,
-                `    local ${vByte} = ${vData}[i]`,
-                `    -- Bitwise XOR restoration via bit32/bit or manual arithmetic fallbacks`,
-                `    local ${vChar} = (bit32 and bit32.bxor(${vByte}, ${vKey}))`,
-                `        or (bit and bit.bxor(${vByte}, ${vKey}))`,
-                `        or (function(a,b) local r,p=0,1 while a>0 or b>0 do if (a%2) ~= (b%2) then r=r+p end a=math.floor(a/2) b=math.floor(b/2) p=p*2 end return r end)(${vByte}, ${vKey})`,
-                `    ${vRes}[i] = string.char(${vChar})`,
-                `end`,
-                `local ${vEnv} = loadstring or load`,
-                `return ${vEnv}(table.concat(${vRes}))()`
-            ].join('\n');
-
-            return wrappedScript;
-        }
-
         async function deployScript() {
             const scriptName = document.getElementById('scriptName').value;
             const fileType = document.getElementById('fileType').value;
@@ -502,10 +530,7 @@
             statusMsg.innerText = 'Obfuscating and deploying...';
 
             try {
-                // Apply byte array XOR obfuscation before sending payload
-                const obfuscatedCode = obfuscateLua(scriptInput);
-                const payload = safeBase64Encode(obfuscatedCode);
-
+                const payload = safeBase64Encode(scriptInput);
                 const res = await fetch('/api/obfuscate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
