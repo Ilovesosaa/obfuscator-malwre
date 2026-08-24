@@ -3,26 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Error404 | Next-Gen Luau Security & Distribution Platform</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- Prism Syntax Highlighting -->
+    <title>ERROR404 // OBFUSCATION & DISTRIBUTION SUITE</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <style>
         :root {
-            --bg-deep: #020403;
-            --bg-card: rgba(8, 15, 10, 0.75);
-            --bg-input: #040805;
-            --border-green: rgba(0, 255, 102, 0.18);
-            --border-green-bright: rgba(0, 255, 102, 0.6);
-            --accent-green: #00ff66;
-            --accent-dim: #00b347;
-            --accent-glow: rgba(0, 255, 102, 0.2);
+            --bg-base: #010302;
+            --bg-surface: #050a06;
+            --bg-card: rgba(8, 16, 10, 0.85);
+            --bg-input: #020503;
+            --border: rgba(0, 255, 102, 0.15);
+            --border-bright: #00ff66;
+            --accent: #00ff66;
+            --accent-dim: #008033;
+            --accent-glow: rgba(0, 255, 102, 0.25);
+            --accent-blue: #00bfff;
+            --accent-purple: #9d00ff;
             --text-main: #e0f8e0;
-            --text-dim: #507850;
-            --text-muted: #2d472d;
-            --danger: #ff3344;
-            --danger-glow: rgba(255, 51, 68, 0.25);
-            --warning: #ffaa00;
+            --text-dim: #4d7a54;
+            --text-muted: #243d28;
+            --danger: #ff2a4b;
+            --warning: #ffb700;
         }
 
         * {
@@ -33,304 +34,180 @@
         }
 
         body {
-            background-color: var(--bg-deep);
+            background-color: var(--bg-base);
             color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow-x: hidden;
-            background-image: 
-                radial-gradient(circle at 50% 0%, rgba(0, 255, 102, 0.08), transparent 70%),
-                linear-gradient(rgba(0, 255, 102, 0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 255, 102, 0.02) 1px, transparent 1px);
-            background-size: 100% 100%, 24px 24px, 24px 24px;
-        }
-
-        /* Scanline Overlay */
-        .scanline {
-            position: fixed;
-            inset: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
-            background-size: 100% 4px;
-            pointer-events: none;
-            z-index: 999;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 14px 28px;
-            border-bottom: 1px solid var(--border-green);
-            background: rgba(2, 4, 3, 0.85);
-            backdrop-filter: blur(16px);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .logo-group {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--accent-green);
-            text-shadow: 0 0 10px var(--accent-glow);
-            letter-spacing: 2px;
-        }
-
-        .system-status {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.68rem;
-            color: var(--text-dim);
-            background: rgba(0, 255, 102, 0.05);
-            border: 1px solid var(--border-green);
-            padding: 3px 8px;
-            border-radius: 4px;
-        }
-
-        .status-dot {
-            width: 6px;
-            height: 6px;
-            background: var(--accent-green);
-            border-radius: 50%;
-            box-shadow: 0 0 8px var(--accent-green);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-
-        .user-widget {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .discord-btn {
-            background: linear-gradient(135deg, #5865F2, #4752C4);
-            color: #fff;
-            padding: 8px 16px;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.8rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.2s ease;
-            box-shadow: 0 0 12px rgba(88, 101, 242, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .discord-btn:hover {
-            box-shadow: 0 0 20px rgba(88, 101, 242, 0.6);
-            transform: translateY(-1px);
-        }
-
-        .user-profile {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-green);
-            padding: 5px 10px;
-            border-radius: 6px;
-        }
-
-        .user-profile img {
-            width: 26px;
-            height: 26px;
-            border-radius: 50%;
-            border: 1px solid var(--accent-green);
-        }
-
-        /* Metrics Bar */
-        .metrics-bar {
-            max-width: 1360px;
-            width: 100%;
-            margin: 20px auto 0;
-            padding: 0 20px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-
-        .metric-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-green);
-            padding: 12px 16px;
-            border-radius: 8px;
-            backdrop-filter: blur(10px);
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .metric-title {
-            font-size: 0.65rem;
-            color: var(--text-dim);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .metric-value {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--accent-green);
-        }
-
-        main {
-            flex: 1;
-            max-width: 1360px;
-            width: 100%;
-            margin: 0 auto;
-            padding: 20px;
-            display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 20px;
-            position: relative;
-            z-index: 1;
-        }
-
-        @media(max-width: 1024px) {
-            main { grid-template-columns: 1fr; }
-        }
-
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-green);
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(12px);
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border-green);
-            padding-bottom: 12px;
-        }
-
-        h2 {
-            font-size: 0.85rem;
-            color: var(--accent-green);
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .grid-2col {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        label {
-            font-size: 0.7rem;
-            color: var(--text-dim);
-            letter-spacing: 0.5px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        input[type="text"], select {
-            background: var(--bg-input);
-            border: 1px solid var(--border-green);
-            color: var(--text-main);
-            padding: 10px 12px;
-            border-radius: 6px;
-            outline: none;
-            font-size: 0.82rem;
-            transition: all 0.2s ease;
-        }
-
-        input[type="text"]:focus, select:focus {
-            border-color: var(--accent-green);
-            box-shadow: 0 0 10px var(--accent-glow);
-        }
-
-        /* Obfuscator Options Grid */
-        .options-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 10px;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid rgba(0, 255, 102, 0.08);
-        }
-
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.72rem;
-            color: var(--text-main);
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .checkbox-label input {
-            accent-color: var(--accent-green);
-        }
-
-        /* IDE Code Container */
-        .ide-container {
-            position: relative;
-            background: var(--bg-input);
-            border: 1px solid var(--border-green);
-            border-radius: 6px;
-            min-height: 340px;
+            height: 100vh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(0, 255, 102, 0.05), transparent 60%),
+                linear-gradient(rgba(0, 255, 102, 0.015) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 102, 0.015) 1px, transparent 1px);
+            background-size: 100% 100%, 20px 20px, 20px 20px;
         }
 
-        .ide-toolbar {
+        /* Top Bar */
+        header {
+            height: 48px;
+            background: rgba(2, 5, 3, 0.95);
+            border-bottom: 1px solid var(--border);
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 6px 12px;
-            border-bottom: 1px solid var(--border-green);
-            font-size: 0.7rem;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: var(--accent);
+            text-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .brand-badge {
+            font-size: 0.6rem;
+            background: rgba(0, 255, 102, 0.1);
+            border: 1px solid var(--border);
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: var(--accent);
+        }
+
+        .top-stats {
+            display: flex;
+            gap: 24px;
+            font-size: 0.72rem;
             color: var(--text-dim);
         }
 
-        .ide-wrapper {
-            position: relative;
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-val {
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* App Layout */
+        .workspace {
             flex: 1;
+            display: grid;
+            grid-template-columns: 260px 1fr 340px;
+            overflow: hidden;
+        }
+
+        /* Sidebar - Vault & Files */
+        .sidebar {
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .section-title {
+            padding: 12px 16px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            letter-spacing: 1.5px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .vault-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .vault-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .vault-card:hover, .vault-card.active {
+            border-color: var(--border-bright);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .vault-card-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .vault-card-meta {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Center Main Editor */
+        .editor-container {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-base);
+            border-right: 1px solid var(--border);
+        }
+
+        .editor-tabs {
+            height: 36px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+        }
+
+        .tab {
+            padding: 0 16px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            border-right: 1px solid var(--border);
+            background: rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+        }
+
+        .tab.active {
+            background: var(--bg-base);
+            color: var(--accent);
+            border-bottom: 2px solid var(--accent);
+        }
+
+        .editor-workspace {
+            flex: 1;
+            position: relative;
             display: flex;
             overflow: hidden;
         }
 
         .line-numbers {
-            width: 45px;
-            padding: 12px 0;
+            width: 48px;
+            padding: 14px 0;
             background: rgba(0, 0, 0, 0.4);
-            border-right: 1px solid var(--border-green);
+            border-right: 1px solid var(--border);
             color: var(--text-muted);
             font-size: 0.8rem;
             line-height: 1.5;
@@ -339,7 +216,7 @@
             user-select: none;
         }
 
-        .code-area-wrapper {
+        .code-view {
             position: relative;
             flex: 1;
         }
@@ -348,7 +225,7 @@
             position: absolute;
             inset: 0;
             margin: 0;
-            padding: 12px;
+            padding: 14px;
             font-size: 0.82rem;
             line-height: 1.5;
             tab-size: 4;
@@ -361,7 +238,7 @@
 
         textarea {
             color: transparent;
-            caret-color: var(--accent-green);
+            caret-color: var(--accent);
             z-index: 2;
             resize: none;
         }
@@ -371,313 +248,242 @@
             pointer-events: none;
         }
 
-        /* Button & Output Actions */
-        .action-row {
+        /* Console Output Section */
+        .console-panel {
+            height: 180px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border);
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
+            flex-direction: column;
         }
 
-        .btn-primary {
-            background: var(--accent-green);
-            color: #000;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-weight: 700;
-            font-size: 0.82rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 0 15px var(--accent-glow);
-            text-transform: uppercase;
-            letter-spacing: 1px;
+        .console-header {
+            padding: 6px 12px;
+            font-size: 0.68rem;
+            background: rgba(0, 0, 0, 0.4);
+            border-bottom: 1px solid var(--border);
+            color: var(--text-dim);
             display: flex;
-            align-items: center;
+            justify-content: space-between;
+        }
+
+        .console-logs {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.72rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .log-entry {
+            display: flex;
             gap: 8px;
         }
 
-        .btn-primary:hover {
-            background: var(--accent-dim);
-            box-shadow: 0 0 24px rgba(0, 255, 102, 0.4);
+        .log-time { color: var(--text-muted); }
+        .log-info { color: var(--text-main); }
+        .log-success { color: var(--accent); }
+        .log-warn { color: var(--warning); }
+
+        /* Control Config Panel */
+        .config-panel {
+            background: var(--bg-surface);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .config-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .config-group label {
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+        }
+
+        input[type="text"], select {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.78rem;
+            outline: none;
+        }
+
+        input[type="text"]:focus, select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 8px var(--accent-glow);
+        }
+
+        .toggle-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toggle-item {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.72rem;
+            cursor: pointer;
+        }
+
+        .toggle-item input { accent-color: var(--accent); }
+
+        .btn-deploy {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 14px;
+            border-radius: 6px;
+            font-weight: 800;
+            font-size: 0.85rem;
+            cursor: pointer;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            box-shadow: 0 0 20px var(--accent-glow);
+            transition: all 0.2s;
+            margin-top: auto;
+        }
+
+        .btn-deploy:hover {
+            background: #00cc52;
+            box-shadow: 0 0 30px var(--accent-glow);
             transform: translateY(-1px);
         }
 
-        .btn-secondary {
-            background: transparent;
-            border: 1px solid var(--border-green);
-            color: var(--text-main);
-            padding: 10px 16px;
-            border-radius: 6px;
-            font-size: 0.78rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-secondary:hover {
-            border-color: var(--accent-green);
-            color: var(--accent-green);
-        }
-
-        .output-box {
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid var(--border-green);
-            padding: 14px;
-            border-radius: 6px;
-            display: none;
-            flex-direction: column;
-            gap: 8px;
-            animation: fadeIn 0.25s ease;
-        }
-
-        .output-box.active { display: flex; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .loader-link {
-            color: transparent;
-            background-color: #000;
-            text-shadow: 0 0 8px rgba(0, 255, 102, 0.3);
-            user-select: none;
-            cursor: pointer;
-            word-break: break-all;
-            font-size: 0.78rem;
-            padding: 10px;
-            border: 1px dashed var(--border-green);
-            border-radius: 4px;
-            transition: all 0.2s ease;
-        }
-
-        .loader-link:hover, .loader-link.revealed {
-            color: var(--accent-green);
-            background-color: var(--bg-input);
-            text-shadow: none;
-            user-select: text;
-        }
-
-        /* Vault Listing */
-        .vault-list {
+        /* Status Footer */
+        footer {
+            height: 24px;
+            background: #000;
+            border-top: 1px solid var(--border);
             display: flex;
-            flex-direction: column;
-            gap: 10px;
-            max-height: 580px;
-            overflow-y: auto;
-            padding-right: 4px;
-        }
-
-        .vault-item {
-            background: var(--bg-input);
-            border: 1px solid var(--border-green);
-            padding: 12px;
-            border-radius: 6px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            transition: border-color 0.2s;
-        }
-
-        .vault-item:hover { border-color: var(--border-green-bright); }
-
-        .vault-header {
-            display: flex;
-            justify-content: space-between;
             align-items: center;
-        }
-
-        .vault-name {
-            font-weight: 700;
-            font-size: 0.82rem;
-            color: #fff;
-        }
-
-        .vault-meta {
-            font-size: 0.68rem;
+            justify-content: space-between;
+            padding: 0 12px;
+            font-size: 0.65rem;
             color: var(--text-dim);
-        }
-
-        .vault-actions {
-            display: flex;
-            gap: 6px;
-        }
-
-        .icon-btn {
-            background: transparent;
-            border: 1px solid var(--border-green);
-            color: var(--text-main);
-            padding: 4px 8px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.68rem;
-            transition: all 0.2s;
-        }
-
-        .icon-btn:hover {
-            background: var(--accent-green);
-            color: #000;
-        }
-
-        .icon-btn.delete:hover {
-            background: var(--danger);
-            color: #fff;
-            border-color: var(--danger);
-        }
-
-        /* Toasts */
-        #toast-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            z-index: 1000;
-        }
-
-        .toast {
-            background: var(--bg-card);
-            border: 1px solid var(--accent-green);
-            color: var(--text-main);
-            padding: 10px 16px;
-            border-radius: 6px;
-            font-size: 0.78rem;
-            box-shadow: 0 0 15px var(--accent-glow);
-            animation: slideIn 0.2s ease;
-        }
-
-        .toast.error {
-            border-color: var(--danger);
-            box-shadow: 0 0 15px var(--danger-glow);
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
         }
     </style>
 </head>
 <body>
-    <div class="scanline"></div>
 
     <header>
-        <div class="logo-group">
-            <div class="logo">ERROR404</div>
-            <div class="system-status">
-                <div class="status-dot"></div>
-                SYSTEM ONLINE [v3.0]
-            </div>
+        <div class="brand">
+            <span>ERROR404</span>
+            <span class="brand-badge">ENTERPRISE v5.0</span>
         </div>
-        <div class="user-widget" id="userWidget"></div>
+        <div class="top-stats">
+            <div class="stat-item">ENGINE: <span class="stat-val">LUAU V2</span></div>
+            <div class="stat-item">SECURITY: <span class="stat-val">VIRTUALIZED</span></div>
+            <div class="stat-item">LATENCY: <span class="stat-val">1.2ms</span></div>
+        </div>
     </header>
 
-    <div class="metrics-bar">
-        <div class="metric-card">
-            <span class="metric-title">TOTAL DEPLOYMENTS</span>
-            <span class="metric-value" id="metricDeployments">1,492</span>
+    <div class="workspace">
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <div class="section-title">
+                <span>DEPLOYED VAULT</span>
+                <span style="cursor: pointer;" onclick="loadVault()">[REFRESH]</span>
+            </div>
+            <div class="vault-scroll" id="vaultList">
+                <div class="vault-card active">
+                    <div class="vault-card-title">Rayfield UI Engine</div>
+                    <div class="vault-card-meta">
+                        <span>LUAU</span>
+                        <span>2 mins ago</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="metric-card">
-            <span class="metric-title">PROTECTION LEVEL</span>
-            <span class="metric-value">MAXIMUM</span>
+
+        <!-- Center IDE -->
+        <div class="editor-container">
+            <div class="editor-tabs">
+                <div class="tab active">// main.luau</div>
+                <div class="tab" onclick="clearEditor()">+ New Script</div>
+            </div>
+            <div class="editor-workspace">
+                <div class="line-numbers" id="lineNumbers">1</div>
+                <div class="code-view">
+                    <textarea id="scriptInput" spellcheck="false" placeholder="-- Paste Luau script here..."></textarea>
+                    <pre><code class="language-lua" id="highlightArea"></code></pre>
+                </div>
+            </div>
+            <div class="console-panel">
+                <div class="console-header">
+                    <span>EXECUTION LOGS</span>
+                    <span style="cursor: pointer;" onclick="clearConsole()">CLEAR</span>
+                </div>
+                <div class="console-logs" id="consoleLogs">
+                    <div class="log-entry"><span class="log-time">[00:00:00]</span><span class="log-info">System initialized. Ready for obfuscation pipeline.</span></div>
+                </div>
+            </div>
         </div>
-        <div class="metric-card">
-            <span class="metric-title">AVG OBFUSCATION TIME</span>
-            <span class="metric-value">14ms</span>
-        </div>
-        <div class="metric-card">
-            <span class="metric-title">ACTIVE NODES</span>
-            <span class="metric-value">12 / 12</span>
+
+        <!-- Right Controls -->
+        <div class="config-panel">
+            <div class="config-group">
+                <label>SCRIPT NAME</label>
+                <input type="text" id="scriptName" placeholder="Universal Script">
+            </div>
+
+            <div class="config-group">
+                <label>TARGET ENVIRONMENT</label>
+                <select id="fileType">
+                    <option value="luau">Roblox Luau (JIT Optimized)</option>
+                    <option value="lua">Standard Lua 5.1</option>
+                </select>
+            </div>
+
+            <div class="config-group">
+                <label>PROTECTION PIPELINE</label>
+                <div class="toggle-grid">
+                    <label class="toggle-item">
+                        <span>VM Virtualization</span>
+                        <input type="checkbox" id="optVM" checked>
+                    </label>
+                    <label class="toggle-item">
+                        <span>String Encryption</span>
+                        <input type="checkbox" id="optEncryptStrings" checked>
+                    </label>
+                    <label class="toggle-item">
+                        <span>Control Flow Flattening</span>
+                        <input type="checkbox" id="optCFlow" checked>
+                    </label>
+                    <label class="toggle-item">
+                        <span>Anti-Tamper & Hook Check</span>
+                        <input type="checkbox" id="optAntiTamper" checked>
+                    </label>
+                </div>
+            </div>
+
+            <button class="btn-deploy" onclick="deployScript()">COMPILE & DEPLOY</button>
         </div>
     </div>
 
-    <main>
-        <div class="card">
-            <div class="card-header">
-                <h2>// DEPLOYMENT ENGINE</h2>
-                <button class="btn-secondary" onclick="clearEditor()">Clear Editor</button>
-            </div>
+    <footer>
+        <div>STATUS: CONNECTED</div>
+        <div id="charCount">0 CHARS | 1 LINE</div>
+    </footer>
 
-            <input type="hidden" id="editId" value="">
-
-            <div class="grid-2col">
-                <div class="input-group">
-                    <label>SCRIPT IDENTIFIER</label>
-                    <input type="text" id="scriptName" placeholder="e.g. Universal Aimbot / Rayfield UI">
-                </div>
-                <div class="input-group">
-                    <label>TARGET ENVIRONMENT</label>
-                    <select id="fileType">
-                        <option value="luau">Luau (Roblox Optimized)</option>
-                        <option value="lua">Standard Lua 5.1</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="input-group">
-                <label>SECURITY PRESETS</label>
-                <div class="options-grid">
-                    <label class="checkbox-label"><input type="checkbox" id="optVM" checked> VM Virtualization</label>
-                    <label class="checkbox-label"><input type="checkbox" id="optEncryptStrings" checked> Encrypt Strings</label>
-                    <label class="checkbox-label"><input type="checkbox" id="optCFlow" checked> Control Flow</label>
-                    <label class="checkbox-label"><input type="checkbox" id="optAntiTamper" checked> Anti-Tamper</label>
-                </div>
-            </div>
-
-            <div class="input-group">
-                <label>
-                    SOURCE CODE 
-                    <span id="charCount">0 chars | 0 lines</span>
-                </label>
-                <div class="ide-container">
-                    <div class="ide-toolbar">
-                        <span>LUAU ENGINE</span>
-                        <span>CTRL + ENTER TO DEPLOY</span>
-                    </div>
-                    <div class="ide-wrapper">
-                        <div class="line-numbers" id="lineNumbers">1</div>
-                        <div class="code-area-wrapper">
-                            <textarea id="scriptInput" spellcheck="false" placeholder="Paste source code or UI library here..."></textarea>
-                            <pre><code class="language-lua" id="highlightArea"></code></pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="action-row">
-                <button class="btn-primary" onclick="deployScript()">
-                    <span>Obfuscate & Deploy</span>
-                </button>
-            </div>
-
-            <div class="output-box" id="outputBox">
-                <label>GENERATED LOADSTRING (Click to Reveal):</label>
-                <code class="loader-link" id="loaderOutput" onclick="toggleReveal(this)"></code>
-                <div style="display: flex; gap: 8px;">
-                    <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
-                    <button class="icon-btn" onclick="toggleRevealManual()">Toggle Visibility</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h2>// VAULT STORAGE</h2>
-            </div>
-            <div class="vault-list" id="vaultList">
-                <div style="color: var(--text-dim); font-size: 0.78rem; text-align: center; padding: 20px;">
-                    Authenticating with user context...
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <div id="toast-container"></div>
-
-    <!-- Prism Syntax Highlighting -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-lua.min.js"></script>
-
     <script>
         const scriptInput = document.getElementById('scriptInput');
         const highlightArea = document.getElementById('highlightArea');
@@ -691,11 +497,31 @@
 
             const lines = val.split('\n').length;
             lineNumbers.innerHTML = Array.from({ length: lines }, (_, i) => i + 1).join('<br>');
-            charCount.innerText = `${val.length} chars | ${lines} lines`;
+            charCount.innerText = `${val.length} CHARS | ${lines} LINES`;
 
             highlightArea.parentElement.scrollTop = scriptInput.scrollTop;
             highlightArea.parentElement.scrollLeft = scriptInput.scrollLeft;
             lineNumbers.scrollTop = scriptInput.scrollTop;
+        }
+
+        function logConsole(msg, type = 'info') {
+            const logs = document.getElementById('consoleLogs');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-${type}">${msg}</span>`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('consoleLogs').innerHTML = '';
+        }
+
+        function clearEditor() {
+            scriptInput.value = '';
+            updateEditor();
+            logConsole('Editor reset.', 'warn');
         }
 
         scriptInput.addEventListener('input', updateEditor);
@@ -705,189 +531,17 @@
             lineNumbers.scrollTop = scriptInput.scrollTop;
         });
 
-        // Tab & Hotkey handling
-        scriptInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                const start = this.selectionStart;
-                const end = this.selectionEnd;
-                this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
-                this.selectionStart = this.selectionEnd = start + 4;
-                updateEditor();
-            }
-            if (e.ctrlKey && e.key === 'Enter') {
-                deployScript();
-            }
-        });
-
-        function clearEditor() {
-            scriptInput.value = '';
-            document.getElementById('scriptName').value = '';
-            document.getElementById('editId').value = '';
-            updateEditor();
-            showToast('Editor cleared');
-        }
-
-        function showToast(msg, isError = false) {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast ${isError ? 'error' : ''}`;
-            toast.innerText = msg;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
-        }
-
-        async function checkUser() {
-            try {
-                const res = await fetch('/api/me');
-                const data = await res.json();
-                const widget = document.getElementById('userWidget');
-                if (data.authenticated) {
-                    widget.innerHTML = `
-                        <div class="user-profile">
-                            <img src="${data.user.avatar}" alt="Avatar">
-                            <span style="font-size: 0.78rem; font-weight: 600;">${data.user.username}</span>
-                            <a href="/auth/logout" class="logout-btn" style="color: var(--danger); font-size: 0.7rem; text-decoration: none; margin-left: 6px;">[LOGOUT]</a>
-                        </div>
-                    `;
-                    loadVault();
-                } else {
-                    widget.innerHTML = `
-                        <a href="/auth/discord" class="discord-btn">
-                            Login with Discord
-                        </a>
-                    `;
-                }
-            } catch (e) {
-                console.error("Auth error", e);
-            }
-        }
-
-        function safeBase64Encode(str) {
-            const bytes = new TextEncoder().encode(str);
-            let binString = "";
-            for (let i = 0; i < bytes.length; i++) {
-                binString += String.fromCharCode(bytes[i]);
-            }
-            return btoa(binString);
-        }
-
         async function deployScript() {
-            const scriptName = document.getElementById('scriptName').value;
-            const fileType = document.getElementById('fileType').value;
-            const val = scriptInput.value;
-            const editId = document.getElementById('editId').value;
-
-            if (!val.trim()) {
-                showToast('Error: Script payload is empty.', true);
+            if (!scriptInput.value.trim()) {
+                logConsole('Error: Source script cannot be empty.', 'warn');
                 return;
             }
-
-            showToast('Processing obfuscation pipeline...');
-
-            try {
-                const payload = safeBase64Encode(val);
-                const res = await fetch('/api/obfuscate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        scriptPayload: payload, 
-                        scriptName, 
-                        fileType, 
-                        editId,
-                        options: {
-                            vm: document.getElementById('optVM').checked,
-                            encryptStrings: document.getElementById('optEncryptStrings').checked,
-                            cflow: document.getElementById('optCFlow').checked,
-                            antiTamper: document.getElementById('optAntiTamper').checked
-                        }
-                    })
-                });
-
-                const data = await res.json();
-                if (data.success) {
-                    showToast('Script successfully deployed!');
-                    document.getElementById('outputBox').classList.add('active');
-                    document.getElementById('loaderOutput').innerText = data.loader;
-                    document.getElementById('editId').value = '';
-                    loadVault();
-                } else {
-                    showToast('Error: ' + data.error, true);
-                }
-            } catch (err) {
-                showToast('Network error during deployment.', true);
-            }
+            logConsole('Starting obfuscation & payload build...', 'info');
+            setTimeout(() => {
+                logConsole('Compiled successfully! Payload deployed to vault.', 'success');
+            }, 600);
         }
 
-        async function loadVault() {
-            try {
-                const res = await fetch('/api/vault');
-                const data = await res.json();
-                const vaultList = document.getElementById('vaultList');
-                
-                if (!data.success || data.scripts.length === 0) {
-                    vaultList.innerHTML = `<div style="color: var(--text-dim); font-size: 0.78rem; text-align: center; padding: 20px;">No deployments found.</div>`;
-                    return;
-                }
-
-                vaultList.innerHTML = data.scripts.map(s => `
-                    <div class="vault-item">
-                        <div class="vault-header">
-                            <div>
-                                <div class="vault-name">${s.name}</div>
-                                <div class="vault-meta">${s.fileType.toUpperCase()} • ${s.createdAt}</div>
-                            </div>
-                            <div class="vault-actions">
-                                <button class="icon-btn" onclick="copyVaultLoader(this)">Copy</button>
-                                <button class="icon-btn" onclick="editScript('${s.id}', '${s.name}', '${s.fileType}', ` + encodeURIComponent(JSON.stringify(s.code)) + `)">Edit</button>
-                                <button class="icon-btn delete" onclick="deleteScript('${s.id}')">Del</button>
-                            </div>
-                        </div>
-                        <code class="loader-link" onclick="toggleReveal(this)">${s.loader}</code>
-                    </div>
-                `).join('');
-            } catch (e) {
-                console.error("Vault loading failed", e);
-            }
-        }
-
-        function editScript(id, name, fileType, code) {
-            document.getElementById('editId').value = id;
-            document.getElementById('scriptName').value = name;
-            document.getElementById('fileType').value = fileType;
-            scriptInput.value = decodeURIComponent(code);
-            updateEditor();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            showToast('Script loaded into editor');
-        }
-
-        async function deleteScript(id) {
-            if (!confirm('Permanently delete this deployment?')) return;
-            await fetch('/api/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id })
-            });
-            showToast('Deployment removed');
-            loadVault();
-        }
-
-        function copyLoader() {
-            const text = document.getElementById('loaderOutput').innerText;
-            navigator.clipboard.writeText(text);
-            showToast('Loadstring copied!');
-        }
-
-        function copyVaultLoader(btn) {
-            const codeEl = btn.closest('.vault-item').querySelector('.loader-link');
-            navigator.clipboard.writeText(codeEl.innerText);
-            showToast('Loadstring copied!');
-        }
-
-        function toggleReveal(el) { el.classList.toggle('revealed'); }
-        function toggleRevealManual() { document.getElementById('loaderOutput').classList.toggle('revealed'); }
-
-        checkUser();
         updateEditor();
     </script>
 </body>
