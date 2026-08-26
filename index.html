@@ -3,26 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Error404 | Secure Luau Obfuscator & Host</title>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+    <title>ERROR404 // Advanced Luau Obfuscator & Script Host</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-base: #030604;
-            --bg-surface: rgba(10, 18, 12, 0.7);
-            --bg-input: rgba(4, 10, 6, 0.85);
-            --border-glow: rgba(0, 255, 128, 0.25);
-            --border-hover: rgba(0, 255, 128, 0.6);
+            --bg-surface: rgba(10, 18, 12, 0.65);
+            --bg-card: rgba(6, 12, 8, 0.75);
+            --bg-input: rgba(3, 8, 5, 0.9);
+            
+            --border-glow: rgba(0, 255, 128, 0.18);
+            --border-hover: rgba(0, 255, 128, 0.5);
+            
             --accent-green: #00ff80;
             --accent-cyan: #00f0ff;
-            --accent-glow: rgba(0, 255, 128, 0.4);
-            --text-primary: #ecfdf5;
-            --text-secondary: #6ee7b7;
-            --text-dim: #34d39988;
+            --accent-glow: rgba(0, 255, 128, 0.35);
+            --accent-cyan-glow: rgba(0, 240, 255, 0.35);
+            
+            --text-primary: #f0fdf4;
+            --text-secondary: #86efac;
+            --text-dim: #34d39977;
+            
             --danger: #ff3366;
-            --danger-glow: rgba(255, 51, 102, 0.4);
+            --danger-glow: rgba(255, 51, 102, 0.35);
+            
+            --radius-main: 16px;
+            --radius-inner: 10px;
+            --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Fira Code', monospace; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Fira Code', monospace;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
+        ::-webkit-scrollbar-thumb { background: var(--border-glow); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-green); }
 
         body {
             background-color: var(--bg-base);
@@ -34,28 +56,30 @@
             position: relative;
         }
 
+        /* Ambient Cyber Grid Background */
         body::before {
             content: "";
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: 
-                radial-gradient(circle at 20% 10%, rgba(0, 255, 128, 0.08) 0%, transparent 40%),
-                radial-gradient(circle at 80% 90%, rgba(0, 240, 255, 0.05) 0%, transparent 40%),
-                linear-gradient(rgba(0, 255, 128, 0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 255, 128, 0.02) 1px, transparent 1px);
-            background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+                radial-gradient(circle at 15% 15%, rgba(0, 255, 128, 0.07) 0%, transparent 45%),
+                radial-gradient(circle at 85% 85%, rgba(0, 240, 255, 0.05) 0%, transparent 45%),
+                linear-gradient(rgba(0, 255, 128, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 128, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
             pointer-events: none;
             z-index: 0;
         }
 
+        /* Header Bar */
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 18px 48px;
+            padding: 16px 48px;
             border-bottom: 1px solid var(--border-glow);
             background: rgba(3, 6, 4, 0.85);
-            backdrop-filter: blur(20px);
+            backdrop-filter: blur(24px);
             position: sticky;
             top: 0;
             z-index: 100;
@@ -63,8 +87,8 @@
 
         .logo {
             font-family: 'Plus Jakarta Sans', sans-serif;
-            font-size: 1.5rem;
-            font-weight: 800;
+            font-size: 1.4rem;
+            font-weight: 900;
             color: #fff;
             letter-spacing: 2px;
             display: flex;
@@ -72,44 +96,53 @@
             gap: 12px;
         }
 
-        .logo-highlight { color: var(--accent-green); text-shadow: 0 0 15px var(--accent-glow); }
+        .logo-highlight {
+            color: var(--accent-green);
+            text-shadow: 0 0 16px var(--accent-glow);
+        }
+
         .logo-badge {
             font-size: 0.65rem;
             color: var(--accent-green);
-            background: rgba(0, 255, 128, 0.1);
-            border: 1px solid var(--accent-green);
+            background: rgba(0, 255, 128, 0.08);
+            border: 1px solid var(--border-glow);
             padding: 4px 10px;
             border-radius: 20px;
+            letter-spacing: 1.5px;
+            font-weight: 700;
         }
 
         .user-widget { display: flex; align-items: center; gap: 12px; }
-        .auth-btn-group { display: flex; align-items: center; gap: 10px; }
+        .auth-btn-group { display: flex; align-items: center; gap: 12px; }
 
         .discord-btn {
             background: linear-gradient(135deg, #5865F2 0%, #3b42cc 100%);
             color: #fff;
-            padding: 10px 20px;
-            border-radius: 8px;
+            padding: 10px 22px;
+            border-radius: var(--radius-inner);
             text-decoration: none;
             font-family: 'Plus Jakarta Sans', sans-serif;
-            font-weight: 700;
-            font-size: 0.82rem;
+            font-weight: 800;
+            font-size: 0.8rem;
             display: flex;
             align-items: center;
             gap: 8px;
+            box-shadow: 0 4px 20px rgba(88, 101, 242, 0.3);
         }
+        .discord-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(88, 101, 242, 0.5); }
 
         .key-auth-btn {
-            background: rgba(0, 255, 128, 0.08);
+            background: rgba(0, 255, 128, 0.06);
             color: var(--accent-green);
             border: 1px solid var(--accent-green);
-            padding: 10px 18px;
-            border-radius: 8px;
+            padding: 10px 20px;
+            border-radius: var(--radius-inner);
             font-family: 'Plus Jakarta Sans', sans-serif;
-            font-weight: 700;
-            font-size: 0.82rem;
+            font-weight: 800;
+            font-size: 0.8rem;
             cursor: pointer;
         }
+        .key-auth-btn:hover { background: rgba(0, 255, 128, 0.15); box-shadow: 0 0 16px var(--accent-glow); }
 
         .user-profile {
             display: flex;
@@ -117,13 +150,13 @@
             gap: 12px;
             background: var(--bg-surface);
             border: 1px solid var(--border-glow);
-            padding: 6px 18px;
+            padding: 6px 16px 6px 8px;
             border-radius: 40px;
         }
 
         .user-profile img, .user-avatar-key {
-            width: 30px;
-            height: 30px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             border: 2px solid var(--accent-green);
             display: flex;
@@ -131,125 +164,170 @@
             justify-content: center;
             background: rgba(0, 255, 128, 0.1);
             color: var(--accent-green);
-            font-weight: 700;
+            font-weight: 800;
             font-size: 0.75rem;
         }
 
         .logout-btn { color: var(--danger); text-decoration: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; margin-left: 6px; }
+        .logout-btn:hover { text-shadow: 0 0 8px var(--danger-glow); }
 
+        /* Layout Grid */
         main {
             flex: 1;
-            max-width: 1320px;
+            max-width: 1380px;
             width: 100%;
             margin: 0 auto;
-            padding: 40px 24px;
+            padding: 36px 24px;
             display: grid;
-            grid-template-columns: 1fr 400px;
-            gap: 32px;
+            grid-template-columns: 1fr 420px;
+            gap: 28px;
             position: relative;
             z-index: 1;
         }
 
+        /* Glassmorphism Cards */
         .card {
             background: var(--bg-surface);
             border: 1px solid var(--border-glow);
-            border-radius: 16px;
+            border-radius: var(--radius-main);
             padding: 32px;
-            backdrop-filter: blur(16px);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
             margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent-green), transparent);
+            opacity: 0.5;
         }
 
         h2 {
             font-family: 'Plus Jakarta Sans', sans-serif;
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-weight: 800;
             color: var(--accent-green);
-            margin-bottom: 20px;
+            margin-bottom: 22px;
             letter-spacing: 2px;
-            text-shadow: 0 0 10px var(--accent-glow);
+            text-shadow: 0 0 12px var(--accent-glow);
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-        label { font-size: 0.75rem; color: var(--text-secondary); letter-spacing: 1px; font-weight: 600; text-transform: uppercase; }
+        .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+        label { font-size: 0.72rem; color: var(--text-secondary); letter-spacing: 1.5px; font-weight: 700; text-transform: uppercase; }
 
         input[type="text"], input[type="password"], select, textarea {
             background: var(--bg-input);
             border: 1px solid var(--border-glow);
             color: var(--text-primary);
             padding: 14px 18px;
-            border-radius: 10px;
+            border-radius: var(--radius-inner);
             outline: none;
-            font-size: 0.88rem;
+            font-size: 0.85rem;
         }
 
-        textarea { min-height: 280px; color: #00ffaa; resize: vertical; }
+        input[type="text"]:focus, input[type="password"]:focus, select:focus, textarea:focus {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 16px var(--accent-glow);
+        }
+
+        textarea {
+            min-height: 320px;
+            color: var(--accent-green);
+            resize: vertical;
+            line-height: 1.5;
+        }
 
         .btn-primary {
             background: linear-gradient(135deg, #00ff80 0%, #00b359 100%);
             color: #020603;
             border: none;
             padding: 14px 32px;
-            border-radius: 10px;
+            border-radius: var(--radius-inner);
             font-family: 'Plus Jakarta Sans', sans-serif;
             font-weight: 800;
-            font-size: 0.88rem;
+            font-size: 0.85rem;
             cursor: pointer;
             text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 20px var(--accent-glow);
         }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 28px var(--accent-glow); }
 
         .icon-btn {
             background: rgba(0, 255, 128, 0.06);
             border: 1px solid var(--border-glow);
             color: var(--text-primary);
-            padding: 7px 14px;
-            border-radius: 8px;
+            padding: 8px 16px;
+            border-radius: var(--radius-inner);
             cursor: pointer;
             font-size: 0.78rem;
-            font-weight: 600;
+            font-weight: 700;
         }
+        .icon-btn:hover { background: rgba(0, 255, 128, 0.15); border-color: var(--accent-green); }
 
-        .icon-btn.delete { background: rgba(255, 51, 102, 0.06); border-color: rgba(255, 51, 102, 0.25); color: var(--danger); }
+        .icon-btn.delete { background: rgba(255, 51, 102, 0.08); border-color: rgba(255, 51, 102, 0.3); color: var(--danger); }
+        .icon-btn.delete:hover { background: rgba(255, 51, 102, 0.2); border-color: var(--danger); box-shadow: 0 0 12px var(--danger-glow); }
 
         .loader-link {
             color: transparent;
-            background-color: #020503;
-            text-shadow: 0 0 12px rgba(0, 255, 128, 0.3);
+            background-color: rgba(0, 0, 0, 0.6);
+            text-shadow: 0 0 12px rgba(0, 255, 128, 0.4);
             user-select: none;
             cursor: pointer;
             word-break: break-all;
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             margin: 12px 0;
             padding: 14px;
             border: 1px dashed var(--border-glow);
-            border-radius: 8px;
+            border-radius: var(--radius-inner);
             display: block;
         }
-
         .loader-link.revealed { color: var(--accent-green); text-shadow: none; user-select: text; border-style: solid; }
 
-        .vault-list { display: flex; flex-direction: column; gap: 14px; max-height: 500px; overflow-y: auto; }
-        .vault-item { background: rgba(2, 6, 3, 0.8); border: 1px solid var(--border-glow); padding: 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 12px; }
+        .vault-list { display: flex; flex-direction: column; gap: 14px; max-height: 540px; overflow-y: auto; padding-right: 4px; }
+        .vault-item {
+            background: rgba(2, 6, 3, 0.85);
+            border: 1px solid var(--border-glow);
+            padding: 18px;
+            border-radius: var(--radius-inner);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .vault-item:hover { border-color: var(--border-hover); box-shadow: 0 4px 20px rgba(0, 255, 128, 0.08); }
 
         /* Owner Control Panel Styling */
         .owner-panel {
             grid-column: 1 / -1;
-            background: rgba(12, 6, 20, 0.8);
+            background: rgba(10, 16, 28, 0.8);
             border: 1px solid var(--accent-cyan);
-            box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+            box-shadow: 0 0 35px rgba(0, 240, 255, 0.15);
             display: none;
         }
-
+        .owner-panel::before { background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent); }
         .owner-panel.active { display: block; }
-        .owner-panel h2 { color: var(--accent-cyan); text-shadow: 0 0 10px rgba(0, 240, 255, 0.5); }
+        .owner-panel h2 { color: var(--accent-cyan); text-shadow: 0 0 12px rgba(0, 240, 255, 0.5); }
 
+        /* Modal Backdrop */
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(12px);
             display: none; justify-content: center; align-items: center; z-index: 1000;
         }
         .modal-overlay.active { display: flex; }
-        .modal-card { background: var(--bg-surface); border: 1px solid var(--accent-green); border-radius: 16px; padding: 32px; width: 100%; max-width: 440px; }
+        .modal-card { background: var(--bg-card); border: 1px solid var(--accent-green); border-radius: var(--radius-main); padding: 32px; width: 100%; max-width: 440px; box-shadow: 0 0 40px var(--accent-glow); }
+
+        @media (max-width: 900px) {
+            main { grid-template-columns: 1fr; }
+            header { padding: 16px 20px; }
+        }
     </style>
 </head>
 <body>
@@ -257,7 +335,7 @@
     <header>
         <div class="logo">
             ERROR<span class="logo-highlight">404</span> 
-            <span class="logo-badge">OBFUSCATOR</span>
+            <span class="logo-badge">SYSTEM</span>
         </div>
         <div class="user-widget" id="userWidget"></div>
     </header>
@@ -265,25 +343,25 @@
     <main>
         <!-- Owner Admin Section (Only displays for Discord ID: 1257596807857569793) -->
         <div class="card owner-panel" id="ownerPanel">
-            <h2>// OWNER ADMIN PANEL (KEY GENERATOR)</h2>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <h2><span>⚡</span> OWNER CONTROL PANEL (KEY GENERATOR)</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                 <div>
                     <div class="input-group">
                         <label>ASSIGN USERNAME / CLIENT LABEL</label>
-                        <input type="text" id="targetUsername" placeholder="e.g. VIP_Buyer_01">
+                        <input type="text" id="targetUsername" placeholder="e.g. Premium_User_01">
                     </div>
                     <button class="btn-primary" style="background: linear-gradient(135deg, #00f0ff 0%, #0080ff 100%); color: #000;" onclick="adminGenerateKey()">Generate API Key</button>
                 </div>
                 <div>
                     <label>GENERATED API KEY</label>
                     <input type="text" id="generatedKeyOutput" readonly placeholder="Key will appear here..." style="width: 100%; margin-top: 8px;">
-                    <button class="icon-btn" style="margin-top: 10px;" onclick="copyGeneratedKey()">Copy Key</button>
+                    <button class="icon-btn" style="margin-top: 12px;" onclick="copyGeneratedKey()">Copy Key</button>
                 </div>
             </div>
             
-            <div style="margin-top: 24px;">
+            <div style="margin-top: 28px;">
                 <label>ACTIVE KEYS IN SYSTEM</label>
-                <div id="activeKeysList" style="margin-top: 10px; max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                <div id="activeKeysList" style="margin-top: 12px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
                     <!-- Active keys populated here -->
                 </div>
             </div>
@@ -291,12 +369,12 @@
 
         <!-- Script Deployment Card -->
         <div class="card">
-            <h2>// SCRIPT DEPLOYMENT ENGINE</h2>
+            <h2><span>⚙️</span> SCRIPT DEPLOYMENT ENGINE</h2>
             <div class="editor-container">
                 <input type="hidden" id="editId" value="">
                 <div class="input-group">
                     <label>SCRIPT NAME</label>
-                    <input type="text" id="scriptName" placeholder="e.g. Universal Aimbot / UI Library">
+                    <input type="text" id="scriptName" placeholder="e.g. Universal Aimbot / Rayfield UI">
                 </div>
                 <div class="input-group">
                     <label>LANGUAGE ENVIRONMENT</label>
@@ -307,14 +385,14 @@
                 </div>
                 <div class="input-group">
                     <label>SOURCE CODE & UI LIBRARIES</label>
-                    <textarea id="scriptInput" placeholder="Paste your script code here..."></textarea>
+                    <textarea id="scriptInput" placeholder="-- Paste your source code or Rayfield UI script here..."></textarea>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span id="statusMsg" style="font-size: 0.8rem; color: var(--accent-green);"></span>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+                    <span id="statusMsg" style="font-size: 0.8rem; color: var(--accent-green); font-weight: 600;"></span>
                     <button class="btn-primary" onclick="deployScript()">Obfuscate & Host</button>
                 </div>
 
-                <div class="output-box" id="outputBox" style="display:none; margin-top: 15px;">
+                <div class="output-box" id="outputBox" style="display:none; margin-top: 20px;">
                     <label>GENERATED LOADSTRING:</label>
                     <code class="loader-link" id="loaderOutput" onclick="toggleReveal(this)"></code>
                     <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
@@ -324,9 +402,9 @@
 
         <!-- Vault Card -->
         <div class="card">
-            <h2>// SCRIPT VAULT</h2>
+            <h2><span>📦</span> SCRIPT VAULT</h2>
             <div class="vault-list" id="vaultList">
-                <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 20px;">
+                <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">
                     Authenticate to view your vault.
                 </div>
             </div>
@@ -336,14 +414,14 @@
     <!-- Key Login Modal -->
     <div class="modal-overlay" id="keyModal">
         <div class="modal-card">
-            <h2>// ENTER API KEY</h2>
+            <h2 style="margin-bottom: 16px;">🔑 ENTER API KEY</h2>
             <div class="input-group">
                 <label>AUTHENTICATION KEY</label>
                 <input type="password" id="apiKeyInput" placeholder="err404_key_xxxxxxxxxxxxx">
             </div>
-            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
                 <button class="icon-btn" onclick="closeKeyModal()">Cancel</button>
-                <button class="btn-primary" style="padding: 10px 20px;" onclick="saveApiKey()">Login</button>
+                <button class="btn-primary" style="padding: 10px 22px;" onclick="saveApiKey()">Login</button>
             </div>
         </div>
     </div>
@@ -354,7 +432,6 @@
 
         async function checkUser() {
             try {
-                // Check stored API Key authentication
                 if (currentApiKey) {
                     const res = await fetch('/api/verify-key', { headers: { 'X-API-Key': currentApiKey } });
                     const data = await res.json();
@@ -368,13 +445,11 @@
                     }
                 }
 
-                // Check Discord Session
                 const res = await fetch('/api/me');
                 const data = await res.json();
                 if (data.authenticated) {
                     renderUserWidget({ ...data.user, type: 'discord' });
                     
-                    // Show Owner Control Panel if Discord ID matches Owner ID
                     if (data.user.id === OWNER_DISCORD_ID) {
                         document.getElementById('ownerPanel').classList.add('active');
                         loadAdminKeys();
@@ -397,7 +472,7 @@
             widget.innerHTML = `
                 <div class="user-profile">
                     ${avatarHtml}
-                    <span style="font-size: 0.85rem; font-weight: 600;">${user.username}</span>
+                    <span style="font-size: 0.85rem; font-weight: 700;">${user.username}</span>
                     <a onclick="logout()" class="logout-btn">[LOGOUT]</a>
                 </div>
             `;
@@ -412,7 +487,6 @@
             `;
         }
 
-        // Owner API Key Generator Function
         async function adminGenerateKey() {
             const targetUsername = document.getElementById('targetUsername').value.trim() || "User_Key";
             const res = await fetch('/api/admin/generate-key', {
@@ -435,8 +509,8 @@
             if (data.success) {
                 const list = document.getElementById('activeKeysList');
                 list.innerHTML = data.keys.map(k => `
-                    <div style="background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px; display: flex; justify-content: space-between; font-size: 0.75rem;">
-                        <span><strong>${k.username}:</strong> <code>${k.key}</code></span>
+                    <div style="background: rgba(0,0,0,0.6); padding: 10px 14px; border-radius: var(--radius-inner); border: 1px solid var(--border-glow); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
+                        <span><strong style="color:var(--accent-cyan);">${k.username}:</strong> <code>${k.key}</code></span>
                         <button class="icon-btn delete" onclick="revokeKey('${k.key}')">Revoke</button>
                     </div>
                 `).join('');
@@ -530,15 +604,15 @@
                 const data = await res.json();
                 const vaultList = document.getElementById('vaultList');
                 if (!data.success || !data.scripts || data.scripts.length === 0) {
-                    vaultList.innerHTML = `<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 20px;">No deployed scripts in vault.</div>`;
+                    vaultList.innerHTML = `<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">No deployed scripts in vault.</div>`;
                     return;
                 }
                 vaultList.innerHTML = data.scripts.map(s => `
                     <div class="vault-item">
-                        <div style="display:flex; justify-shadow: space-between; align-items: center;">
+                        <div style="display:flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <strong style="color:#fff;">${s.name}</strong>
-                                <div style="font-size:0.7rem; color:var(--text-dim);">${s.fileType.toUpperCase()}</div>
+                                <strong style="color:#fff; font-size:0.9rem;">${s.name}</strong>
+                                <div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">${s.fileType.toUpperCase()}</div>
                             </div>
                             <div>
                                 <button class="icon-btn delete" onclick="deleteScript('${s.id}')">Del</button>
