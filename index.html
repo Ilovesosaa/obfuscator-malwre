@@ -3,26 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ERROR404 // Advanced Luau Obfuscator & Script Host</title>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;700;800;900&display=swap" rel="stylesheet">
+    <title>ERROR404 // Next-Gen Luau Security & Vault Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-base: #030604;
-            --bg-surface: rgba(10, 18, 12, 0.65);
-            --bg-card: rgba(6, 12, 8, 0.75);
-            --bg-input: rgba(3, 8, 5, 0.9);
+            --bg-base: #020403;
+            --bg-surface: rgba(8, 15, 10, 0.75);
+            --bg-card: rgba(5, 10, 7, 0.85);
+            --bg-input: rgba(2, 6, 4, 0.95);
             
-            --border-glow: rgba(0, 255, 128, 0.18);
-            --border-hover: rgba(0, 255, 128, 0.5);
+            --border-glow: rgba(0, 255, 128, 0.15);
+            --border-hover: rgba(0, 255, 128, 0.45);
             
             --accent-green: #00ff80;
             --accent-cyan: #00f0ff;
+            --accent-purple: #a855f7;
             --accent-glow: rgba(0, 255, 128, 0.35);
             --accent-cyan-glow: rgba(0, 240, 255, 0.35);
             
             --text-primary: #f0fdf4;
             --text-secondary: #86efac;
-            --text-dim: #34d39977;
+            --text-dim: #34d39966;
             
             --danger: #ff3366;
             --danger-glow: rgba(255, 51, 102, 0.35);
@@ -36,15 +37,14 @@
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Fira Code', monospace;
-            transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+            font-family: 'JetBrains Mono', monospace;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
         }
 
-        /* Custom Scrollbars */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.4); }
         ::-webkit-scrollbar-thumb { background: var(--border-glow); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--accent-green); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); }
 
         body {
             background-color: var(--bg-base);
@@ -56,29 +56,41 @@
             position: relative;
         }
 
-        /* Ambient Cyber Grid Background */
+        /* Scanline Overlay Effect */
+        body::after {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 3px, 6px 100%;
+            pointer-events: none;
+            z-index: 999;
+            opacity: 0.6;
+        }
+
+        /* Cyber Backdrop Grid */
         body::before {
             content: "";
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: 
-                radial-gradient(circle at 15% 15%, rgba(0, 255, 128, 0.07) 0%, transparent 45%),
-                radial-gradient(circle at 85% 85%, rgba(0, 240, 255, 0.05) 0%, transparent 45%),
+                radial-gradient(circle at 10% 20%, rgba(0, 255, 128, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 240, 255, 0.06) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.04) 0%, transparent 60%),
                 linear-gradient(rgba(0, 255, 128, 0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(0, 255, 128, 0.03) 1px, transparent 1px);
-            background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+            background-size: 100% 100%, 100% 100%, 100% 100%, 32px 32px, 32px 32px;
             pointer-events: none;
             z-index: 0;
         }
 
-        /* Header Bar */
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 16px 48px;
             border-bottom: 1px solid var(--border-glow);
-            background: rgba(3, 6, 4, 0.85);
+            background: rgba(2, 5, 3, 0.85);
             backdrop-filter: blur(24px);
             position: sticky;
             top: 0;
@@ -87,7 +99,7 @@
 
         .logo {
             font-family: 'Plus Jakarta Sans', sans-serif;
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             font-weight: 900;
             color: #fff;
             letter-spacing: 2px;
@@ -98,18 +110,18 @@
 
         .logo-highlight {
             color: var(--accent-green);
-            text-shadow: 0 0 16px var(--accent-glow);
+            text-shadow: 0 0 18px var(--accent-glow);
         }
 
         .logo-badge {
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             color: var(--accent-green);
             background: rgba(0, 255, 128, 0.08);
             border: 1px solid var(--border-glow);
             padding: 4px 10px;
             border-radius: 20px;
-            letter-spacing: 1.5px;
-            font-weight: 700;
+            letter-spacing: 2px;
+            font-weight: 800;
         }
 
         .user-widget { display: flex; align-items: center; gap: 12px; }
@@ -127,9 +139,9 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            box-shadow: 0 4px 20px rgba(88, 101, 242, 0.3);
+            box-shadow: 0 4px 20px rgba(88, 101, 242, 0.35);
         }
-        .discord-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(88, 101, 242, 0.5); }
+        .discord-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(88, 101, 242, 0.55); }
 
         .key-auth-btn {
             background: rgba(0, 255, 128, 0.06);
@@ -142,7 +154,7 @@
             font-size: 0.8rem;
             cursor: pointer;
         }
-        .key-auth-btn:hover { background: rgba(0, 255, 128, 0.15); box-shadow: 0 0 16px var(--accent-glow); }
+        .key-auth-btn:hover { background: rgba(0, 255, 128, 0.18); box-shadow: 0 0 18px var(--accent-glow); }
 
         .user-profile {
             display: flex;
@@ -155,8 +167,8 @@
         }
 
         .user-profile img, .user-avatar-key {
-            width: 32px;
-            height: 32px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             border: 2px solid var(--accent-green);
             display: flex;
@@ -171,10 +183,9 @@
         .logout-btn { color: var(--danger); text-decoration: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; margin-left: 6px; }
         .logout-btn:hover { text-shadow: 0 0 8px var(--danger-glow); }
 
-        /* Layout Grid */
         main {
             flex: 1;
-            max-width: 1380px;
+            max-width: 1440px;
             width: 100%;
             margin: 0 auto;
             padding: 36px 24px;
@@ -185,14 +196,13 @@
             z-index: 1;
         }
 
-        /* Glassmorphism Cards */
         .card {
             background: var(--bg-surface);
             border: 1px solid var(--border-glow);
             border-radius: var(--radius-main);
             padding: 32px;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(24px);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8);
             margin-bottom: 24px;
             position: relative;
             overflow: hidden;
@@ -203,7 +213,7 @@
             position: absolute;
             top: 0; left: 0; right: 0; height: 1px;
             background: linear-gradient(90deg, transparent, var(--accent-green), transparent);
-            opacity: 0.5;
+            opacity: 0.6;
         }
 
         h2 {
@@ -213,14 +223,14 @@
             color: var(--accent-green);
             margin-bottom: 22px;
             letter-spacing: 2px;
-            text-shadow: 0 0 12px var(--accent-glow);
+            text-shadow: 0 0 14px var(--accent-glow);
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
         .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
-        label { font-size: 0.72rem; color: var(--text-secondary); letter-spacing: 1.5px; font-weight: 700; text-transform: uppercase; }
+        label { font-size: 0.7rem; color: var(--text-secondary); letter-spacing: 1.5px; font-weight: 700; text-transform: uppercase; }
 
         input[type="text"], input[type="password"], select, textarea {
             background: var(--bg-input);
@@ -234,15 +244,60 @@
 
         input[type="text"]:focus, input[type="password"]:focus, select:focus, textarea:focus {
             border-color: var(--accent-green);
-            box-shadow: 0 0 16px var(--accent-glow);
+            box-shadow: 0 0 18px var(--accent-glow);
         }
 
-        textarea {
-            min-height: 320px;
+        /* IDE Container Visual Improvements */
+        .ide-wrapper {
+            position: relative;
+            background: var(--bg-input);
+            border: 1px solid var(--border-glow);
+            border-radius: var(--radius-inner);
+            overflow: hidden;
+        }
+        .ide-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.5);
+            border-bottom: 1px solid var(--border-glow);
+            font-size: 0.72rem;
+            color: var(--text-dim);
+        }
+        textarea.ide-textarea {
+            width: 100%;
+            border: none;
+            background: transparent;
+            min-height: 360px;
             color: var(--accent-green);
             resize: vertical;
-            line-height: 1.5;
+            line-height: 1.6;
+            padding: 16px;
+            border-radius: 0;
         }
+        textarea.ide-textarea:focus { box-shadow: none; }
+
+        /* Protection Switches Setup */
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .option-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid var(--border-glow);
+            padding: 10px 14px;
+            border-radius: var(--radius-inner);
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .option-toggle:hover { border-color: var(--accent-green); }
+        .option-toggle input[type="checkbox"] { accent-color: var(--accent-green); cursor: pointer; }
 
         .btn-primary {
             background: linear-gradient(135deg, #00ff80 0%, #00b359 100%);
@@ -270,14 +325,14 @@
             font-size: 0.78rem;
             font-weight: 700;
         }
-        .icon-btn:hover { background: rgba(0, 255, 128, 0.15); border-color: var(--accent-green); }
+        .icon-btn:hover { background: rgba(0, 255, 128, 0.18); border-color: var(--accent-green); }
 
         .icon-btn.delete { background: rgba(255, 51, 102, 0.08); border-color: rgba(255, 51, 102, 0.3); color: var(--danger); }
-        .icon-btn.delete:hover { background: rgba(255, 51, 102, 0.2); border-color: var(--danger); box-shadow: 0 0 12px var(--danger-glow); }
+        .icon-btn.delete:hover { background: rgba(255, 51, 102, 0.22); border-color: var(--danger); box-shadow: 0 0 14px var(--danger-glow); }
 
         .loader-link {
             color: transparent;
-            background-color: rgba(0, 0, 0, 0.6);
+            background-color: rgba(0, 0, 0, 0.7);
             text-shadow: 0 0 12px rgba(0, 255, 128, 0.4);
             user-select: none;
             cursor: pointer;
@@ -291,7 +346,7 @@
         }
         .loader-link.revealed { color: var(--accent-green); text-shadow: none; user-select: text; border-style: solid; }
 
-        .vault-list { display: flex; flex-direction: column; gap: 14px; max-height: 540px; overflow-y: auto; padding-right: 4px; }
+        .vault-list { display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
         .vault-item {
             background: rgba(2, 6, 3, 0.85);
             border: 1px solid var(--border-glow);
@@ -301,28 +356,26 @@
             flex-direction: column;
             gap: 12px;
         }
-        .vault-item:hover { border-color: var(--border-hover); box-shadow: 0 4px 20px rgba(0, 255, 128, 0.08); }
+        .vault-item:hover { border-color: var(--border-hover); box-shadow: 0 4px 22px rgba(0, 255, 128, 0.1); }
 
-        /* Owner Control Panel Styling */
         .owner-panel {
             grid-column: 1 / -1;
-            background: rgba(10, 16, 28, 0.8);
+            background: rgba(10, 16, 28, 0.85);
             border: 1px solid var(--accent-cyan);
-            box-shadow: 0 0 35px rgba(0, 240, 255, 0.15);
+            box-shadow: 0 0 40px rgba(0, 240, 255, 0.18);
             display: none;
         }
         .owner-panel::before { background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent); }
         .owner-panel.active { display: block; }
-        .owner-panel h2 { color: var(--accent-cyan); text-shadow: 0 0 12px rgba(0, 240, 255, 0.5); }
+        .owner-panel h2 { color: var(--accent-cyan); text-shadow: 0 0 14px rgba(0, 240, 255, 0.5); }
 
-        /* Modal Backdrop */
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(12px);
+            background: rgba(0, 0, 0, 0.88); backdrop-filter: blur(14px);
             display: none; justify-content: center; align-items: center; z-index: 1000;
         }
         .modal-overlay.active { display: flex; }
-        .modal-card { background: var(--bg-card); border: 1px solid var(--accent-green); border-radius: var(--radius-main); padding: 32px; width: 100%; max-width: 440px; box-shadow: 0 0 40px var(--accent-glow); }
+        .modal-card { background: var(--bg-card); border: 1px solid var(--accent-green); border-radius: var(--radius-main); padding: 32px; width: 100%; max-width: 440px; box-shadow: 0 0 50px var(--accent-glow); }
 
         @media (max-width: 900px) {
             main { grid-template-columns: 1fr; }
@@ -335,77 +388,95 @@
     <header>
         <div class="logo">
             ERROR<span class="logo-highlight">404</span> 
-            <span class="logo-badge">SYSTEM</span>
+            <span class="logo-badge">ENGINE V2</span>
         </div>
         <div class="user-widget" id="userWidget"></div>
     </header>
 
     <main>
-        <!-- Owner Admin Section (Only displays for Discord ID: 1257596807857569793) -->
+        <!-- Owner Admin Dashboard (Only renders for Owner Discord ID) -->
         <div class="card owner-panel" id="ownerPanel">
-            <h2><span>⚡</span> OWNER CONTROL PANEL (KEY GENERATOR)</h2>
+            <h2><span>⚡</span> ADMIN CONTROL SYSTEM (KEY MANAGEMENT)</h2>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                 <div>
                     <div class="input-group">
-                        <label>ASSIGN USERNAME / CLIENT LABEL</label>
-                        <input type="text" id="targetUsername" placeholder="e.g. Premium_User_01">
+                        <label>CLIENT IDENTIFIER / NAME</label>
+                        <input type="text" id="targetUsername" placeholder="e.g. VIP_Subscriber">
                     </div>
-                    <button class="btn-primary" style="background: linear-gradient(135deg, #00f0ff 0%, #0080ff 100%); color: #000;" onclick="adminGenerateKey()">Generate API Key</button>
+                    <button class="btn-primary" style="background: linear-gradient(135deg, #00f0ff 0%, #0080ff 100%); color: #000;" onclick="adminGenerateKey()">Generate Key</button>
                 </div>
                 <div>
                     <label>GENERATED API KEY</label>
-                    <input type="text" id="generatedKeyOutput" readonly placeholder="Key will appear here..." style="width: 100%; margin-top: 8px;">
+                    <input type="text" id="generatedKeyOutput" readonly placeholder="Key output..." style="width: 100%; margin-top: 8px;">
                     <button class="icon-btn" style="margin-top: 12px;" onclick="copyGeneratedKey()">Copy Key</button>
                 </div>
             </div>
             
             <div style="margin-top: 28px;">
-                <label>ACTIVE KEYS IN SYSTEM</label>
+                <label>ACTIVE SYSTEM KEYS</label>
                 <div id="activeKeysList" style="margin-top: 12px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
-                    <!-- Active keys populated here -->
                 </div>
             </div>
         </div>
 
-        <!-- Script Deployment Card -->
+        <!-- Main Obfuscation Console -->
         <div class="card">
-            <h2><span>⚙️</span> SCRIPT DEPLOYMENT ENGINE</h2>
+            <h2><span>⚙️</span> SOURCE COMPILER & OBFUSCATOR</h2>
             <div class="editor-container">
                 <input type="hidden" id="editId" value="">
-                <div class="input-group">
-                    <label>SCRIPT NAME</label>
-                    <input type="text" id="scriptName" placeholder="e.g. Universal Aimbot / Rayfield UI">
-                </div>
-                <div class="input-group">
-                    <label>LANGUAGE ENVIRONMENT</label>
-                    <select id="fileType">
-                        <option value="luau">Luau (Roblox Optimized)</option>
-                        <option value="lua">Lua 5.1 / Standard</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>SOURCE CODE & UI LIBRARIES</label>
-                    <textarea id="scriptInput" placeholder="-- Paste your source code or Rayfield UI script here..."></textarea>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
-                    <span id="statusMsg" style="font-size: 0.8rem; color: var(--accent-green); font-weight: 600;"></span>
-                    <button class="btn-primary" onclick="deployScript()">Obfuscate & Host</button>
+                
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                    <div class="input-group">
+                        <label>SCRIPT IDENTIFIER</label>
+                        <input type="text" id="scriptName" placeholder="e.g. Rayfield UI / Custom Script">
+                    </div>
+                    <div class="input-group">
+                        <label>ENVIRONMENT</label>
+                        <select id="fileType">
+                            <option value="luau">Luau (Roblox Studio)</option>
+                            <option value="lua">Standard Lua 5.1</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="output-box" id="outputBox" style="display:none; margin-top: 20px;">
-                    <label>GENERATED LOADSTRING:</label>
+                <label style="margin-bottom: 8px; display: block;">PROTECTION PROFILES</label>
+                <div class="options-grid">
+                    <label class="option-toggle"><input type="checkbox" checked id="optMinify"> Minify Source</label>
+                    <label class="option-toggle"><input type="checkbox" checked id="optRename"> Rename Variables</label>
+                    <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
+                    <label class="option-toggle"><input type="checkbox" id="optAntiTamper"> Anti-Tamper</label>
+                </div>
+
+                <div class="input-group">
+                    <label>LUAU / LUA SOURCE CODE</label>
+                    <div class="ide-wrapper">
+                        <div class="ide-header">
+                            <span>MAIN.LUAU</span>
+                            <span id="charCount">0 characters</span>
+                        </div>
+                        <textarea class="ide-textarea" id="scriptInput" oninput="updateCharCount()" placeholder="-- Paste your script code or UI library here..."></textarea>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+                    <span id="statusMsg" style="font-size: 0.8rem; color: var(--accent-green); font-weight: 600;"></span>
+                    <button class="btn-primary" onclick="deployScript()">Build & Deploy</button>
+                </div>
+
+                <div class="output-box" id="outputBox" style="display:none; margin-top: 24px;">
+                    <label>ENCRYPTED LOADSTRING:</label>
                     <code class="loader-link" id="loaderOutput" onclick="toggleReveal(this)"></code>
                     <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
                 </div>
             </div>
         </div>
 
-        <!-- Vault Card -->
+        <!-- Script Vault -->
         <div class="card">
-            <h2><span>📦</span> SCRIPT VAULT</h2>
+            <h2><span>📦</span> ENCRYPTED VAULT</h2>
             <div class="vault-list" id="vaultList">
                 <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">
-                    Authenticate to view your vault.
+                    Login to inspect your hosted scripts.
                 </div>
             </div>
         </div>
@@ -414,14 +485,14 @@
     <!-- Key Login Modal -->
     <div class="modal-overlay" id="keyModal">
         <div class="modal-card">
-            <h2 style="margin-bottom: 16px;">🔑 ENTER API KEY</h2>
+            <h2 style="margin-bottom: 16px;">🔑 AUTHENTICATE KEY</h2>
             <div class="input-group">
-                <label>AUTHENTICATION KEY</label>
+                <label>API KEY</label>
                 <input type="password" id="apiKeyInput" placeholder="err404_key_xxxxxxxxxxxxx">
             </div>
             <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
                 <button class="icon-btn" onclick="closeKeyModal()">Cancel</button>
-                <button class="btn-primary" style="padding: 10px 22px;" onclick="saveApiKey()">Login</button>
+                <button class="btn-primary" style="padding: 10px 22px;" onclick="saveApiKey()">Authorize</button>
             </div>
         </div>
     </div>
@@ -429,6 +500,11 @@
     <script>
         const OWNER_DISCORD_ID = "1257596807857569793";
         let currentApiKey = localStorage.getItem('err404_api_key') || null;
+
+        function updateCharCount() {
+            const txt = document.getElementById('scriptInput').value;
+            document.getElementById('charCount').innerText = `${txt.length} characters`;
+        }
 
         async function checkUser() {
             try {
@@ -499,7 +575,7 @@
                 document.getElementById('generatedKeyOutput').value = data.apiKey;
                 loadAdminKeys();
             } else {
-                alert('Error generating key: ' + data.error);
+                alert('Error: ' + data.error);
             }
         }
 
@@ -518,7 +594,7 @@
         }
 
         async function revokeKey(key) {
-            if (!confirm("Revoke this API Key?")) return;
+            if (!confirm("Revoke this Key?")) return;
             await fetch('/api/admin/revoke-key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -574,9 +650,9 @@
             const editId = document.getElementById('editId').value;
             const statusMsg = document.getElementById('statusMsg');
 
-            if (!scriptInput.trim()) return alert('Script source cannot be empty');
+            if (!scriptInput.trim()) return alert('Script body cannot be empty.');
 
-            statusMsg.innerText = 'Obfuscating...';
+            statusMsg.innerText = 'Processing Payload...';
             try {
                 const payload = safeBase64Encode(scriptInput);
                 const res = await fetch('/api/obfuscate', {
@@ -586,7 +662,7 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    statusMsg.innerText = 'Deployed!';
+                    statusMsg.innerText = 'Deployment Complete!';
                     document.getElementById('outputBox').style.display = 'block';
                     document.getElementById('loaderOutput').innerText = data.loader;
                     loadVault();
@@ -594,7 +670,7 @@
                     statusMsg.innerText = 'Error: ' + data.error;
                 }
             } catch (err) {
-                statusMsg.innerText = 'Network error.';
+                statusMsg.innerText = 'Network error during build.';
             }
         }
 
@@ -604,7 +680,7 @@
                 const data = await res.json();
                 const vaultList = document.getElementById('vaultList');
                 if (!data.success || !data.scripts || data.scripts.length === 0) {
-                    vaultList.innerHTML = `<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">No deployed scripts in vault.</div>`;
+                    vaultList.innerHTML = `<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">Vault is currently empty.</div>`;
                     return;
                 }
                 vaultList.innerHTML = data.scripts.map(s => `
@@ -615,7 +691,7 @@
                                 <div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">${s.fileType.toUpperCase()}</div>
                             </div>
                             <div>
-                                <button class="icon-btn delete" onclick="deleteScript('${s.id}')">Del</button>
+                                <button class="icon-btn delete" onclick="deleteScript('${s.id}')">Delete</button>
                             </div>
                         </div>
                         <code class="loader-link" onclick="toggleReveal(this)">${s.loader}</code>
@@ -625,13 +701,13 @@
         }
 
         async function deleteScript(id) {
-            if (!confirm('Delete script?')) return;
+            if (!confirm('Delete this script permanently?')) return;
             await fetch('/api/delete', { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ id }) });
             loadVault();
         }
 
         function toggleReveal(el) { el.classList.toggle('revealed'); }
-        function copyLoader() { navigator.clipboard.writeText(document.getElementById('loaderOutput').innerText); alert('Copied!'); }
+        function copyLoader() { navigator.clipboard.writeText(document.getElementById('loaderOutput').innerText); alert('Copied to clipboard!'); }
 
         checkUser();
     </script>
