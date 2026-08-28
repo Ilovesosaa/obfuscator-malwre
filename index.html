@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nix6 Obfuscator // Next-Gen Luau Security Engine</title>
+    <title>Nix6 Security Engine</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,800;1,400&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -272,7 +272,7 @@
             box-shadow: 0 0 12px var(--accent-glow);
         }
 
-        /* Monochrome IDE Layout */
+        /* IDE Layout */
         .ide-wrapper {
             position: relative;
             background: var(--bg-input);
@@ -404,6 +404,59 @@
         .modal-overlay.active { display: flex; }
         .modal-card { background: var(--bg-card); border: 1px solid var(--accent-white); border-radius: var(--radius-main); padding: 32px; width: 100%; max-width: 440px; }
 
+        /* Access Restricted Page View */
+        .restricted-view {
+            display: none;
+            min-height: 100vh;
+            width: 100%;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 10;
+        }
+        .restricted-view.active { display: flex; }
+
+        .restricted-card {
+            background: var(--bg-surface);
+            border: 1px dashed var(--border-subtle);
+            border-radius: var(--radius-main);
+            padding: 40px 48px;
+            text-align: center;
+            max-width: 520px;
+            width: 90%;
+            box-shadow: 0 0 32px rgba(255, 255, 255, 0.03);
+        }
+        .restricted-card:hover {
+            border-color: var(--border-hover);
+            box-shadow: 0 0 40px rgba(255, 255, 255, 0.06);
+        }
+        .restricted-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 3px;
+            color: #ffffff;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .restricted-title::before,
+        .restricted-title::after {
+            content: "//";
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .restricted-subtitle {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+            line-height: 1.5;
+        }
+
+        .main-app-container { display: flex; flex-direction: column; min-height: 100vh; }
+        .main-app-container.hidden { display: none; }
+
         @media (max-width: 960px) {
             main { grid-template-columns: 1fr; }
             .hud-bar { grid-template-columns: repeat(2, 1fr); }
@@ -413,136 +466,147 @@
 </head>
 <body>
 
-    <header>
-        <div class="logo">
-            NIX<span class="logo-highlight">6</span> 
-            <span class="logo-badge">ENGINE V3</span>
-        </div>
-        <div class="user-widget" id="userWidget"></div>
-    </header>
-
-    <!-- Top System Analytics HUD -->
-    <div class="hud-bar">
-        <div class="hud-card">
-            <span class="hud-label">ENGINE STATUS</span>
-            <span class="hud-value">ONLINE</span>
-        </div>
-        <div class="hud-card">
-            <span class="hud-label">HOSTED VAULT SCRIPTS</span>
-            <span class="hud-value" id="hudScriptCount">0</span>
-        </div>
-        <div class="hud-card">
-            <span class="hud-label">SYSTEM API KEYS</span>
-            <span class="hud-value" id="hudKeyCount">ACTIVE</span>
-        </div>
-        <div class="hud-card">
-            <span class="hud-label">SERVER LATENCY</span>
-            <span class="hud-value">12ms</span>
+    <!-- Access Restricted View -->
+    <div class="restricted-view" id="restrictedPage">
+        <div class="restricted-card">
+            <h1 class="restricted-title">ACCESS RESTRICTED</h1>
+            <p class="restricted-subtitle">This loadstring source is protected and unlisted.</p>
         </div>
     </div>
 
-    <main>
-        <!-- Owner Admin Dashboard (Only renders for Owner Discord ID) -->
-        <div class="card owner-panel" id="ownerPanel">
-            <h2>
-                <svg class="ui-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                ADMIN CONTROL SYSTEM (KEY MANAGEMENT)
-            </h2>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-                <div>
-                    <div class="input-group">
-                        <label>CLIENT IDENTIFIER / NAME</label>
-                        <input type="text" id="targetUsername" placeholder="e.g. VIP_Subscriber">
-                    </div>
-                    <button class="btn-primary" onclick="adminGenerateKey()">Generate Key</button>
-                </div>
-                <div>
-                    <label>GENERATED API KEY</label>
-                    <input type="text" id="generatedKeyOutput" readonly placeholder="Key output..." style="width: 100%; margin-top: 8px;">
-                    <button class="icon-btn" style="margin-top: 12px;" onclick="copyGeneratedKey()">Copy Key</button>
-                </div>
+    <!-- Main Workspace Application View -->
+    <div class="main-app-container" id="mainApp">
+        <header>
+            <div class="logo">
+                NIX<span class="logo-highlight">6</span> 
+                <span class="logo-badge">ENGINE V3</span>
             </div>
-            
-            <div style="margin-top: 28px;">
-                <label>ACTIVE SYSTEM KEYS</label>
-                <div id="activeKeysList" style="margin-top: 12px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
-                </div>
+            <div class="user-widget" id="userWidget"></div>
+        </header>
+
+        <!-- Analytics HUD -->
+        <div class="hud-bar">
+            <div class="hud-card">
+                <span class="hud-label">ENGINE STATUS</span>
+                <span class="hud-value">ONLINE</span>
+            </div>
+            <div class="hud-card">
+                <span class="hud-label">HOSTED VAULT SCRIPTS</span>
+                <span class="hud-value" id="hudScriptCount">0</span>
+            </div>
+            <div class="hud-card">
+                <span class="hud-label">SYSTEM API KEYS</span>
+                <span class="hud-value" id="hudKeyCount">ACTIVE</span>
+            </div>
+            <div class="hud-card">
+                <span class="hud-label">SERVER LATENCY</span>
+                <span class="hud-value">12ms</span>
             </div>
         </div>
 
-        <!-- Main Obfuscation Engine -->
-        <div class="card">
-            <h2>
-                <svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                NIX6 SOURCE COMPILER & OBFUSCATOR
-            </h2>
-            <div class="editor-container">
-                <input type="hidden" id="editId" value="">
-                
-                <div class="editing-banner" id="editingBanner">
-                    <span><strong>EDITING SCRIPT:</strong> <span id="editingNameDisplay"></span></span>
-                    <button class="icon-btn" style="padding: 4px 10px; font-size: 0.7rem;" onclick="cancelEditMode()">Cancel Edit Mode</button>
-                </div>
-
-                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
-                    <div class="input-group">
-                        <label>SCRIPT IDENTIFIER</label>
-                        <input type="text" id="scriptName" placeholder="e.g. Rayfield UI / Custom Script">
-                    </div>
-                    <div class="input-group">
-                        <label>ENVIRONMENT</label>
-                        <select id="fileType">
-                            <option value="luau">Luau (Roblox Studio)</option>
-                            <option value="lua">Standard Lua 5.1</option>
-                        </select>
-                    </div>
-                </div>
-
-                <label style="margin-bottom: 8px; display: block;">PROTECTION MATRIX</label>
-                <div class="options-grid">
-                    <label class="option-toggle"><input type="checkbox" checked id="optMinify"> Minify Code</label>
-                    <label class="option-toggle"><input type="checkbox" checked id="optRename"> Rename Variables</label>
-                    <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
-                    <label class="option-toggle"><input type="checkbox" id="optAntiTamper"> Anti-Tamper Shield</label>
-                </div>
-
-                <div class="input-group">
-                    <label>LUAU / LUA SOURCE CODE</label>
-                    <div class="ide-wrapper">
-                        <div class="ide-header">
-                            <span id="ideFilename">MAIN.LUAU</span>
-                            <span id="charCount">0 lines | 0 chars</span>
+        <main>
+            <!-- Owner Admin Dashboard -->
+            <div class="card owner-panel" id="ownerPanel">
+                <h2>
+                    <svg class="ui-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    ADMIN CONTROL SYSTEM (KEY MANAGEMENT)
+                </h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                    <div>
+                        <div class="input-group">
+                            <label>CLIENT IDENTIFIER / NAME</label>
+                            <input type="text" id="targetUsername" placeholder="e.g. VIP_Subscriber">
                         </div>
-                        <textarea class="ide-textarea" id="scriptInput" oninput="updateEditorStats()" placeholder="-- Paste your source code or UI library here..."></textarea>
+                        <button class="btn-primary" onclick="adminGenerateKey()">Generate Key</button>
+                    </div>
+                    <div>
+                        <label>GENERATED API KEY</label>
+                        <input type="text" id="generatedKeyOutput" readonly placeholder="Key output..." style="width: 100%; margin-top: 8px;">
+                        <button class="icon-btn" style="margin-top: 12px;" onclick="copyGeneratedKey()">Copy Key</button>
                     </div>
                 </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
-                    <span id="statusMsg" style="font-size: 0.8rem; color: #ffffff; font-weight: 600;"></span>
-                    <button class="btn-primary" id="deployBtn" onclick="deployScript()">Compile & Deploy</button>
-                </div>
-
-                <div class="output-box" id="outputBox" style="display:none; margin-top: 24px;">
-                    <label>GENERATED LOADSTRING:</label>
-                    <code class="loader-link" id="loaderOutput" onclick="toggleReveal(this)"></code>
-                    <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
+                
+                <div style="margin-top: 28px;">
+                    <label>ACTIVE SYSTEM KEYS</label>
+                    <div id="activeKeysList" style="margin-top: 12px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Script Vault -->
-        <div class="card">
-            <h2>
-                <svg class="ui-icon" viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/><path d="M12 12v4M10 14h4"/></svg>
-                ENCRYPTED VAULT
-            </h2>
-            <div class="vault-list" id="vaultList">
-                <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">
-                    Login to inspect your hosted scripts.
+            <!-- Main Obfuscation Engine -->
+            <div class="card">
+                <h2>
+                    <svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    NIX6 SOURCE COMPILER & OBFUSCATOR
+                </h2>
+                <div class="editor-container">
+                    <input type="hidden" id="editId" value="">
+                    
+                    <div class="editing-banner" id="editingBanner">
+                        <span><strong>EDITING SCRIPT:</strong> <span id="editingNameDisplay"></span></span>
+                        <button class="icon-btn" style="padding: 4px 10px; font-size: 0.7rem;" onclick="cancelEditMode()">Cancel Edit Mode</button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                        <div class="input-group">
+                            <label>SCRIPT IDENTIFIER</label>
+                            <input type="text" id="scriptName" placeholder="e.g. Rayfield UI / Custom Script">
+                        </div>
+                        <div class="input-group">
+                            <label>ENVIRONMENT</label>
+                            <select id="fileType">
+                                <option value="luau">Luau (Roblox Studio)</option>
+                                <option value="lua">Standard Lua 5.1</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <label style="margin-bottom: 8px; display: block;">PROTECTION MATRIX</label>
+                    <div class="options-grid">
+                        <label class="option-toggle"><input type="checkbox" checked id="optMinify"> Minify Code</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optRename"> Rename Variables</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
+                        <label class="option-toggle"><input type="checkbox" id="optAntiTamper"> Anti-Tamper Shield</label>
+                    </div>
+
+                    <div class="input-group">
+                        <label>LUAU / LUA SOURCE CODE</label>
+                        <div class="ide-wrapper">
+                            <div class="ide-header">
+                                <span id="ideFilename">MAIN.LUAU</span>
+                                <span id="charCount">0 lines | 0 chars</span>
+                            </div>
+                            <textarea class="ide-textarea" id="scriptInput" oninput="updateEditorStats()" placeholder="-- Paste your source code or UI library here..."></textarea>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+                        <span id="statusMsg" style="font-size: 0.8rem; color: #ffffff; font-weight: 600;"></span>
+                        <button class="btn-primary" id="deployBtn" onclick="deployScript()">Compile & Deploy</button>
+                    </div>
+
+                    <div class="output-box" id="outputBox" style="display:none; margin-top: 24px;">
+                        <label>GENERATED LOADSTRING:</label>
+                        <code class="loader-link" id="loaderOutput" onclick="toggleReveal(this)"></code>
+                        <button class="icon-btn" onclick="copyLoader()">Copy Loadstring</button>
+                    </div>
                 </div>
             </div>
-        </div>
-    </main>
+
+            <!-- Script Vault -->
+            <div class="card">
+                <h2>
+                    <svg class="ui-icon" viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/><path d="M12 12v4M10 14h4"/></svg>
+                    ENCRYPTED VAULT
+                </h2>
+                <div class="vault-list" id="vaultList">
+                    <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">
+                        Login to inspect your hosted scripts.
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
 
     <!-- Key Login Modal -->
     <div class="modal-overlay" id="keyModal">
@@ -566,6 +630,21 @@
         const OWNER_DISCORD_ID = "1257596807857569793";
         let currentApiKey = localStorage.getItem('nix6_api_key') || null;
         let cachedVaultScripts = [];
+
+        // Route between Obfuscator UI and Access Restricted UI
+        function handleRouting() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const isRestricted = window.location.pathname.startsWith('/raw') || urlParams.get('restricted') === 'true';
+            
+            if (isRestricted) {
+                document.getElementById('mainApp').classList.add('hidden');
+                document.getElementById('restrictedPage').classList.add('active');
+            } else {
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('restrictedPage').classList.remove('active');
+                checkUser();
+            }
+        }
 
         function updateEditorStats() {
             const txt = document.getElementById('scriptInput').value;
@@ -832,7 +911,7 @@
         function toggleReveal(el) { el.classList.toggle('revealed'); }
         function copyLoader() { navigator.clipboard.writeText(document.getElementById('loaderOutput').innerText); alert('Copied to clipboard!'); }
 
-        checkUser();
+        handleRouting();
     </script>
 </body>
 </html>
