@@ -136,6 +136,9 @@
             font-weight: 800;
             font-size: 0.8rem;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .key-auth-btn:hover { border-color: var(--accent-white); background: rgba(255, 255, 255, 0.1); }
 
@@ -223,7 +226,19 @@
             letter-spacing: 2px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+        }
+
+        .ui-icon {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            display: inline-block;
+            vertical-align: middle;
         }
 
         .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
@@ -364,7 +379,6 @@
             display: none;
         }
         .owner-panel.active { display: block; }
-        .owner-panel h2 { color: #ffffff; }
 
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -414,7 +428,10 @@
     <main>
         <!-- Owner Admin Dashboard (Only renders for Owner Discord ID) -->
         <div class="card owner-panel" id="ownerPanel">
-            <h2><span>⚡</span> ADMIN CONTROL SYSTEM (KEY MANAGEMENT)</h2>
+            <h2>
+                <svg class="ui-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                ADMIN CONTROL SYSTEM (KEY MANAGEMENT)
+            </h2>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                 <div>
                     <div class="input-group">
@@ -439,7 +456,10 @@
 
         <!-- Main Obfuscation Engine -->
         <div class="card">
-            <h2><span>⚙️</span> NIX6 SOURCE COMPILER & OBFUSCATOR</h2>
+            <h2>
+                <svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                NIX6 SOURCE COMPILER & OBFUSCATOR
+            </h2>
             <div class="editor-container">
                 <input type="hidden" id="editId" value="">
                 
@@ -491,7 +511,10 @@
 
         <!-- Script Vault -->
         <div class="card">
-            <h2><span>📦</span> ENCRYPTED VAULT</h2>
+            <h2>
+                <svg class="ui-icon" viewBox="0 0 24 24"><path d="M21 8Key2H3v13h18V8zM3 8l9-6 9 6"/><path d="M12 12v4M10 14h4"/></svg>
+                ENCRYPTED VAULT
+            </h2>
             <div class="vault-list" id="vaultList">
                 <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">
                     Login to inspect your hosted scripts.
@@ -503,7 +526,10 @@
     <!-- Key Login Modal -->
     <div class="modal-overlay" id="keyModal">
         <div class="modal-card">
-            <h2 style="margin-bottom: 16px;">🔑 AUTHENTICATE KEY</h2>
+            <h2 style="margin-bottom: 16px;">
+                <svg class="ui-icon" viewBox="0 0 24 24"><path d="M21 2l-2 2m-2 2l-2 2m2-2l2 2m-7 1a5 5 0 1 1-7 7 5 5 0 0 1 7-7z"/></svg>
+                AUTHENTICATE KEY
+            </h2>
             <div class="input-group">
                 <label>API KEY</label>
                 <input type="password" id="apiKeyInput" placeholder="nix6_key_xxxxxxxxxxxxx">
@@ -562,7 +588,7 @@
             const widget = document.getElementById('userWidget');
             const avatarHtml = user.type === 'discord' 
                 ? `<img src="${user.avatar}" alt="Avatar">`
-                : `<div class="user-avatar-key">KEY</div>`;
+                : `<div class="user-avatar-key"><svg class="ui-icon" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M21 2l-2 2m-2 2l-2 2m2-2l2 2m-7 1a5 5 0 1 1-7 7 5 5 0 0 1 7-7z"/></svg></div>`;
 
             widget.innerHTML = `
                 <div class="user-profile">
@@ -576,7 +602,10 @@
         function renderLoggedOutWidget() {
             document.getElementById('userWidget').innerHTML = `
                 <div class="auth-btn-group">
-                    <button class="key-auth-btn" onclick="openKeyModal()">API Key</button>
+                    <button class="key-auth-btn" onclick="openKeyModal()">
+                        <svg class="ui-icon" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M21 2l-2 2m-2 2l-2 2m2-2l2 2m-7 1a5 5 0 1 1-7 7 5 5 0 0 1 7-7z"/></svg>
+                        API Key
+                    </button>
                     <a href="/auth/discord" class="discord-btn">Discord Login</a>
                 </div>
             `;
