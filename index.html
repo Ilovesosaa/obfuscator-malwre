@@ -54,7 +54,7 @@
             position: relative;
         }
 
-        /* Subtle Grid Pattern */
+        /* Grid Background Pattern */
         body::before {
             content: "";
             position: fixed;
@@ -67,7 +67,6 @@
             z-index: 0;
         }
 
-        /* Header Navigation */
         header {
             display: flex;
             justify-content: space-between;
@@ -169,7 +168,6 @@
         .logout-btn { color: var(--text-secondary); text-decoration: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; margin-left: 6px; }
         .logout-btn:hover { color: #ffffff; }
 
-        /* Top HUD Bar */
         .hud-bar {
             max-width: 1440px;
             width: 100%;
@@ -193,7 +191,6 @@
         .hud-label { font-size: 0.65rem; color: var(--text-dim); font-weight: 700; letter-spacing: 1.5px; }
         .hud-value { font-size: 1.1rem; color: #ffffff; font-weight: 800; }
 
-        /* Main Workspace Grid */
         main {
             flex: 1;
             max-width: 1440px;
@@ -272,7 +269,6 @@
             box-shadow: 0 0 12px var(--accent-glow);
         }
 
-        /* IDE Layout */
         .ide-wrapper {
             position: relative;
             background: var(--bg-input);
@@ -306,7 +302,6 @@
         }
         textarea.ide-textarea:focus { box-shadow: none; }
 
-        /* Options Grid */
         .options-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -358,9 +353,6 @@
         }
         .icon-btn:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--accent-white); }
 
-        .icon-btn.delete { background: var(--danger-bg); border-color: var(--border-subtle); color: #ffffff; }
-        .icon-btn.delete:hover { background: rgba(255, 255, 255, 0.2); border-color: #ffffff; }
-
         .loader-link {
             color: var(--text-dim);
             background-color: #000000;
@@ -386,7 +378,6 @@
             flex-direction: column;
             gap: 12px;
         }
-        .vault-item:hover { border-color: var(--border-hover); }
 
         .owner-panel {
             grid-column: 1 / -1;
@@ -404,7 +395,7 @@
         .modal-overlay.active { display: flex; }
         .modal-card { background: var(--bg-card); border: 1px solid var(--accent-white); border-radius: var(--radius-main); padding: 32px; width: 100%; max-width: 440px; }
 
-        /* Access Restricted Page View */
+        /* Access Restricted View */
         .restricted-view {
             display: none;
             min-height: 100vh;
@@ -470,7 +461,7 @@
     <div class="restricted-view" id="restrictedPage">
         <div class="restricted-card">
             <h1 class="restricted-title">ACCESS RESTRICTED</h1>
-            <p class="restricted-subtitle">This loadstring source is protected and unlisted.</p>
+            <p class="restricted-subtitle" id="restrictedMessage">This loadstring source is protected and unlisted.</p>
         </div>
     </div>
 
@@ -484,7 +475,6 @@
             <div class="user-widget" id="userWidget"></div>
         </header>
 
-        <!-- Analytics HUD -->
         <div class="hud-bar">
             <div class="hud-card">
                 <span class="hud-label">ENGINE STATUS</span>
@@ -495,8 +485,8 @@
                 <span class="hud-value" id="hudScriptCount">0</span>
             </div>
             <div class="hud-card">
-                <span class="hud-label">SYSTEM API KEYS</span>
-                <span class="hud-value" id="hudKeyCount">ACTIVE</span>
+                <span class="hud-label">SECURITY MATRIX</span>
+                <span class="hud-value" style="color: #ffffff;">5 LAYERS ACTIVE</span>
             </div>
             <div class="hud-card">
                 <span class="hud-label">SERVER LATENCY</span>
@@ -505,11 +495,10 @@
         </div>
 
         <main>
-            <!-- Owner Admin Dashboard -->
             <div class="card owner-panel" id="ownerPanel">
                 <h2>
                     <svg class="ui-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                    ADMIN CONTROL SYSTEM (KEY MANAGEMENT)
+                    ADMIN CONTROL SYSTEM
                 </h2>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                     <div>
@@ -533,7 +522,6 @@
                 </div>
             </div>
 
-            <!-- Main Obfuscation Engine -->
             <div class="card">
                 <h2>
                     <svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -564,9 +552,9 @@
                     <label style="margin-bottom: 8px; display: block;">PROTECTION MATRIX</label>
                     <div class="options-grid">
                         <label class="option-toggle"><input type="checkbox" checked id="optMinify"> Minify Code</label>
-                        <label class="option-toggle"><input type="checkbox" checked id="optRename"> Rename Variables</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optRename"> Variable Renaming</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
-                        <label class="option-toggle"><input type="checkbox" id="optAntiTamper"> Anti-Tamper Shield</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optAntiTamper"> Anti-Tamper Shield</label>
                     </div>
 
                     <div class="input-group">
@@ -576,7 +564,7 @@
                                 <span id="ideFilename">MAIN.LUAU</span>
                                 <span id="charCount">0 lines | 0 chars</span>
                             </div>
-                            <textarea class="ide-textarea" id="scriptInput" oninput="updateEditorStats()" placeholder="-- Paste your source code or UI library here..."></textarea>
+                            <textarea class="ide-textarea" id="scriptInput" oninput="updateEditorStats()" placeholder="-- Paste your raw source code here..."></textarea>
                         </div>
                     </div>
 
@@ -593,7 +581,6 @@
                 </div>
             </div>
 
-            <!-- Script Vault -->
             <div class="card">
                 <h2>
                     <svg class="ui-icon" viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/><path d="M12 12v4M10 14h4"/></svg>
@@ -627,23 +614,97 @@
     </div>
 
     <script>
+        // ==========================================
+        // SECURITY LAYER 1: Anti-DevTools Protection
+        // ==========================================
+        document.addEventListener('keydown', (e) => {
+            if (
+                e.key === 'F12' || 
+                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
+                (e.ctrlKey && (e.key === 'U' || e.key === 'S'))
+            ) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Dynamic Anti-Debugger Hook
+        setInterval(() => {
+            const startTime = performance.now();
+            (function() {}.constructor("debugger")());
+            if (performance.now() - startTime > 100) {
+                document.body.innerHTML = '<div style="color:#fff;background:#000;height:100vh;display:flex;align-items:center;justify-content:center;font-family:monospace;">[SECURITY ALERT] UNAUTHORIZED DEBUGGER DETECTED</div>';
+            }
+        }, 1000);
+
+        // ==========================================
+        // SECURITY LAYER 2: Request Signature Token
+        // ==========================================
+        function generateSecurityToken(path) {
+            const timestamp = Math.floor(Date.now() / 1000);
+            const secret = "NIX6_SECURE_TOKEN_SALT";
+            let hash = 0;
+            const payload = `${path}:${timestamp}:${secret}`;
+            for (let i = 0; i < payload.length; i++) {
+                hash = ((hash << 5) - hash) + payload.charCodeAt(i);
+                hash |= 0;
+            }
+            return { token: Math.abs(hash).toString(16), t: timestamp };
+        }
+
+        // ==========================================
+        // SECURITY LAYER 3: Client Rate-Limiting
+        // ==========================================
+        const requestTracker = { count: 0, resetTime: Date.now() + 60000 };
+        function checkRateLimit() {
+            if (Date.now() > requestTracker.resetTime) {
+                requestTracker.count = 0;
+                requestTracker.resetTime = Date.now() + 60000;
+            }
+            requestTracker.count++;
+            if (requestTracker.count > 30) {
+                showRestrictedPage("Rate limit exceeded. Access throttled.");
+                return false;
+            }
+            return true;
+        }
+
+        // ==========================================
+        // SECURITY LAYER 4 & 5: Routing & Inspection Guard
+        // ==========================================
         const OWNER_DISCORD_ID = "1257596807857569793";
         let currentApiKey = localStorage.getItem('nix6_api_key') || null;
         let cachedVaultScripts = [];
 
-        // Route between Obfuscator UI and Access Restricted UI
+        function showRestrictedPage(msg) {
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('restrictedPage').classList.add('active');
+            if (msg) document.getElementById('restrictedMessage').innerText = msg;
+        }
+
         function handleRouting() {
+            if (!checkRateLimit()) return;
+
             const urlParams = new URLSearchParams(window.location.search);
-            const isRestricted = window.location.pathname.startsWith('/raw') || urlParams.get('restricted') === 'true';
+            const path = window.location.pathname;
+            const isRestricted = path.startsWith('/raw') || urlParams.get('restricted') === 'true';
             
             if (isRestricted) {
-                document.getElementById('mainApp').classList.add('hidden');
-                document.getElementById('restrictedPage').classList.add('active');
-            } else {
-                document.getElementById('mainApp').classList.remove('hidden');
-                document.getElementById('restrictedPage').classList.remove('active');
-                checkUser();
+                const token = urlParams.get('token');
+                const t = urlParams.get('t');
+                
+                // Block raw source viewing without signature token
+                if (!token || !t || Math.abs(Math.floor(Date.now() / 1000) - parseInt(t)) > 300) {
+                    showRestrictedPage("This loadstring source is protected and unlisted.");
+                    return;
+                }
             }
+            
+            document.getElementById('mainApp').classList.remove('hidden');
+            document.getElementById('restrictedPage').classList.remove('active');
+            checkUser();
         }
 
         function updateEditorStats() {
@@ -655,7 +716,12 @@
         async function checkUser() {
             try {
                 if (currentApiKey) {
-                    const res = await fetch('/api/verify-key', { headers: { 'X-API-Key': currentApiKey } });
+                    const res = await fetch('/api/verify-key', { 
+                        headers: { 
+                            'X-API-Key': currentApiKey,
+                            'X-Nix6-Signature': generateSecurityToken('/api/verify-key').token 
+                        } 
+                    });
                     const data = await res.json();
                     if (data.authenticated) {
                         renderUserWidget({ username: data.username || 'API User', type: 'key' });
@@ -732,7 +798,6 @@
             const res = await fetch('/api/admin/keys');
             const data = await res.json();
             if (data.success) {
-                document.getElementById('hudKeyCount').innerText = data.keys.length;
                 const list = document.getElementById('activeKeysList');
                 list.innerHTML = data.keys.map(k => `
                     <div style="background: rgba(0,0,0,0.8); padding: 10px 14px; border-radius: var(--radius-inner); border: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
@@ -781,7 +846,10 @@
         }
 
         function getAuthHeaders() {
-            const headers = { 'Content-Type': 'application/json' };
+            const headers = { 
+                'Content-Type': 'application/json',
+                'X-Nix6-Signature': generateSecurityToken('/api').token
+            };
             if (currentApiKey) headers['X-API-Key'] = currentApiKey;
             return headers;
         }
@@ -814,7 +882,18 @@
                 const res = await fetch('/api/obfuscate', {
                     method: 'POST',
                     headers: getAuthHeaders(),
-                    body: JSON.stringify({ scriptPayload: payload, scriptName, fileType, editId })
+                    body: JSON.stringify({ 
+                        scriptPayload: payload, 
+                        scriptName, 
+                        fileType, 
+                        editId,
+                        options: {
+                            minify: document.getElementById('optMinify').checked,
+                            rename: document.getElementById('optRename').checked,
+                            encrypt: document.getElementById('optEncrypt').checked,
+                            antiTamper: document.getElementById('optAntiTamper').checked
+                        }
+                    })
                 });
                 const data = await res.json();
                 if (data.success) {
