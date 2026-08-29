@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nix6 Security Engine</title>
+    <title>Nix6 // Obfuscator Engine</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,800;1,400&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -22,9 +22,6 @@
             --text-secondary: #a1a1aa;
             --text-dim: #52525b;
             
-            --danger: #ffffff;
-            --danger-bg: rgba(255, 255, 255, 0.08);
-            
             --radius-main: 12px;
             --radius-inner: 8px;
             --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -38,7 +35,6 @@
             transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
         }
 
-        /* Custom Scrollbars */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #000000; }
         ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
@@ -54,7 +50,6 @@
             position: relative;
         }
 
-        /* Grid Background Pattern */
         body::before {
             content: "";
             position: fixed;
@@ -352,6 +347,7 @@
             gap: 6px;
         }
         .icon-btn:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--accent-white); }
+        .icon-btn.delete:hover { border-color: #ffffff; background: rgba(255, 255, 255, 0.2); }
 
         .loader-link {
             color: var(--text-dim);
@@ -395,7 +391,6 @@
         .modal-overlay.active { display: flex; }
         .modal-card { background: var(--bg-card); border: 1px solid var(--accent-white); border-radius: var(--radius-main); padding: 32px; width: 100%; max-width: 440px; }
 
-        /* Access Restricted View */
         .restricted-view {
             display: none;
             min-height: 100vh;
@@ -457,7 +452,6 @@
 </head>
 <body>
 
-    <!-- Access Restricted View -->
     <div class="restricted-view" id="restrictedPage">
         <div class="restricted-card">
             <h1 class="restricted-title">ACCESS RESTRICTED</h1>
@@ -465,7 +459,6 @@
         </div>
     </div>
 
-    <!-- Main Workspace Application View -->
     <div class="main-app-container" id="mainApp">
         <header>
             <div class="logo">
@@ -595,7 +588,6 @@
         </main>
     </div>
 
-    <!-- Key Login Modal -->
     <div class="modal-overlay" id="keyModal">
         <div class="modal-card">
             <h2 style="margin-bottom: 16px;">
@@ -614,9 +606,6 @@
     </div>
 
     <script>
-        // ==========================================
-        // SECURITY LAYER 1: Anti-DevTools Protection
-        // ==========================================
         document.addEventListener('keydown', (e) => {
             if (
                 e.key === 'F12' || 
@@ -630,7 +619,6 @@
 
         document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // Dynamic Anti-Debugger Hook
         setInterval(() => {
             const startTime = performance.now();
             (function() {}.constructor("debugger")());
@@ -639,9 +627,6 @@
             }
         }, 1000);
 
-        // ==========================================
-        // SECURITY LAYER 2: Request Signature Token
-        // ==========================================
         function generateSecurityToken(path) {
             const timestamp = Math.floor(Date.now() / 1000);
             const secret = "NIX6_SECURE_TOKEN_SALT";
@@ -654,9 +639,6 @@
             return { token: Math.abs(hash).toString(16), t: timestamp };
         }
 
-        // ==========================================
-        // SECURITY LAYER 3: Client Rate-Limiting
-        // ==========================================
         const requestTracker = { count: 0, resetTime: Date.now() + 60000 };
         function checkRateLimit() {
             if (Date.now() > requestTracker.resetTime) {
@@ -671,9 +653,6 @@
             return true;
         }
 
-        // ==========================================
-        // SECURITY LAYER 4 & 5: Routing & Inspection Guard
-        // ==========================================
         const OWNER_DISCORD_ID = "1257596807857569793";
         let currentApiKey = localStorage.getItem('nix6_api_key') || null;
         let cachedVaultScripts = [];
@@ -695,7 +674,6 @@
                 const token = urlParams.get('token');
                 const t = urlParams.get('t');
                 
-                // Block raw source viewing without signature token
                 if (!token || !t || Math.abs(Math.floor(Date.now() / 1000) - parseInt(t)) > 300) {
                     showRestrictedPage("This loadstring source is protected and unlisted.");
                     return;
