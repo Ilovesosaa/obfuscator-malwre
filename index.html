@@ -814,7 +814,7 @@
             const targetUsername = document.getElementById('targetUsername').value.trim() || "User_Key";
             const res = await fetch('/api/admin/generate-key', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({ username: targetUsername })
             });
             const data = await res.json();
@@ -827,7 +827,7 @@
         }
 
         async function loadAdminKeys() {
-            const res = await fetch('/api/admin/keys');
+            const res = await fetch('/api/admin/keys', { headers: getAuthHeaders() });
             const data = await res.json();
             if (data.success) {
                 const list = document.getElementById('activeKeysList');
@@ -844,12 +844,23 @@
             const confirmed = await showCustomConfirm("Revoke this system key permanently?", "REVOKE API KEY");
             if (!confirmed) return;
 
-            await fetch('/api/revoke-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key })
-            });
-            loadAdminKeys();
+            try {
+                const res = await fetch('/api/admin/revoke-key', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ key })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showCustomAlert("Key successfully revoked.", "KEY REVOKED");
+                    loadAdminKeys();
+                } else {
+                    showCustomAlert(data.error || "Failed to revoke key.", "REVOCATION ERROR");
+                }
+            } catch (err) {
+                showCustomAlert("Network error while revoking key.", "CONNECTION ERROR");
+            }
         }
 
         function copyGeneratedKey() {
