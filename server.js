@@ -8,9 +8,14 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
 
-// In-Memory Databases (Replace with SQLite/MongoDB in production)
+// Safely configure static directory
+const publicPath = path.join(__dirname, 'public');
+if (fs.existsSync(publicPath)) {
+    app.use(express.static(publicPath));
+}
+
+// In-Memory Databases
 const vaultDatabase = new Map();
 const apiKeysDatabase = new Map();
 
@@ -20,14 +25,13 @@ function generateHash(data) {
 }
 
 // ------------------------------------------------------------------
-// 1. RAW SCRIPT LINK ENDPOINT (Monochrome Access Restricted Response)
+// 1. RAW SCRIPT LINK ENDPOINT (Monochrome Access Restricted)
 // ------------------------------------------------------------------
 app.get('/raw/:id', (req, res) => {
     const scriptId = req.params.id;
     const userAgent = req.headers['user-agent'] || '';
     const nixSignature = req.headers['x-nix6-signature'];
 
-    // Check if request is coming from an authorized execution environment/API header
     const isAuthorizedExecutor = userAgent.includes('Roblox') || userAgent.includes('Luau') || nixSignature;
 
     if (isAuthorizedExecutor && vaultDatabase.has(scriptId)) {
@@ -36,7 +40,6 @@ app.get('/raw/:id', (req, res) => {
         return res.status(200).send(scriptData.compiledCode);
     }
 
-    // Default Browser Access: Serve White, Black & Gray Restricted Page
     res.setHeader('Content-Type', 'text/html');
     return res.status(403).send(`
 <!DOCTYPE html>
@@ -149,7 +152,6 @@ app.get('/raw/:id', (req, res) => {
 // 2. API ENDPOINTS
 // ------------------------------------------------------------------
 
-// Verify Key Endpoint
 app.get('/api/verify-key', (req, res) => {
     const apiKey = req.headers['x-api-key'];
     if (apiKey && apiKeysDatabase.has(apiKey)) {
@@ -158,7 +160,6 @@ app.get('/api/verify-key', (req, res) => {
     return res.status(401).json({ authenticated: false, error: 'Invalid Key' });
 });
 
-// Compile & Obfuscate Endpoint
 app.post('/api/obfuscate', (req, res) => {
     const { scriptPayload, scriptName, fileType, editId, options } = req.body;
 
@@ -169,7 +170,6 @@ app.post('/api/obfuscate', (req, res) => {
     const scriptId = editId || crypto.randomBytes(8).toString('hex');
     const decodedSource = Buffer.from(scriptPayload, 'base64').toString('utf8');
 
-    // Build-in Transformation Logic (Minification & Header Shield)
     let processedCode = `-- Nix6 Obfuscated Source [ID: ${scriptId}]\n`;
     if (options && options.antiTamper) {
         processedCode += `if not game or not game:GetService then return end\n`;
@@ -196,13 +196,11 @@ app.post('/api/obfuscate', (req, res) => {
     });
 });
 
-// Fetch Vault Scripts Endpoint
 app.get('/api/vault', (req, res) => {
     const scripts = Array.from(vaultDatabase.values());
     return res.json({ success: true, scripts });
 });
 
-// Delete Script Endpoint
 app.post('/api/delete', (req, res) => {
     const { id } = req.body;
     if (vaultDatabase.has(id)) {
@@ -212,7 +210,6 @@ app.post('/api/delete', (req, res) => {
     return res.status(404).json({ success: false, error: 'Script not found' });
 });
 
-// Admin Generate Key Endpoint
 app.post('/api/admin/generate-key', (req, res) => {
     const { username } = req.body;
     const newKey = `nix6_key_${crypto.randomBytes(12).toString('hex')}`;
@@ -221,13 +218,11 @@ app.post('/api/admin/generate-key', (req, res) => {
     return res.json({ success: true, apiKey: newKey });
 });
 
-// Admin List Keys Endpoint
 app.get('/api/admin/keys', (req, res) => {
     const keys = Array.from(apiKeysDatabase.values());
     return res.json({ success: true, keys });
 });
 
-// Admin Revoke Key Endpoint
 app.post('/api/admin/revoke-key', (req, res) => {
     const { key } = req.body;
     if (apiKeysDatabase.has(key)) {
@@ -237,9 +232,38 @@ app.post('/api/admin/revoke-key', (req, res) => {
     return res.status(404).json({ success: false, error: 'Key not found' });
 });
 
-// Default App Route
+// ------------------------------------------------------------------
+// 3. ROOT & FALLBACK ROUTE HANDLER
+// ------------------------------------------------------------------
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+
+    if (fs.existsSync(indexPath)) {
+        return res.sendFile(indexPath);
+    }
+
+    // Fallback response if index.html is missing in the deployment directory
+    res.setHeader('Content-Type', 'text/html');
+    return res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nix6 Engine // Online</title>
+    <style>
+        body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .box { border: 1px dashed #333; padding: 20px 30px; border-radius: 8px; text-align: center; }
+        h1 { font-size: 1rem; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>// NIX6 ENGINE ACTIVE</h1>
+        <p style="color:#666; font-size: 0.8rem;">Backend API is running. Add index.html to /public for frontend interface.</p>
+    </div>
+</body>
+</html>
+    `);
 });
 
 app.listen(PORT, () => {
