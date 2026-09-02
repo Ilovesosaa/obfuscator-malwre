@@ -1,13 +1,29 @@
 {
-  "name": "nix6-obfuscator",
-  "version": "1.0.0",
+  "name": "nix6-engine",
+  "version": "1.1.0",
+  "description": "Nix6 Secure Luau VM Obfuscator & Script Hosting Platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
+  "keywords": [
+    "nix6",
+    "luau",
+    "obfuscator",
+    "lua-vm",
+    "express",
+    "roblox",
+    "script-hosting"
+  ],
+  "author": "Nix6",
+  "license": "ISC",
   "dependencies": {
-    "cors": "^2.8.5",
     "express": "^4.19.2",
-    "express-session": "^1.18.0"
+    "express-session": "^1.18.0",
+    "node-fetch": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
