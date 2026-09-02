@@ -6,7 +6,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Built-in CORS handler replacing external 'cors' package
+// Built-in CORS
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-API-Key, X-Nix6-Signature');
@@ -16,6 +16,8 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '10mb' }));
+
+// Serve static assets from public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
@@ -33,6 +35,7 @@ function safeBase64Decode(str) {
     return Buffer.from(str, 'base64').toString('utf-8');
 }
 
+// Enterprise Lua VM Obfuscator Engine
 class EnterpriseLuaVM {
     constructor(sourceCode) {
         this.source = sourceCode;
@@ -146,6 +149,7 @@ end ${v_vm}()`;
     }
 }
 
+// Authentication Middlewares
 function requireAuth(req, res, next) {
     const apiKey = req.headers['x-api-key'];
     if (apiKey && activeKeys.has(apiKey)) {
@@ -166,6 +170,7 @@ function requireOwner(req, res, next) {
     return res.status(403).json({ success: false, error: 'Owner required.' });
 }
 
+// API Routes
 app.get('/api/verify-key', (req, res) => {
     const apiKey = req.headers['x-api-key'];
     if (apiKey && activeKeys.has(apiKey)) {
@@ -252,6 +257,11 @@ app.post('/api/admin/revoke-key', requireOwner, (req, res) => {
 
 app.get('/auth/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
+});
+
+// Explicit Root Catch-All Route Fixes "Cannot GET /"
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
