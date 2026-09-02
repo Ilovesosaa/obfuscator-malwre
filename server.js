@@ -33,14 +33,19 @@ function safeBase64Decode(str) {
     return Buffer.from(str, 'base64').toString('utf-8');
 }
 
-// Enterprise Luau Obfuscator Engine (Handles any valid Luau/Roblox syntax)
-class EnterpriseLuaVM {
+// Luraph-Style Enterprise Obfuscation Engine
+class LuraphEngine {
     constructor(sourceCode) {
         this.source = sourceCode;
     }
 
-    _randomId(length = 12) {
-        const chars = "I1l0O_qwertyuiopasdfghjklzxcvbnm";
+    _randomId(length = 14) {
+        const charSets = [
+            "I1l0O_qwertyuiopasdfghjklzxcvbnm",
+            "IIllIIllIIll",
+            "_0x1a_0x2b_0x3c_0x4d"
+        ];
+        const chars = charSets[Math.floor(Math.random() * charSets.length)];
         let res = "";
         for (let i = 0; i < length; i++) {
             res += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -48,8 +53,20 @@ class EnterpriseLuaVM {
         return /^\d/.test(res) ? "_" + res : res;
     }
 
+    _generateOpCodes() {
+        const pool = Array.from({ length: 50 }, (_, i) => (i + 1) * 17 + Math.floor(Math.random() * 9)).sort(() => Math.random() - 0.5);
+        return {
+            OP_GETGLOBAL: pool[0],
+            OP_LOADK: pool[1],
+            OP_CALL: pool[2],
+            OP_RETURN: pool[3],
+            OP_EXEC_CHUNK: pool[4]
+        };
+    }
+
     buildProtectedVM() {
-        const xorKey = Math.floor(Math.random() * 200) + 20;
+        const op = this._generateOpCodes();
+        const xorKey = Math.floor(Math.random() * 180) + 35;
         const srcBytes = Buffer.from(this.source, 'utf-8');
         const encBytes = [];
 
@@ -57,27 +74,28 @@ class EnterpriseLuaVM {
             encBytes.push(srcBytes[i] ^ xorKey);
         }
 
-        const v_fn = this._randomId();
-        const v_bytes = this._randomId();
+        const v_vm = this._randomId();
+        const v_bytecode = this._randomId();
+        const v_consts = this._randomId();
         const v_k = this._randomId();
-        const v_out = this._randomId();
-        const v_i = this._randomId();
-        const v_b = this._randomId();
-        const v_chunk = this._randomId();
+        const v_pc = this._randomId();
+        const v_reg = this._randomId();
+        const v_instr = this._randomId();
+        const v_op = this._randomId();
         const v_bxor = this._randomId();
+        const v_decode = this._randomId();
+        const v_env = this._randomId();
 
         const formattedBytes = '{' + encBytes.join(',') + '}';
 
-        return `-- Nix6 Security Engine Protected Executable
-local function ${v_fn}()
-    if debug and debug.getmetatable and debug.getmetatable(_G) then
-        while true do end
+        return `-- [[ Nix6 Security Engine v4.0 - Luraph Grade Protection ]]
+local function ${v_vm}(...)
+    local ${v_env} = getfenv and getfenv() or _ENV
+    if debug and debug.getmetatable then
+        local _meta = debug.getmetatable(${v_env})
+        if _meta then while true do end end
     end
 
-    local ${v_bytes} = ${formattedBytes}
-    local ${v_k} = ${xorKey}
-    local ${v_out} = {}
-    
     local ${v_bxor} = bit32 and bit32.bxor or function(a, b)
         local r, p = 0, 1
         while a > 0 or b > 0 do
@@ -88,23 +106,49 @@ local function ${v_fn}()
         return r
     end
 
-    for ${v_i} = 1, #${v_bytes} do
-        local ${v_b} = ${v_bxor}(${v_bytes}[${v_i}], ${v_k})
-        table.insert(${v_out}, string.char(${v_b}))
+    local ${v_k} = ${xorKey}
+    local ${v_bytecode} = ${formattedBytes}
+
+    local function ${v_decode}(_t, _key)
+        local _out = {}
+        for _i = 1, #_t do
+            table.insert(_out, string.char(${v_bxor}(_t[_i], _key)))
+        end
+        return table.concat(_out)
     end
 
-    local ${v_chunk} = table.concat(${v_out})
-    local ${v_fn}Exec = loadstring or load
-    if ${v_fn}Exec then
-        local ${v_i}Func, ${v_b}Err = ${v_fn}Exec(${v_chunk})
-        if ${v_i}Func then
-            return ${v_i}Func()
-        else
-            error(${v_b}Err or "Execution Failed")
+    local ${v_consts} = {
+        [1] = ${v_decode}(${v_bytecode}, ${v_k})
+    }
+
+    local ${v_instr} = {
+        {${op.OP_EXEC_CHUNK}, 1}
+    }
+
+    local ${v_reg} = {}
+    local ${v_pc} = 1
+
+    while ${v_pc} <= #${v_instr} do
+        local _curr = ${v_instr}[${v_pc}]
+        local ${v_op} = _curr[1]
+
+        if ${v_op} == ${op.OP_EXEC_CHUNK} then
+            local _code = ${v_consts}[_curr[2]]
+            local _loader = loadstring or load
+            if _loader then
+                local _compiled, _err = _loader(_code)
+                if _compiled then
+                    return _compiled(...)
+                else
+                    error(_err or "VM Instruction Fault")
+                end
+            end
         end
+
+        ${v_pc} = ${v_pc} + 1
     end
 end
-${v_fn}()`;
+return ${v_vm}(...)`;
     }
 }
 
@@ -151,8 +195,8 @@ app.post('/api/obfuscate', requireAuth, (req, res) => {
         if (!scriptPayload) return res.status(400).json({ success: false, error: 'Empty payload.' });
 
         const rawScript = safeBase64Decode(scriptPayload);
-        const vmEngine = new EnterpriseLuaVM(rawScript);
-        const obfuscatedCode = vmEngine.buildProtectedVM();
+        const engine = new LuraphEngine(rawScript);
+        const obfuscatedCode = engine.buildProtectedVM();
 
         const scriptId = editId || 'nix6_' + crypto.randomBytes(8).toString('hex');
         const loader = `loadstring(game:HttpGet("https://${req.get('host')}/raw/${scriptId}"))()`;
@@ -263,7 +307,7 @@ app.get('/auth/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
 });
 
-// Wildcard SPA Router Catch-All
+// SPA Router Fallback
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
