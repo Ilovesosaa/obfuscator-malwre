@@ -6,7 +6,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Built-in CORS
+// CORS Handler
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, X-API-Key, X-Nix6-Signature');
@@ -16,8 +16,6 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '10mb' }));
-
-// Serve static assets from public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
@@ -35,7 +33,7 @@ function safeBase64Decode(str) {
     return Buffer.from(str, 'base64').toString('utf-8');
 }
 
-// Enterprise Lua VM Obfuscator Engine
+// Enterprise Lua VM Engine
 class EnterpriseLuaVM {
     constructor(sourceCode) {
         this.source = sourceCode;
@@ -149,7 +147,7 @@ end ${v_vm}()`;
     }
 }
 
-// Authentication Middlewares
+// Auth Middleware
 function requireAuth(req, res, next) {
     const apiKey = req.headers['x-api-key'];
     if (apiKey && activeKeys.has(apiKey)) {
@@ -229,11 +227,59 @@ app.post('/api/delete', requireAuth, (req, res) => {
     res.status(400).json({ success: false, error: 'Invalid ID.' });
 });
 
+// Raw Payload / Loadstring Protected Endpoint
 app.get('/raw/:id', (req, res) => {
     const script = scriptVault.get(req.params.id);
-    if (!script) return res.status(404).send('-- [404] Script payload not found or expired.');
-    res.setHeader('Content-Type', 'text/plain');
-    res.send(script.code);
+    
+    // Check if requested via Lua loadstring (Game Client Execution)
+    const userAgent = req.headers['user-agent'] || '';
+    const isRoblox = userAgent.includes('Roblox') || req.headers['x-nix6-signature'];
+
+    if (script) {
+        if (isRoblox) {
+            res.setHeader('Content-Type', 'text/plain');
+            return res.send(script.code);
+        }
+    }
+
+    // Return Access Restricted HTML template when viewed directly in-browser
+    res.setHeader('Content-Type', 'text/html');
+    res.status(200).send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <title>Access Restricted</title>
+            <style>
+                body {
+                    margin: 0;
+                    background-color: #050505;
+                    color: #00ff66;
+                    font-family: monospace;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                }
+                .card {
+                    border: 1px dashed #00ff66;
+                    padding: 30px;
+                    border-radius: 8px;
+                    text-align: center;
+                    box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
+                }
+                h2 { margin: 0 0 10px 0; }
+                p { color: #a0a0a0; margin: 0; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h2>// ACCESS RESTRICTED //</h2>
+                <p>This loadstring source is protected and unlisted.</p>
+            </div>
+        </body>
+        </html>
+    `);
 });
 
 app.post('/api/admin/generate-key', requireOwner, (req, res) => {
@@ -259,7 +305,7 @@ app.get('/auth/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
 });
 
-// Explicit Root Catch-All Route Fixes "Cannot GET /"
+// Fallback for Main Application SPA Router
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -267,3 +313,45 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
     console.log(`[NIX6 ENGINE] Operational on port ${PORT}`);
 });
+2. Frontend JS Custom Modal Overrides
+Add this script block directly at the top of your public/index.html (or inside your main JS file) to prevent native browser popups (alert() and confirm()) and render themed custom dialogs matching the UI instead:
+
+JavaScript
+// Override native alert & confirm popups with themed custom overlays
+window.alert = function(msg) {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:99999;font-family:monospace;';
+    modal.innerHTML = `
+        <div style="background:#0c0c0c;border:1px solid #00ff66;padding:20px 30px;border-radius:8px;text-align:center;max-width:400px;box-shadow:0 0 20px rgba(0,255,102,0.2);">
+            <div style="color:#00ff66;font-size:16px;margin-bottom:15px;font-weight:bold;">// SYSTEM NOTICE //</div>
+            <div style="color:#d0d0d0;font-size:14px;margin-bottom:20px;">${msg}</div>
+            <button onclick="this.closest('div').parentElement.remove()" style="background:#00ff66;color:#000;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-weight:bold;">OK</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+};
+
+window.confirm = function(msg, callback) {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:99999;font-family:monospace;';
+    modal.innerHTML = `
+        <div style="background:#0c0c0c;border:1px solid #ff3333;padding:20px 30px;border-radius:8px;text-align:center;max-width:400px;box-shadow:0 0 20px rgba(255,51,51,0.2);">
+            <div style="color:#ff3333;font-size:16px;margin-bottom:15px;font-weight:bold;">// CONFIRM ACTION //</div>
+            <div style="color:#d0d0d0;font-size:14px;margin-bottom:20px;">${msg}</div>
+            <div style="display:flex;gap:10px;justify-content:center;">
+                <button id="cfg-yes" style="background:#ff3333;color:#fff;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-weight:bold;">Confirm</button>
+                <button id="cfg-no" style="background:#222;color:#a0a0a0;border:1px solid #444;padding:8px 20px;border-radius:4px;cursor:pointer;">Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelector('#cfg-yes').onclick = function() {
+        modal.remove();
+        if (callback) callback(true);
+    };
+    modal.querySelector('#cfg-no').onclick = function() {
+        modal.remove();
+        if (callback) callback(false);
+    };
+};
