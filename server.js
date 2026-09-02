@@ -33,17 +33,13 @@ function safeBase64Decode(str) {
     return Buffer.from(str, 'base64').toString('utf-8');
 }
 
-// Enterprise Lua VM Engine
+// Enterprise Luau Obfuscator Engine (Handles any valid Luau/Roblox syntax)
 class EnterpriseLuaVM {
     constructor(sourceCode) {
         this.source = sourceCode;
-        this.OP_LOADK = 1;
-        this.OP_GETGLOBAL = 2;
-        this.OP_CALL = 3;
-        this.OP_RETURN = 4;
     }
 
-    _randomId(length = 10) {
+    _randomId(length = 12) {
         const chars = "I1l0O_qwertyuiopasdfghjklzxcvbnm";
         let res = "";
         for (let i = 0; i < length; i++) {
@@ -52,98 +48,63 @@ class EnterpriseLuaVM {
         return /^\d/.test(res) ? "_" + res : res;
     }
 
-    _generateOpcodeMap() {
-        const ids = [100, 250, 400, 550, 700, 850];
-        for (let i = ids.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [ids[i], ids[j]] = [ids[j], ids[i]];
-        }
-        return {
-            [this.OP_LOADK]: ids[0],
-            [this.OP_GETGLOBAL]: ids[1],
-            [this.OP_CALL]: ids[2],
-            [this.OP_RETURN]: ids[3]
-        };
-    }
-
-    _compileBytecode(opMap) {
-        const constants = [];
-        const instructions = [];
-        const match = this.source.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*["'](.*?)["']\s*\)/);
-
-        if (match) {
-            constants.push(match[1]);
-            constants.push(match[2]);
-        } else {
-            constants.push("print");
-            constants.push("Nix6 Protected Executable Loaded");
-        }
-
-        instructions.push([opMap[this.OP_GETGLOBAL], 0, 0]);
-        instructions.push([opMap[this.OP_LOADK], 1, 1]);
-        instructions.push([opMap[this.OP_CALL], 0, 1]);
-        instructions.push([opMap[this.OP_RETURN], 0, 0]);
-
-        return { constants, instructions };
-    }
-
     buildProtectedVM() {
-        const opMap = this._generateOpcodeMap();
-        const { constants, instructions } = this._compileBytecode(opMap);
+        const xorKey = Math.floor(Math.random() * 200) + 20;
+        const srcBytes = Buffer.from(this.source, 'utf-8');
+        const encBytes = [];
 
-        const v_vm = this._randomId();
-        const v_instr = this._randomId();
-        const v_const = this._randomId();
-        const v_pc = this._randomId();
-        const v_reg = this._randomId();
-        const v_op = this._randomId();
+        for (let i = 0; i < srcBytes.length; i++) {
+            encBytes.push(srcBytes[i] ^ xorKey);
+        }
 
-        const xorKey = Math.floor(Math.random() * 160) + 40;
-        const encConsts = constants.map(c => Array.from(String(c)).map(char => char.charCodeAt(0) ^ xorKey));
+        const v_fn = this._randomId();
+        const v_bytes = this._randomId();
+        const v_k = this._randomId();
+        const v_out = this._randomId();
+        const v_i = this._randomId();
+        const v_b = this._randomId();
+        const v_chunk = this._randomId();
+        const v_bxor = this._randomId();
 
-        const formattedConsts = JSON.stringify(encConsts).replace(/\[/g, '{').replace(/\]/g, '}');
-        const formattedInstr = JSON.stringify(instructions).replace(/\[/g, '{').replace(/\]/g, '}');
+        const formattedBytes = '{' + encBytes.join(',') + '}';
 
-        return `local function ${v_vm}()
+        return `-- Nix6 Security Engine Protected Executable
+local function ${v_fn}()
     if debug and debug.getmetatable and debug.getmetatable(_G) then
         while true do end
     end
 
-    local ${v_const} = {}
-    local _raw_consts = ${formattedConsts}
-    local _k = ${xorKey}
+    local ${v_bytes} = ${formattedBytes}
+    local ${v_k} = ${xorKey}
+    local ${v_out} = {}
     
-    for i = 1, #_raw_consts do
-        local _buf = {}
-        for j = 1, #_raw_consts[i] do
-            table.insert(_buf, string.char(bit32 and bit32.bxor(_raw_consts[i][j], _k) or (_raw_consts[i][j] ~ _k)))
+    local ${v_bxor} = bit32 and bit32.bxor or function(a, b)
+        local r, p = 0, 1
+        while a > 0 or b > 0 do
+            local aa, bb = a % 2, b % 2
+            if aa ~= bb then r = r + p end
+            a, b, p = (a - aa) / 2, (b - bb) / 2, p * 2
         end
-        ${v_const}[i - 1] = table.concat(_buf)
+        return r
     end
 
-    local ${v_instr} = ${formattedInstr}
-    local ${v_reg} = {}
-    local ${v_pc} = 1
-
-    while ${v_pc} <= #${v_instr} do
-        local _i = ${v_instr}[${v_pc}]
-        local ${v_op} = _i[1]
-        
-        if ${v_op} == ${opMap[this.OP_GETGLOBAL]} then
-            ${v_reg}[_i[2]] = _G[${v_const}[_i[3]]]
-        elseif ${v_op} == ${opMap[this.OP_LOADK]} then
-            ${v_reg}[_i[2]] = ${v_const}[_i[3]]
-        elseif ${v_op} == ${opMap[this.OP_CALL]} then
-            local _fn = ${v_reg}[_i[2]]
-            local _arg = ${v_reg}[_i[2] + 1]
-            _fn(_arg)
-        elseif ${v_op} == ${opMap[this.OP_RETURN]} then
-            break
-        end
-        
-        ${v_pc} = ${v_pc} + 1
+    for ${v_i} = 1, #${v_bytes} do
+        local ${v_b} = ${v_bxor}(${v_bytes}[${v_i}], ${v_k})
+        table.insert(${v_out}, string.char(${v_b}))
     end
-end ${v_vm}()`;
+
+    local ${v_chunk} = table.concat(${v_out})
+    local ${v_fn}Exec = loadstring or load
+    if ${v_fn}Exec then
+        local ${v_i}Func, ${v_b}Err = ${v_fn}Exec(${v_chunk})
+        if ${v_i}Func then
+            return ${v_i}Func()
+        else
+            error(${v_b}Err or "Execution Failed")
+        end
+    end
+end
+${v_fn}()`;
     }
 }
 
@@ -209,7 +170,7 @@ app.post('/api/obfuscate', requireAuth, (req, res) => {
 
         res.json({ success: true, scriptId, loader, code: obfuscatedCode });
     } catch (err) {
-        res.status(500).json({ success: false, error: 'Compilation error.' });
+        res.status(500).json({ success: false, error: 'Compilation error: ' + err.message });
     }
 });
 
@@ -227,11 +188,9 @@ app.post('/api/delete', requireAuth, (req, res) => {
     res.status(400).json({ success: false, error: 'Invalid ID.' });
 });
 
-// Raw Payload / Loadstring Protected Endpoint
+// Raw Endpoint
 app.get('/raw/:id', (req, res) => {
     const script = scriptVault.get(req.params.id);
-    
-    // Check if requested via Lua loadstring (Game Client Execution)
     const userAgent = req.headers['user-agent'] || '';
     const isRoblox = userAgent.includes('Roblox') || req.headers['x-nix6-signature'];
 
@@ -242,7 +201,6 @@ app.get('/raw/:id', (req, res) => {
         }
     }
 
-    // Return Access Restricted HTML template when viewed directly in-browser
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(`
         <!DOCTYPE html>
@@ -305,7 +263,7 @@ app.get('/auth/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
 });
 
-// Fallback for Main Application SPA Router
+// Wildcard SPA Router Catch-All
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -313,45 +271,3 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
     console.log(`[NIX6 ENGINE] Operational on port ${PORT}`);
 });
-2. Frontend JS Custom Modal Overrides
-Add this script block directly at the top of your public/index.html (or inside your main JS file) to prevent native browser popups (alert() and confirm()) and render themed custom dialogs matching the UI instead:
-
-JavaScript
-// Override native alert & confirm popups with themed custom overlays
-window.alert = function(msg) {
-    const modal = document.createElement('div');
-    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:99999;font-family:monospace;';
-    modal.innerHTML = `
-        <div style="background:#0c0c0c;border:1px solid #00ff66;padding:20px 30px;border-radius:8px;text-align:center;max-width:400px;box-shadow:0 0 20px rgba(0,255,102,0.2);">
-            <div style="color:#00ff66;font-size:16px;margin-bottom:15px;font-weight:bold;">// SYSTEM NOTICE //</div>
-            <div style="color:#d0d0d0;font-size:14px;margin-bottom:20px;">${msg}</div>
-            <button onclick="this.closest('div').parentElement.remove()" style="background:#00ff66;color:#000;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-weight:bold;">OK</button>
-        </div>
-    `;
-    document.body.appendChild(modal);
-};
-
-window.confirm = function(msg, callback) {
-    const modal = document.createElement('div');
-    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:99999;font-family:monospace;';
-    modal.innerHTML = `
-        <div style="background:#0c0c0c;border:1px solid #ff3333;padding:20px 30px;border-radius:8px;text-align:center;max-width:400px;box-shadow:0 0 20px rgba(255,51,51,0.2);">
-            <div style="color:#ff3333;font-size:16px;margin-bottom:15px;font-weight:bold;">// CONFIRM ACTION //</div>
-            <div style="color:#d0d0d0;font-size:14px;margin-bottom:20px;">${msg}</div>
-            <div style="display:flex;gap:10px;justify-content:center;">
-                <button id="cfg-yes" style="background:#ff3333;color:#fff;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-weight:bold;">Confirm</button>
-                <button id="cfg-no" style="background:#222;color:#a0a0a0;border:1px solid #444;padding:8px 20px;border-radius:4px;cursor:pointer;">Cancel</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    modal.querySelector('#cfg-yes').onclick = function() {
-        modal.remove();
-        if (callback) callback(true);
-    };
-    modal.querySelector('#cfg-no').onclick = function() {
-        modal.remove();
-        if (callback) callback(false);
-    };
-};
