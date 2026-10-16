@@ -2,6 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 const fetch = require('node-fetch');
 
 const app = express();
@@ -10,52 +11,117 @@ const PORT = process.env.PORT || 3000;
 // Owner Discord ID
 const OWNER_DISCORD_ID = "1257596807857569793";
 
-// GitHub Gist Configuration (Set in Vercel Environment Variables)
+// File path for local persistent storage fallback
+const KEYS_FILE = path.join(__dirname, 'keys.json');
+
+// GitHub Gist Environment Variables
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const KEYS_GIST_ID = process.env.KEYS_GIST_ID;
 const VAULT_GIST_ID = process.env.VAULT_GIST_ID;
 
-// Helper to fetch data from GitHub Gist
-async function getGistData(gistId, fileName) {
-    if (!GITHUB_TOKEN || !gistId) return [];
+// Helper to load keys (Gist primary for Vercel, fallback to local fs)
+async function loadKeys() {
+    if (GITHUB_TOKEN && KEYS_GIST_ID) {
+        try {
+            const res = await fetch(`https://api.github.com/gists/${KEYS_GIST_ID}`, {
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'User-Agent': 'Vercel-Nix6-App'
+                }
+            });
+            const data = await res.json();
+            const content = data.files['keys.json']?.content;
+            return content ? JSON.parse(content) : [];
+        } catch (e) {
+            console.error('Error fetching keys from Gist:', e);
+            return [];
+        }
+    }
+
+    if (!fs.existsSync(KEYS_FILE)) {
+        try { fs.writeFileSync(KEYS_FILE, JSON.stringify([])); } catch (e) {}
+        return [];
+    }
     try {
-        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
-            headers: {
-                'Authorization': `token ${GITHUB_TOKEN}`,
-                'User-Agent': 'Vercel-Nix6-App'
-            }
-        });
-        const data = await res.json();
-        const content = data.files[fileName]?.content;
-        return content ? JSON.parse(content) : [];
+        return JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
     } catch (e) {
-        console.error(`Error reading ${fileName} from Gist:`, e);
         return [];
     }
 }
 
-// Helper to update data in GitHub Gist
-async function updateGistData(gistId, fileName, data) {
-    if (!GITHUB_TOKEN || !gistId) return;
-    try {
-        await fetch(`https://api.github.com/gists/${gistId}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `token ${GITHUB_TOKEN}`,
-                'Content-Type': 'application/json',
-                'User-Agent': 'Vercel-Nix6-App'
-            },
-            body: JSON.stringify({
-                files: {
-                    [fileName]: {
-                        content: JSON.stringify(data, null, 2)
+// Helper to save keys (Gist primary for Vercel, fallback to local fs)
+async function saveKeys(keys) {
+    if (GITHUB_TOKEN && KEYS_GIST_ID) {
+        try {
+            await fetch(`https://api.github.com/gists/${KEYS_GIST_ID}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Vercel-Nix6-App'
+                },
+                body: JSON.stringify({
+                    files: {
+                        'keys.json': { content: JSON.stringify(keys, null, 2) }
                     }
-                }
-            })
-        });
-    } catch (e) {
-        console.error(`Error writing ${fileName} to Gist:`, e);
+                })
+            });
+            return;
+        } catch (e) {
+            console.error('Error saving keys to Gist:', e);
+        }
     }
+
+    try {
+        fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+    } catch (e) {
+        console.error('Local FS write error:', e);
+    }
+}
+
+// Helper to load vault scripts
+async function loadVault() {
+    if (GITHUB_TOKEN && VAULT_GIST_ID) {
+        try {
+            const res = await fetch(`https://api.github.com/gists/${VAULT_GIST_ID}`, {
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'User-Agent': 'Vercel-Nix6-App'
+                }
+            });
+            const data = await res.json();
+            const content = data.files['vault.json']?.content;
+            return content ? JSON.parse(content) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+    return vaultDatabase;
+}
+
+// Helper to save vault scripts
+async function saveVault(vault) {
+    if (GITHUB_TOKEN && VAULT_GIST_ID) {
+        try {
+            await fetch(`https://api.github.com/gists/${VAULT_GIST_ID}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Vercel-Nix6-App'
+                },
+                body: JSON.stringify({
+                    files: {
+                        'vault.json': { content: JSON.stringify(vault, null, 2) }
+                    }
+                })
+            });
+            return;
+        } catch (e) {
+            console.error('Error saving vault to Gist:', e);
+        }
+    }
+    vaultDatabase = vault;
 }
 
 // --- LURAPH-STYLE VM OBFUSCATION ENGINE ---
@@ -188,8 +254,10 @@ app.use(session({
     secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === 'production' }
+    cookie: { secure: false }
 }));
+
+let vaultDatabase = [];
 
 // --- MIDDLEWARE ---
 
@@ -198,8 +266,7 @@ function requireOwner(req, res, next) {
         return next();
     }
     
-    // Check if authenticating via Owner API Key
-    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
+    const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'];
     if (apiKey) {
         return next();
     }
@@ -212,9 +279,9 @@ async function getAuthUser(req) {
         return req.session.user;
     }
     
-    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
+    const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'];
     if (apiKey) {
-        const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
+        const keys = await loadKeys();
         const foundKey = keys.find(k => k.key === apiKey);
         if (foundKey) {
             return {
@@ -227,14 +294,21 @@ async function getAuthUser(req) {
     return null;
 }
 
-// --- STATIC ROUTE ---
+// --- STATIC FILES & ROOT ROUTE ---
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    const indexPath = path.join(__dirname, 'index.html');
+    if (fs.existsSync(indexPath)) {
+        return res.sendFile(indexPath);
+    }
+    res.setHeader('Content-Type', 'text/html');
+    return res.send('<h1>Nix6 Engine Active</h1>');
 });
 
 const publicPath = path.join(__dirname, 'public');
-app.use(express.static(publicPath));
+if (fs.existsSync(publicPath)) {
+    app.use(express.static(publicPath));
+}
 app.use(express.static(__dirname));
 
 // --- AUTHENTICATION ROUTES ---
@@ -268,7 +342,7 @@ app.get('/auth/discord/callback', async (req, res) => {
         });
 
         const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) return res.status(400).send('Failed to obtain access token from Discord.');
+        if (!tokenData.access_token) return res.status(400).send('Failed to obtain access token from Discord: ' + JSON.stringify(tokenData));
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
@@ -284,7 +358,6 @@ app.get('/auth/discord/callback', async (req, res) => {
                 : 'https://cdn.discordapp.com/embed/avatars/0.png'
         };
 
-        // Redirect back to frontend with query parameters for serverless persistence
         const avatarUrl = userData.avatar 
             ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
             : 'https://cdn.discordapp.com/embed/avatars/0.png';
@@ -304,10 +377,7 @@ app.get('/auth/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
     if (req.session.user) {
-        res.json({ 
-            authenticated: true, 
-            user: req.session.user
-        });
+        res.json({ authenticated: true, user: req.session.user });
     } else {
         res.json({ authenticated: false });
     }
@@ -317,37 +387,37 @@ app.get('/api/me', (req, res) => {
 
 app.post('/api/admin/generate-key', requireOwner, async (req, res) => {
     const username = req.body.username || "Client_User";
-    const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
+    const keys = await loadKeys();
     
     const newApiKey = "nix6_key_" + crypto.randomBytes(16).toString('hex');
     const keyData = { key: newApiKey, username: username, createdAt: new Date().toISOString() };
     
     keys.push(keyData);
-    await updateGistData(KEYS_GIST_ID, 'keys.json', keys);
+    await saveKeys(keys);
 
     res.json({ success: true, apiKey: newApiKey });
 });
 
 app.get('/api/admin/keys', requireOwner, async (req, res) => {
-    const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
+    const keys = await loadKeys();
     res.json({ success: true, keys });
 });
 
 app.post('/api/admin/revoke-key', requireOwner, async (req, res) => {
     const { key } = req.body;
-    let keys = await getGistData(KEYS_GIST_ID, 'keys.json');
+    let keys = await loadKeys();
     
     keys = keys.filter(k => k.key !== key);
-    await updateGistData(KEYS_GIST_ID, 'keys.json', keys);
+    await saveKeys(keys);
 
     res.json({ success: true, message: 'Key revoked.' });
 });
 
 app.get('/api/verify-key', async (req, res) => {
-    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
+    const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'];
     if (!apiKey) return res.json({ authenticated: false });
 
-    const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
+    const keys = await loadKeys();
     const foundKey = keys.find(k => k.key === apiKey);
 
     if (foundKey) {
@@ -381,10 +451,10 @@ app.post('/api/obfuscate', async (req, res) => {
 
         let scriptId;
         let loaderString;
-        const vaultDatabase = await getGistData(VAULT_GIST_ID, 'vault.json');
+        const currentVault = await loadVault();
 
         if (editId) {
-            const existingScript = vaultDatabase.find(s => s.id === editId && s.ownerId === user.id);
+            const existingScript = currentVault.find(s => s.id === editId && s.ownerId === user.id);
             if (!existingScript) {
                 return res.status(403).json({ success: false, error: 'Script not found or unauthorized to edit.' });
             }
@@ -399,7 +469,7 @@ app.post('/api/obfuscate', async (req, res) => {
             const rawLink = `${hostUrl}/raw/${scriptId}`;
             loaderString = `loadstring(game:HttpGet("${rawLink}"))()`;
 
-            vaultDatabase.push({
+            currentVault.push({
                 id: scriptId,
                 ownerId: user.id,
                 ownerName: user.username,
@@ -412,7 +482,7 @@ app.post('/api/obfuscate', async (req, res) => {
             });
         }
 
-        await updateGistData(VAULT_GIST_ID, 'vault.json', vaultDatabase);
+        await saveVault(currentVault);
         res.json({ success: true, loader: loaderString, id: scriptId });
     } catch (err) {
         console.error('Obfuscation Error:', err);
@@ -425,8 +495,8 @@ app.get('/api/vault', async (req, res) => {
     if (!user) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
-    const vaultDatabase = await getGistData(VAULT_GIST_ID, 'vault.json');
-    const userScripts = vaultDatabase.filter(s => s.ownerId === user.id);
+    const currentVault = await loadVault();
+    const userScripts = currentVault.filter(s => s.ownerId === user.id);
     res.json({ success: true, scripts: userScripts });
 });
 
@@ -437,12 +507,12 @@ app.post('/api/delete', async (req, res) => {
     }
 
     const { id } = req.body;
-    let vaultDatabase = await getGistData(VAULT_GIST_ID, 'vault.json');
-    const index = vaultDatabase.findIndex(s => s.id === id && s.ownerId === user.id);
+    let currentVault = await loadVault();
+    const index = currentVault.findIndex(s => s.id === id && s.ownerId === user.id);
     
     if (index !== -1) {
-        vaultDatabase.splice(index, 1);
-        await updateGistData(VAULT_GIST_ID, 'vault.json', vaultDatabase);
+        currentVault.splice(index, 1);
+        await saveVault(currentVault);
         res.json({ success: true });
     } else {
         res.status(403).json({ success: false, error: 'Script not found or unauthorized.' });
@@ -452,8 +522,8 @@ app.post('/api/delete', async (req, res) => {
 // --- RAW HOSTING ENDPOINT ---
 
 app.get('/raw/:id', async (req, res) => {
-    const vaultDatabase = await getGistData(VAULT_GIST_ID, 'vault.json');
-    const script = vaultDatabase.find(s => s.id === req.params.id);
+    const currentVault = await loadVault();
+    const script = currentVault.find(s => s.id === req.params.id);
     if (!script) return res.status(404).send('Script not found.');
 
     const userAgent = req.headers['user-agent'] || '';
@@ -490,6 +560,6 @@ module.exports = app;
 
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
-        console.log(`Server running locally on http://localhost:${PORT}`);
+        console.log(`Server running on http://localhost:${PORT}`);
     });
 }
