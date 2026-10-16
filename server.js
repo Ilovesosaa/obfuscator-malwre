@@ -223,27 +223,7 @@ async function getAuthUser(req) {
 // --- STATIC FILES & ROOT ROUTE ---
 
 app.get('/', (req, res) => {
-    res.setHeader('Content-Type', 'text/html');
-    return res.send(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <title>Nix6 Engine // Online</title>
-            <style>
-                body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                .box { border: 1px dashed #333; padding: 20px 30px; border-radius: 8px; text-align: center; }
-                h1 { font-size: 1rem; letter-spacing: 2px; }
-            </style>
-        </head>
-        <body>
-            <div class="box">
-                <h1>// NIX6 ENGINE ACTIVE</h1>
-                <p style="color:#666; font-size: 0.8rem;">Backend API is running properly on Vercel.</p>
-            </div>
-        </body>
-        </html>
-    `);
+    return res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const publicPath = path.join(__dirname, 'public');
@@ -312,9 +292,13 @@ app.get('/auth/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
     if (req.session.user) {
-        res.json({ authenticated: true, user: req.session.user });
+        res.json({ 
+            authenticated: true, 
+            user: req.session.user,
+            isOwner: req.session.user.id === OWNER_DISCORD_ID
+        });
     } else {
-        res.json({ authenticated: false });
+        res.json({ authenticated: false, isOwner: false });
     }
 });
 
