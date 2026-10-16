@@ -640,15 +640,6 @@
 
         document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        setInterval(() => {
-            const startTime = performance.now();
-            (function() {}.constructor("debugger")());
-            if (performance.now() - startTime > 100) {
-                document.body.innerHTML = '<div style="color:#fff;background:#000;height:100vh;display:flex;align-items:center;justify-content:center;font-family:monospace;">[SECURITY ALERT] UNAUTHORIZED DEBUGGER DETECTED</div>';
-            }
-        }, 1000);
-
-        // --- CUSTOM NIX6 POPUP DIALOG UTILITIES ---
         function showCustomAlert(msg, title = "NOTIFICATION") {
             document.getElementById('customAlertTitle').innerText = title;
             document.getElementById('customAlertMsg').innerText = msg;
@@ -693,20 +684,6 @@
             return { token: Math.abs(hash).toString(16), t: timestamp };
         }
 
-        const requestTracker = { count: 0, resetTime: Date.now() + 60000 };
-        function checkRateLimit() {
-            if (Date.now() > requestTracker.resetTime) {
-                requestTracker.count = 0;
-                requestTracker.resetTime = Date.now() + 60000;
-            }
-            requestTracker.count++;
-            if (requestTracker.count > 30) {
-                showRestrictedPage("Rate limit exceeded. Access throttled.");
-                return false;
-            }
-            return true;
-        }
-
         const OWNER_DISCORD_ID = "1257596807857569793";
         let currentApiKey = localStorage.getItem('nix6_api_key') || null;
         let cachedVaultScripts = [];
@@ -718,16 +695,24 @@
         }
 
         function handleRouting() {
-            if (!checkRateLimit()) return;
-
             const urlParams = new URLSearchParams(window.location.search);
             const path = window.location.pathname;
+
+            const dId = urlParams.get('discord_id');
+            const dUser = urlParams.get('discord_user');
+            const dAvatar = urlParams.get('discord_avatar');
+
+            if (dId && dUser) {
+                localStorage.setItem('nix6_discord_id', dId);
+                localStorage.setItem('nix6_discord_user', dUser);
+                localStorage.setItem('nix6_discord_avatar', dAvatar || '');
+                window.history.replaceState({}, document.title, "/");
+            }
+
             const isRestricted = path.startsWith('/raw') || urlParams.get('restricted') === 'true';
-            
             if (isRestricted) {
                 const token = urlParams.get('token');
                 const t = urlParams.get('t');
-                
                 if (!token || !t || Math.abs(Math.floor(Date.now() / 1000) - parseInt(t)) > 300) {
                     showRestrictedPage("This loadstring source is protected and unlisted.");
                     return;
@@ -746,14 +731,23 @@
         }
 
         async function checkUser() {
-            try {
-                if (currentApiKey) {
-                    const res = await fetch('/api/verify-key', { 
-                        headers: { 
-                            'X-API-Key': currentApiKey,
-                            'X-Nix6-Signature': generateSecurityToken('/api/verify-key').token 
-                        } 
-                    });
+            const savedDiscordId = localStorage.getItem('nix6_discord_id');
+            const savedDiscordUser = localStorage.getItem('nix6_discord_user');
+            const savedDiscordAvatar = localStorage.getItem('nix6_discord_avatar');
+
+            if (savedDiscordId && savedDiscordUser) {
+                renderUserWidget({ username: savedDiscordUser, avatar: savedDiscordAvatar, type: 'discord' });
+                if (savedDiscordId === OWNER_DISCORD_ID) {
+                    document.getElementById('ownerPanel').classList.add('active');
+                    loadAdminKeys();
+                }
+                loadVault();
+                return;
+            }
+
+            if (currentApiKey) {
+                try {
+                    const res = await fetch('/api/verify-key', { headers: getAuthHeaders() });
                     const data = await res.json();
                     if (data.authenticated) {
                         renderUserWidget({ username: data.username || 'API User', type: 'key' });
@@ -763,13 +757,14 @@
                         localStorage.removeItem('nix6_api_key');
                         currentApiKey = null;
                     }
-                }
+                } catch (e) {}
+            }
 
+            try {
                 const res = await fetch('/api/me');
                 const data = await res.json();
                 if (data.authenticated) {
                     renderUserWidget({ ...data.user, type: 'discord' });
-                    
                     if (data.user.id === OWNER_DISCORD_ID) {
                         document.getElementById('ownerPanel').classList.add('active');
                         loadAdminKeys();
@@ -810,19 +805,41 @@
             `;
         }
 
+        function getAuthHeaders() {
+            const headers = { 
+                'Content-Type': 'application/json',
+                'X-Nix6-Signature': generateSecurityToken('/api').token
+            };
+
+            const discordId = localStorage.getItem('nix6_discord_id');
+            if (discordId) {
+                headers['X-Discord-ID'] = discordId;
+            }
+
+            if (currentApiKey) {
+                headers['X-API-Key'] = currentApiKey;
+            }
+
+            return headers;
+        }
+
         async function adminGenerateKey() {
             const targetUsername = document.getElementById('targetUsername').value.trim() || "User_Key";
-            const res = await fetch('/api/admin/generate-key', {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({ username: targetUsername })
-            });
-            const data = await res.json();
-            if (data.success) {
-                document.getElementById('generatedKeyOutput').value = data.apiKey;
-                loadAdminKeys();
-            } else {
-                showCustomAlert(data.error || 'Failed to generate key.', 'SYSTEM ERROR');
+            try {
+                const res = await fetch('/api/admin/generate-key', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ username: targetUsername })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('generatedKeyOutput').value = data.apiKey;
+                    loadAdminKeys();
+                } else {
+                    showCustomAlert(data.error || 'Failed to generate key.', 'SYSTEM ERROR');
+                }
+            } catch (err) {
+                showCustomAlert('Network error while generating key.', 'CONNECTION ERROR');
             }
         }
 
@@ -886,17 +903,11 @@
 
         function logout() {
             localStorage.removeItem('nix6_api_key');
+            localStorage.removeItem('nix6_discord_id');
+            localStorage.removeItem('nix6_discord_user');
+            localStorage.removeItem('nix6_discord_avatar');
             currentApiKey = null;
             window.location.href = '/auth/logout';
-        }
-
-        function getAuthHeaders() {
-            const headers = { 
-                'Content-Type': 'application/json',
-                'X-Nix6-Signature': generateSecurityToken('/api').token
-            };
-            if (currentApiKey) headers['X-API-Key'] = currentApiKey;
-            return headers;
         }
 
         function safeBase64Encode(str) {
@@ -934,13 +945,7 @@
                         scriptPayload: payload, 
                         scriptName, 
                         fileType, 
-                        editId,
-                        options: {
-                            minify: document.getElementById('optMinify').checked,
-                            rename: document.getElementById('optRename').checked,
-                            encrypt: document.getElementById('optEncrypt').checked,
-                            antiTamper: document.getElementById('optAntiTamper').checked
-                        }
+                        editId
                     })
                 });
                 const data = await res.json();
