@@ -262,11 +262,19 @@ let vaultDatabase = [];
 // --- MIDDLEWARE ---
 
 function requireOwner(req, res, next) {
+    // 1. Session check
     if (req.session && req.session.user && req.session.user.id === OWNER_DISCORD_ID) {
         return next();
     }
     
-    const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'];
+    // 2. Client header check (Serverless Vercel)
+    const clientDiscordId = req.headers['x-discord-id'];
+    if (clientDiscordId === OWNER_DISCORD_ID) {
+        return next();
+    }
+
+    // 3. API Key check
+    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
     if (apiKey) {
         return next();
     }
@@ -278,8 +286,13 @@ async function getAuthUser(req) {
     if (req.session && req.session.user) {
         return req.session.user;
     }
+
+    const clientDiscordId = req.headers['x-discord-id'];
+    if (clientDiscordId) {
+        return { id: clientDiscordId, username: 'Discord Owner' };
+    }
     
-    const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'];
+    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
     if (apiKey) {
         const keys = await loadKeys();
         const foundKey = keys.find(k => k.key === apiKey);
@@ -414,7 +427,7 @@ app.post('/api/admin/revoke-key', requireOwner, async (req, res) => {
 });
 
 app.get('/api/verify-key', async (req, res) => {
-    const apiKey = req.headers['x-api-key'] || req.headers['X-API-Key'];
+    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
     if (!apiKey) return res.json({ authenticated: false });
 
     const keys = await loadKeys();
