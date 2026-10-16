@@ -197,6 +197,13 @@ function requireOwner(req, res, next) {
     if (req.session && req.session.user && req.session.user.id === OWNER_DISCORD_ID) {
         return next();
     }
+    
+    // Check if authenticating via Owner API Key
+    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
+    if (apiKey) {
+        return next();
+    }
+
     return res.status(403).json({ success: false, error: 'Forbidden: Owner access required.' });
 }
 
@@ -277,7 +284,12 @@ app.get('/auth/discord/callback', async (req, res) => {
                 : 'https://cdn.discordapp.com/embed/avatars/0.png'
         };
 
-        res.redirect('/');
+        // Redirect back to frontend with query parameters for serverless persistence
+        const avatarUrl = userData.avatar 
+            ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
+            : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+        res.redirect(`/?discord_id=${userData.id}&discord_user=${encodeURIComponent(userData.username)}&discord_avatar=${encodeURIComponent(avatarUrl)}`);
     } catch (error) {
         console.error('Auth Error:', error);
         res.status(500).send('Internal Authentication Error');
