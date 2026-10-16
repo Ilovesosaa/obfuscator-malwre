@@ -7,10 +7,10 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Owner Discord ID (Only this account gets Admin Key Gen access)
+// Owner Discord ID
 const OWNER_DISCORD_ID = "1257596807857569793";
 
-// GitHub Gist Configuration (Set these in Vercel Environment Variables)
+// GitHub Gist Configuration (Set in Vercel Environment Variables)
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const KEYS_GIST_ID = process.env.KEYS_GIST_ID;
 const VAULT_GIST_ID = process.env.VAULT_GIST_ID;
@@ -205,7 +205,7 @@ async function getAuthUser(req) {
         return req.session.user;
     }
     
-    const apiKey = req.headers['x-api-key'];
+    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
     if (apiKey) {
         const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
         const foundKey = keys.find(k => k.key === apiKey);
@@ -220,10 +220,10 @@ async function getAuthUser(req) {
     return null;
 }
 
-// --- STATIC FILES & ROOT ROUTE ---
+// --- STATIC ROUTE ---
 
 app.get('/', (req, res) => {
-    return res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const publicPath = path.join(__dirname, 'public');
@@ -294,11 +294,10 @@ app.get('/api/me', (req, res) => {
     if (req.session.user) {
         res.json({ 
             authenticated: true, 
-            user: req.session.user,
-            isOwner: req.session.user.id === OWNER_DISCORD_ID
+            user: req.session.user
         });
     } else {
-        res.json({ authenticated: false, isOwner: false });
+        res.json({ authenticated: false });
     }
 });
 
@@ -333,7 +332,7 @@ app.post('/api/admin/revoke-key', requireOwner, async (req, res) => {
 });
 
 app.get('/api/verify-key', async (req, res) => {
-    const apiKey = req.headers['x-api-key'];
+    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
     if (!apiKey) return res.json({ authenticated: false });
 
     const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
@@ -380,6 +379,7 @@ app.post('/api/obfuscate', async (req, res) => {
             existingScript.name = scriptName || 'Untitled Script';
             existingScript.fileType = fileType || 'luau';
             existingScript.code = obfuscatedCode;
+            existingScript.rawPayload = scriptPayload;
             scriptId = existingScript.id;
             loaderString = existingScript.loader;
         } else {
@@ -394,6 +394,7 @@ app.post('/api/obfuscate', async (req, res) => {
                 name: scriptName || 'Untitled Script',
                 fileType: fileType || 'luau',
                 code: obfuscatedCode,
+                rawPayload: scriptPayload,
                 loader: loaderString,
                 createdAt: new Date().toLocaleDateString()
             });
