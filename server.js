@@ -2,7 +2,6 @@ const express = require('express');
 const session = require('express-session');
 const crypto = require('crypto');
 const path = require('path');
-const fs = require('fs');
 const fetch = require('node-fetch');
 
 const app = express();
@@ -11,25 +10,52 @@ const PORT = process.env.PORT || 3000;
 // Owner Discord ID (Only this account gets Admin Key Gen access)
 const OWNER_DISCORD_ID = "1257596807857569793";
 
-// File path for persistent API key storage
-const KEYS_FILE = path.join(__dirname, 'keys.json');
+// GitHub Gist Configuration (Set these in Vercel Environment Variables)
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const KEYS_GIST_ID = process.env.KEYS_GIST_ID;
+const VAULT_GIST_ID = process.env.VAULT_GIST_ID;
 
-// Helper to load keys from file
-function loadKeys() {
-    if (!fs.existsSync(KEYS_FILE)) {
-        fs.writeFileSync(KEYS_FILE, JSON.stringify([]));
-        return [];
-    }
+// Helper to fetch data from GitHub Gist
+async function getGistData(gistId, fileName) {
+    if (!GITHUB_TOKEN || !gistId) return [];
     try {
-        return JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
+        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'User-Agent': 'Vercel-Nix6-App'
+            }
+        });
+        const data = await res.json();
+        const content = data.files[fileName]?.content;
+        return content ? JSON.parse(content) : [];
     } catch (e) {
+        console.error(`Error reading ${fileName} from Gist:`, e);
         return [];
     }
 }
 
-// Helper to save keys to file
-function saveKeys(keys) {
-    fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+// Helper to update data in GitHub Gist
+async function updateGistData(gistId, fileName, data) {
+    if (!GITHUB_TOKEN || !gistId) return;
+    try {
+        await fetch(`https://api.github.com/gists/${gistId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'Vercel-Nix6-App'
+            },
+            body: JSON.stringify({
+                files: {
+                    [fileName]: {
+                        content: JSON.stringify(data, null, 2)
+                    }
+                }
+            })
+        });
+    } catch (e) {
+        console.error(`Error writing ${fileName} to Gist:`, e);
+    }
 }
 
 // --- LURAPH-STYLE VM OBFUSCATION ENGINE ---
@@ -159,18 +185,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(session({
-    secret: crypto.randomBytes(32).toString('hex'),
+    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false } // Set to true if using HTTPS in production
+    cookie: { secure: process.env.NODE_ENV === 'production' }
 }));
-
-// In-memory Database for scripts
-let vaultDatabase = [];
 
 // --- MIDDLEWARE ---
 
-// Middleware to protect Owner routes
 function requireOwner(req, res, next) {
     if (req.session && req.session.user && req.session.user.id === OWNER_DISCORD_ID) {
         return next();
@@ -178,15 +200,14 @@ function requireOwner(req, res, next) {
     return res.status(403).json({ success: false, error: 'Forbidden: Owner access required.' });
 }
 
-// Helper middleware to authenticate via Discord Session OR API Key
-function getAuthUser(req) {
+async function getAuthUser(req) {
     if (req.session && req.session.user) {
         return req.session.user;
     }
     
     const apiKey = req.headers['x-api-key'];
     if (apiKey) {
-        const keys = loadKeys();
+        const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
         const foundKey = keys.find(k => k.key === apiKey);
         if (foundKey) {
             return {
@@ -202,15 +223,6 @@ function getAuthUser(req) {
 // --- STATIC FILES & ROOT ROUTE ---
 
 app.get('/', (req, res) => {
-    const indexPath = path.join(__dirname, 'index.html');
-    const publicIndexPath = path.join(__dirname, 'public', 'index.html');
-
-    if (fs.existsSync(indexPath)) {
-        return res.sendFile(indexPath);
-    } else if (fs.existsSync(publicIndexPath)) {
-        return res.sendFile(publicIndexPath);
-    }
-
     res.setHeader('Content-Type', 'text/html');
     return res.send(`
         <!DOCTYPE html>
@@ -227,7 +239,7 @@ app.get('/', (req, res) => {
         <body>
             <div class="box">
                 <h1>// NIX6 ENGINE ACTIVE</h1>
-                <p style="color:#666; font-size: 0.8rem;">Backend API is running properly.</p>
+                <p style="color:#666; font-size: 0.8rem;">Backend API is running properly on Vercel.</p>
             </div>
         </body>
         </html>
@@ -235,10 +247,8 @@ app.get('/', (req, res) => {
 });
 
 const publicPath = path.join(__dirname, 'public');
-if (fs.existsSync(publicPath)) {
-    app.use(express.static(publicPath));
-}
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(publicPath));
+app.use(express.static(__dirname));
 
 // --- AUTHENTICATION ROUTES ---
 
@@ -271,7 +281,7 @@ app.get('/auth/discord/callback', async (req, res) => {
         });
 
         const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) return res.status(400).send('Failed to obtain access token from Discord: ' + JSON.stringify(tokenData));
+        if (!tokenData.access_token) return res.status(400).send('Failed to obtain access token from Discord.');
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
             headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
@@ -310,43 +320,39 @@ app.get('/api/me', (req, res) => {
 
 // --- OWNER ADMIN & API KEY MANAGEMENT ENDPOINTS ---
 
-// 1. Generate new API Key (Owner Only)
-app.post('/api/admin/generate-key', requireOwner, (req, res) => {
+app.post('/api/admin/generate-key', requireOwner, async (req, res) => {
     const username = req.body.username || "Client_User";
-    const keys = loadKeys();
+    const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
     
     const newApiKey = "nix6_key_" + crypto.randomBytes(16).toString('hex');
     const keyData = { key: newApiKey, username: username, createdAt: new Date().toISOString() };
     
     keys.push(keyData);
-    saveKeys(keys);
+    await updateGistData(KEYS_GIST_ID, 'keys.json', keys);
 
     res.json({ success: true, apiKey: newApiKey });
 });
 
-// 2. Fetch list of all active keys (Owner Only)
-app.get('/api/admin/keys', requireOwner, (req, res) => {
-    const keys = loadKeys();
+app.get('/api/admin/keys', requireOwner, async (req, res) => {
+    const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
     res.json({ success: true, keys });
 });
 
-// 3. Revoke/Delete an API Key (Owner Only)
-app.post('/api/admin/revoke-key', requireOwner, (req, res) => {
+app.post('/api/admin/revoke-key', requireOwner, async (req, res) => {
     const { key } = req.body;
-    let keys = loadKeys();
+    let keys = await getGistData(KEYS_GIST_ID, 'keys.json');
     
     keys = keys.filter(k => k.key !== key);
-    saveKeys(keys);
+    await updateGistData(KEYS_GIST_ID, 'keys.json', keys);
 
     res.json({ success: true, message: 'Key revoked.' });
 });
 
-// 4. Verify API Key Login (Public Header Route)
-app.get('/api/verify-key', (req, res) => {
+app.get('/api/verify-key', async (req, res) => {
     const apiKey = req.headers['x-api-key'];
     if (!apiKey) return res.json({ authenticated: false });
 
-    const keys = loadKeys();
+    const keys = await getGistData(KEYS_GIST_ID, 'keys.json');
     const foundKey = keys.find(k => k.key === apiKey);
 
     if (foundKey) {
@@ -358,8 +364,8 @@ app.get('/api/verify-key', (req, res) => {
 
 // --- SCRIPT MANAGEMENT ROUTES ---
 
-app.post('/api/obfuscate', (req, res) => {
-    const user = getAuthUser(req);
+app.post('/api/obfuscate', async (req, res) => {
+    const user = await getAuthUser(req);
     if (!user) {
         return res.status(401).json({ success: false, error: 'Unauthorized. Please login with Discord or API Key.' });
     }
@@ -372,7 +378,6 @@ app.post('/api/obfuscate', (req, res) => {
     try {
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
         
-        // Pass code through the Luraph obfuscation engine
         const engine = new LuraphEngine(decodedCode);
         const obfuscatedCode = engine.buildProtectedVM();
 
@@ -381,6 +386,7 @@ app.post('/api/obfuscate', (req, res) => {
 
         let scriptId;
         let loaderString;
+        const vaultDatabase = await getGistData(VAULT_GIST_ID, 'vault.json');
 
         if (editId) {
             const existingScript = vaultDatabase.find(s => s.id === editId && s.ownerId === user.id);
@@ -409,6 +415,7 @@ app.post('/api/obfuscate', (req, res) => {
             });
         }
 
+        await updateGistData(VAULT_GIST_ID, 'vault.json', vaultDatabase);
         res.json({ success: true, loader: loaderString, id: scriptId });
     } catch (err) {
         console.error('Obfuscation Error:', err);
@@ -416,35 +423,39 @@ app.post('/api/obfuscate', (req, res) => {
     }
 });
 
-app.get('/api/vault', (req, res) => {
-    const user = getAuthUser(req);
+app.get('/api/vault', async (req, res) => {
+    const user = await getAuthUser(req);
     if (!user) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
+    const vaultDatabase = await getGistData(VAULT_GIST_ID, 'vault.json');
     const userScripts = vaultDatabase.filter(s => s.ownerId === user.id);
     res.json({ success: true, scripts: userScripts });
 });
 
-app.post('/api/delete', (req, res) => {
-    const user = getAuthUser(req);
+app.post('/api/delete', async (req, res) => {
+    const user = await getAuthUser(req);
     if (!user) {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
     const { id } = req.body;
+    let vaultDatabase = await getGistData(VAULT_GIST_ID, 'vault.json');
     const index = vaultDatabase.findIndex(s => s.id === id && s.ownerId === user.id);
     
     if (index !== -1) {
         vaultDatabase.splice(index, 1);
+        await updateGistData(VAULT_GIST_ID, 'vault.json', vaultDatabase);
         res.json({ success: true });
     } else {
         res.status(403).json({ success: false, error: 'Script not found or unauthorized.' });
     }
 });
 
-// --- RAW HOSTING ENDPOINT (MONOCHROME WHITE/BLACK) ---
+// --- RAW HOSTING ENDPOINT ---
 
-app.get('/raw/:id', (req, res) => {
+app.get('/raw/:id', async (req, res) => {
+    const vaultDatabase = await getGistData(VAULT_GIST_ID, 'vault.json');
     const script = vaultDatabase.find(s => s.id === req.params.id);
     if (!script) return res.status(404).send('Script not found.');
 
@@ -458,100 +469,16 @@ app.get('/raw/:id', (req, res) => {
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Nix6 // Access Restricted</title>
-                <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
                 <style>
-                    :root {
-                        --bg-base: #000000;
-                        --bg-card: rgba(12, 12, 12, 0.95);
-                        --border-subtle: rgba(255, 255, 255, 0.15);
-                        --border-glow: rgba(255, 255, 255, 0.35);
-                        --text-primary: #ffffff;
-                        --text-secondary: #a1a1aa;
-                        --radius-main: 12px;
-                    }
-
-                    * {
-                        box-sizing: border-box;
-                        margin: 0;
-                        padding: 0;
-                        font-family: 'JetBrains Mono', monospace;
-                    }
-
-                    body {
-                        background-color: var(--bg-base);
-                        color: var(--text-primary);
-                        min-height: 100vh;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        position: relative;
-                        overflow: hidden;
-                    }
-
-                    body::before {
-                        content: "";
-                        position: absolute;
-                        top: 0; left: 0; right: 0; bottom: 0;
-                        background: 
-                            linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-                            linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-                        background-size: 32px 32px;
-                        pointer-events: none;
-                        z-index: 0;
-                    }
-
-                    .restricted-card {
-                        position: relative;
-                        z-index: 1;
-                        background: var(--bg-card);
-                        border: 1px dashed var(--border-subtle);
-                        border-radius: var(--radius-main);
-                        padding: 40px 48px;
-                        text-align: center;
-                        max-width: 520px;
-                        width: 90%;
-                        box-shadow: 0 0 32px rgba(255, 255, 255, 0.03);
-                        transition: border-color 0.2s ease, box-shadow 0.2s ease;
-                    }
-
-                    .restricted-card:hover {
-                        border-color: var(--border-glow);
-                        box-shadow: 0 0 40px rgba(255, 255, 255, 0.06);
-                    }
-
-                    .restricted-title {
-                        font-size: 1.1rem;
-                        font-weight: 800;
-                        letter-spacing: 3px;
-                        color: #ffffff;
-                        margin-bottom: 14px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        gap: 10px;
-                    }
-
-                    .restricted-title::before,
-                    .restricted-title::after {
-                        content: "//";
-                        color: var(--text-secondary);
-                        font-weight: 500;
-                    }
-
-                    .restricted-subtitle {
-                        font-size: 0.82rem;
-                        color: var(--text-secondary);
-                        letter-spacing: 0.5px;
-                        line-height: 1.5;
-                    }
+                    body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                    .box { border: 1px dashed #333; padding: 20px 30px; border-radius: 8px; text-align: center; }
                 </style>
             </head>
             <body>
-                <div class="restricted-card">
-                    <h1 class="restricted-title">ACCESS RESTRICTED</h1>
-                    <p class="restricted-subtitle">This loadstring source is protected and unlisted.</p>
+                <div class="box">
+                    <h1>// ACCESS RESTRICTED</h1>
+                    <p style="color:#666; font-size: 0.8rem;">This loadstring source is protected and unlisted.</p>
                 </div>
             </body>
             </html>
@@ -562,6 +489,10 @@ app.get('/raw/:id', (req, res) => {
     res.send(script.code);
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server running locally on http://localhost:${PORT}`);
+    });
+}
