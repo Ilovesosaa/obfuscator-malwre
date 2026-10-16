@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# API key store — local fallback for keys.json. Never commit this.
+keys.json
+
+# environment files
+.env
+.env.*
+!.env.example
+
+# logs and OS cruft
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

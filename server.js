@@ -124,8 +124,8 @@ async function saveVault(vault) {
     vaultDatabase = vault;
 }
 
-// --- LURAPH-STYLE VM OBFUSCATION ENGINE ---
-class LuraphEngine {
+// --- OBFUSCATION ENGINE (reversible XOR wrapper; not a VM, not encryption) ---
+class ObfuscatorEngine {
     constructor(sourceCode) {
         this.source = sourceCode;
     }
@@ -179,7 +179,7 @@ class LuraphEngine {
 
         const formattedBytes = '{' + encBytes.join(',') + '}';
 
-        return `-- [[ Nix6 Security Engine v4.0 - Luraph Grade Protection ]]
+        return `-- [[ Nix6 obfuscation wrapper: reversible XOR of source bytes. Not encryption, not a security boundary. ]]
 local function ${v_vm}(...)
     local ${v_env} = getfenv and getfenv() or _ENV
     if debug and debug.getmetatable then
@@ -309,7 +309,7 @@ async function getAuthUser(req) {
 
 // --- STATIC FILES & ROOT ROUTE ---
 
-app.get('/', (req, res) => {
+app.get(['/', '/index.html'], (req, res) => {
     const indexPath = path.join(__dirname, 'index.html');
     if (fs.existsSync(indexPath)) {
         return res.sendFile(indexPath);
@@ -322,7 +322,10 @@ const publicPath = path.join(__dirname, 'public');
 if (fs.existsSync(publicPath)) {
     app.use(express.static(publicPath));
 }
-app.use(express.static(__dirname));
+// NOTE: never add express.static(__dirname) here. __dirname contains server.js
+// and keys.json, so mounting it publishes the API-key store and the server
+// source to anyone. index.html is served explicitly by the '/' route above, and
+// only the dedicated ./public directory is exposed as static content.
 
 // --- AUTHENTICATION ROUTES ---
 
@@ -456,7 +459,7 @@ app.post('/api/obfuscate', async (req, res) => {
     try {
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
         
-        const engine = new LuraphEngine(decodedCode);
+        const engine = new ObfuscatorEngine(decodedCode);
         const obfuscatedCode = engine.buildProtectedVM();
 
         const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -549,7 +552,7 @@ app.get('/raw/:id', async (req, res) => {
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
-                <title>Nix6 // Access Restricted</title>
+                <title>Nix6 // Browser Access Blocked</title>
                 <style>
                     body { background: #000; color: #fff; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
                     .box { border: 1px dashed #333; padding: 20px 30px; border-radius: 8px; text-align: center; }
@@ -557,8 +560,8 @@ app.get('/raw/:id', async (req, res) => {
             </head>
             <body>
                 <div class="box">
-                    <h1>// ACCESS RESTRICTED</h1>
-                    <p style="color:#666; font-size: 0.8rem;">This loadstring source is protected and unlisted.</p>
+                    <h1>// BROWSER ACCESS BLOCKED</h1>
+                    <p style="color:#666; font-size: 0.8rem;">This source is served only to non-browser clients. It is not encrypted.</p>
                 </div>
             </body>
             </html>

@@ -1,7 +1,7 @@
 {
   "name": "nix6-engine",
   "version": "1.1.0",
-  "description": "Nix6 Secure Luau VM Obfuscator & Script Hosting Platform",
+  "description": "Nix6 Luau obfuscator and script hosting platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

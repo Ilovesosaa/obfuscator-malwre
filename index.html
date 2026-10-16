@@ -3,43 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nix6 // Obfuscator Engine</title>
+    <title>Nix6 // Luau Obfuscator &amp; Script Host</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,800;1,400&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap" rel="stylesheet">
     <style>
+        /* ============================================================
+           Design tokens
+           ============================================================ */
         :root {
-            --bg-base: #000000;
-            --bg-surface: rgba(12, 12, 12, 0.95);
-            --bg-card: rgba(18, 18, 18, 0.95);
-            --bg-input: #050505;
-            
-            --border-subtle: rgba(255, 255, 255, 0.12);
-            --border-hover: rgba(255, 255, 255, 0.45);
-            
+            /* surfaces — slightly cool-tinted near-blacks read as more
+               premium than flat #000 and give layering somewhere to go */
+            --bg-base: #08080a;
+            --bg-surface: #0e0e11;
+            --bg-card: #121216;
+            --bg-input: #0a0a0d;
+            --bg-raised: #17171c;
+
+            --border-subtle: #232329;
+            --border-strong: #34343c;
+            --border-hover: #52525b;
+
             --accent-white: #ffffff;
-            --accent-glow: rgba(255, 255, 255, 0.25);
-            
-            --text-primary: #ffffff;
+            --accent-glow: rgba(255, 255, 255, 0.18);
+
+            --text-primary: #f4f4f5;
             --text-secondary: #a1a1aa;
-            --text-dim: #52525b;
-            
-            --radius-main: 12px;
-            --radius-inner: 8px;
+            --text-dim: #71717a;
+
+            --success: #4ade80;
+            --danger: #f87171;
+
+            /* radii scale */
+            --radius-sm: 6px;
+            --radius-inner: 10px;
+            --radius-main: 16px;
+            --radius-pill: 999px;
+
+            /* elevation — layered, soft, never harsh */
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.55);
+            --shadow-glow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+
             --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-base: 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+
+            --header-h: 68px;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'JetBrains Mono', monospace;
-            transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+            font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
         }
 
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #000000; }
-        ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--accent-white); }
+        *,
+        *::before,
+        *::after {
+            transition: border-color var(--transition-fast),
+                        box-shadow var(--transition-fast),
+                        background-color var(--transition-fast),
+                        color var(--transition-fast),
+                        transform var(--transition-fast),
+                        opacity var(--transition-fast);
+        }
 
+        ::selection { background: rgba(255, 255, 255, 0.9); color: #000; }
+
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: #2a2a31;
+            border-radius: var(--radius-pill);
+            border: 2px solid transparent;
+            background-clip: content-box;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: #3f3f48; background-clip: content-box; }
+
+        /* ============================================================
+           Base
+           ============================================================ */
         body {
             background-color: var(--bg-base);
             color: var(--text-primary);
@@ -48,182 +91,270 @@
             flex-direction: column;
             overflow-x: hidden;
             position: relative;
+            font-size: 15px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
         }
 
+        /* two soft radial washes + a finer grid, instead of one flat overlay */
         body::before {
             content: "";
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: 
-                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-            background-size: 32px 32px;
+            inset: 0;
+            background:
+                radial-gradient(900px 500px at 15% -10%, rgba(255, 255, 255, 0.045), transparent 60%),
+                radial-gradient(700px 400px at 95% 0%, rgba(255, 255, 255, 0.025), transparent 60%);
             pointer-events: none;
             z-index: 0;
         }
 
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+            background-size: 48px 48px;
+            mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, #000 25%, transparent 100%);
+            -webkit-mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, #000 25%, transparent 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ============================================================
+           Header
+           ============================================================ */
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 48px;
+            gap: 20px;
+            padding: 0 32px;
+            height: var(--header-h);
             border-bottom: 1px solid var(--border-subtle);
-            background: rgba(0, 0, 0, 0.9);
-            backdrop-filter: blur(20px);
+            background: rgba(8, 8, 10, 0.72);
+            backdrop-filter: blur(18px) saturate(140%);
+            -webkit-backdrop-filter: blur(18px) saturate(140%);
             position: sticky;
             top: 0;
             z-index: 100;
         }
 
         .logo {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            font-size: 1.5rem;
+            font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+            font-size: 1.35rem;
             font-weight: 900;
             color: #fff;
-            letter-spacing: 2px;
+            letter-spacing: 0.06em;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
+            line-height: 1;
         }
 
         .logo-highlight {
-            color: #ffffff;
-            text-shadow: 0 0 16px var(--accent-glow);
+            color: #fff;
+            text-shadow: 0 0 22px rgba(255, 255, 255, 0.35);
         }
 
         .logo-badge {
-            font-size: 0.65rem;
-            color: #ffffff;
-            background: rgba(255, 255, 255, 0.08);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--border-subtle);
-            padding: 4px 10px;
-            border-radius: 20px;
-            letter-spacing: 2px;
-            font-weight: 800;
+            padding: 4px 9px;
+            border-radius: var(--radius-pill);
+            letter-spacing: 0.12em;
+            font-weight: 700;
+            text-transform: uppercase;
         }
 
-        .user-widget { display: flex; align-items: center; gap: 12px; }
-        .auth-btn-group { display: flex; align-items: center; gap: 12px; }
+        .user-widget { display: flex; align-items: center; gap: 10px; }
+        .auth-btn-group { display: flex; align-items: center; gap: 10px; }
 
-        .discord-btn {
-            background: #ffffff;
-            color: #000000;
-            padding: 10px 22px;
-            border-radius: var(--radius-inner);
-            text-decoration: none;
+        .discord-btn,
+        .key-auth-btn {
             font-family: 'Plus Jakarta Sans', sans-serif;
             font-weight: 800;
-            font-size: 0.8rem;
-            display: flex;
+            font-size: 0.78rem;
+            padding: 0 18px;
+            height: 40px;
+            border-radius: var(--radius-inner);
+            display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
+            cursor: pointer;
+            white-space: nowrap;
         }
-        .discord-btn:hover { background: #e4e4e7; transform: translateY(-1px); }
+
+        .discord-btn {
+            background: #fff;
+            color: #000;
+            border: 1px solid #fff;
+            text-decoration: none;
+        }
+        .discord-btn:hover { background: #e4e4e7; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .discord-btn:active { transform: translateY(0); }
 
         .key-auth-btn {
             background: rgba(255, 255, 255, 0.05);
-            color: #ffffff;
+            color: var(--text-primary);
             border: 1px solid var(--border-subtle);
-            padding: 10px 20px;
-            border-radius: var(--radius-inner);
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            font-weight: 800;
-            font-size: 0.8rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
-        .key-auth-btn:hover { border-color: var(--accent-white); background: rgba(255, 255, 255, 0.1); }
+        .key-auth-btn:hover { border-color: var(--border-hover); background: rgba(255, 255, 255, 0.09); }
 
         .user-profile {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
-            padding: 6px 16px 6px 8px;
-            border-radius: 40px;
+            padding: 5px 14px 5px 6px;
+            border-radius: var(--radius-pill);
+            box-shadow: var(--shadow-sm);
         }
 
-        .user-profile img, .user-avatar-key {
-            width: 32px;
-            height: 32px;
+        .user-profile img,
+        .user-avatar-key {
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
-            border: 1px solid var(--accent-white);
+            border: 1px solid var(--border-strong);
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff;
             font-weight: 800;
-            font-size: 0.75rem;
+            font-size: 0.72rem;
+            object-fit: cover;
+            flex: none;
         }
 
-        .logout-btn { color: var(--text-secondary); text-decoration: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; margin-left: 6px; }
-        .logout-btn:hover { color: #ffffff; }
+        .logout-btn {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            margin-left: 2px;
+        }
+        .logout-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
 
+        /* ============================================================
+           HUD
+           ============================================================ */
         .hud-bar {
-            max-width: 1440px;
+            max-width: 1400px;
             width: 100%;
-            margin: 24px auto 0;
-            padding: 0 24px;
+            margin: 28px auto 0;
+            padding: 0 32px;
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
             z-index: 1;
         }
 
         .hud-card {
-            background: var(--bg-surface);
+            position: relative;
+            background: linear-gradient(180deg, var(--bg-raised), var(--bg-surface));
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius-inner);
-            padding: 18px 20px;
+            padding: 16px 18px;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 6px;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
         }
-        .hud-label { font-size: 0.65rem; color: var(--text-dim); font-weight: 700; letter-spacing: 1.5px; }
-        .hud-value { font-size: 1.1rem; color: #ffffff; font-weight: 800; }
 
+        /* thin top highlight — cheap depth cue that lifts the whole row */
+        .hud-card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+        }
+
+        .hud-card:hover { border-color: var(--border-strong); }
+
+        .hud-label {
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .hud-value {
+            font-size: 1rem;
+            color: #fff;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            line-height: 1.3;
+        }
+
+        /* ============================================================
+           Layout
+           ============================================================ */
         main {
             flex: 1;
-            max-width: 1440px;
+            max-width: 1400px;
             width: 100%;
             margin: 0 auto;
-            padding: 24px;
+            padding: 28px 32px 64px;
             display: grid;
-            grid-template-columns: 1fr 420px;
+            grid-template-columns: minmax(0, 1fr) 400px;
             gap: 24px;
+            align-items: start;
             position: relative;
             z-index: 1;
         }
 
         .card {
-            background: var(--bg-surface);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 120px), var(--bg-surface);
             border: 1px solid var(--border-subtle);
             border-radius: var(--radius-main);
-            padding: 32px;
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+            padding: 28px;
+            box-shadow: var(--shadow-lg);
             margin-bottom: 24px;
             position: relative;
         }
 
+        .card::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 16px; right: 16px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+        }
+
+        .editor-container { display: flex; flex-direction: column; }
+
         h2 {
             font-family: 'Plus Jakarta Sans', sans-serif;
-            font-size: 0.95rem;
+            font-size: 0.92rem;
             font-weight: 800;
-            color: #ffffff;
-            margin-bottom: 22px;
-            letter-spacing: 2px;
+            color: #fff;
+            margin-bottom: 24px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 11px;
         }
 
         .ui-icon {
-            width: 18px;
-            height: 18px;
+            width: 17px;
+            height: 17px;
             stroke: currentColor;
             stroke-width: 2;
             stroke-linecap: round;
@@ -231,39 +362,85 @@
             fill: none;
             display: inline-block;
             vertical-align: middle;
+            flex: none;
         }
 
+        /* ============================================================
+           Editing banner
+           ============================================================ */
         .editing-banner {
             display: none;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid var(--accent-white);
-            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-strong);
+            border-left: 3px solid #fff;
+            padding: 11px 14px;
             border-radius: var(--radius-inner);
-            margin-bottom: 18px;
-            font-size: 0.75rem;
+            margin-bottom: 20px;
+            font-size: 0.74rem;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
         }
         .editing-banner.active { display: flex; }
 
+        /* ============================================================
+           Form controls
+           ============================================================ */
         .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
-        label { font-size: 0.7rem; color: var(--text-secondary); letter-spacing: 1.5px; font-weight: 700; text-transform: uppercase; }
 
-        input[type="text"], input[type="password"], select, textarea {
+        label {
+            font-size: 0.66rem;
+            color: var(--text-dim);
+            letter-spacing: 0.13em;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        select,
+        textarea {
             background: var(--bg-input);
             border: 1px solid var(--border-subtle);
             color: var(--text-primary);
-            padding: 14px 18px;
+            padding: 13px 15px;
             border-radius: var(--radius-inner);
             outline: none;
             font-size: 0.85rem;
+            width: 100%;
         }
 
-        input[type="text"]:focus, input[type="password"]:focus, select:focus, textarea:focus {
+        input[type="text"]::placeholder,
+        input[type="password"]::placeholder,
+        textarea::placeholder { color: #55555e; }
+
+        input[type="text"]:hover,
+        input[type="password"]:hover,
+        select:hover,
+        textarea:hover { border-color: var(--border-strong); }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        select:focus,
+        textarea:focus {
             border-color: var(--accent-white);
-            box-shadow: 0 0 12px var(--accent-glow);
+            box-shadow: var(--shadow-glow);
         }
 
+        select {
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 15px;
+            padding-right: 40px;
+            cursor: pointer;
+        }
+
+        /* ============================================================
+           Editor
+           ============================================================ */
         .ide-wrapper {
             position: relative;
             background: var(--bg-input);
@@ -271,38 +448,50 @@
             border-radius: var(--radius-inner);
             overflow: hidden;
         }
+        .ide-wrapper:focus-within {
+            border-color: var(--accent-white);
+            box-shadow: var(--shadow-glow);
+        }
 
         .ide-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 18px;
-            background: rgba(20, 20, 20, 0.6);
+            padding: 11px 16px;
+            background: rgba(255, 255, 255, 0.025);
             border-bottom: 1px solid var(--border-subtle);
-            font-size: 0.72rem;
+            font-size: 0.68rem;
             color: var(--text-dim);
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            font-weight: 700;
         }
 
         textarea.ide-textarea {
             width: 100%;
             border: none;
             background: transparent;
-            min-height: 380px;
-            color: #ffffff;
+            min-height: 360px;
+            color: var(--text-primary);
             resize: vertical;
-            line-height: 1.6;
+            line-height: 1.65;
             padding: 18px;
             border-radius: 0;
             font-size: 0.85rem;
+            tab-size: 4;
         }
-        textarea.ide-textarea:focus { box-shadow: none; }
+        textarea.ide-textarea:focus { box-shadow: none; border-color: transparent; }
 
+        /* ============================================================
+           Options
+           ============================================================ */
         .options-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 10px;
+            margin-bottom: 22px;
         }
+
         .option-toggle {
             display: flex;
             align-items: center;
@@ -312,91 +501,194 @@
             padding: 12px 14px;
             border-radius: var(--radius-inner);
             cursor: pointer;
-            font-size: 0.75rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            user-select: none;
+        }
+
+        .option-toggle:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+        .option-toggle input[type="checkbox"] {
+            accent-color: #fff;
+            cursor: pointer;
+            width: 15px;
+            height: 15px;
+            flex: none;
+        }
+
+        /* the four options are intentionally non-functional — make them
+           read as inert rather than as controls that merely look off */
+        .option-toggle:has(input:disabled) {
+            opacity: 0.45;
+            cursor: not-allowed;
+            border-style: dashed;
+        }
+        .option-toggle:has(input:disabled):hover {
+            border-color: var(--border-subtle);
             color: var(--text-secondary);
         }
-        .option-toggle:hover { border-color: var(--accent-white); color: #ffffff; }
-        .option-toggle input[type="checkbox"] { accent-color: #ffffff; cursor: pointer; }
+        .option-toggle input[type="checkbox"]:disabled { cursor: not-allowed; }
 
+        /* ============================================================
+           Buttons
+           ============================================================ */
         .btn-primary {
-            background: #ffffff;
-            color: #000000;
-            border: none;
-            padding: 14px 32px;
+            background: #fff;
+            color: #000;
+            border: 1px solid #fff;
+            padding: 13px 28px;
             border-radius: var(--radius-inner);
             font-family: 'Plus Jakarta Sans', sans-serif;
             font-weight: 800;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             cursor: pointer;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.07em;
+            white-space: nowrap;
+            box-shadow: var(--shadow-sm);
         }
-        .btn-primary:hover { background: #e4e4e7; transform: translateY(-1px); }
+        .btn-primary:hover { background: #e8e8ea; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-primary:active { transform: translateY(0); box-shadow: var(--shadow-sm); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
         .icon-btn {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--border-subtle);
             color: var(--text-primary);
-            padding: 8px 16px;
+            padding: 9px 15px;
             border-radius: var(--radius-inner);
             cursor: pointer;
-            font-size: 0.78rem;
+            font-size: 0.74rem;
             font-weight: 700;
+            letter-spacing: 0.04em;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
+            white-space: nowrap;
         }
-        .icon-btn:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--accent-white); }
-        .icon-btn.delete:hover { border-color: #ffffff; background: rgba(255, 255, 255, 0.2); }
+        .icon-btn:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--border-hover); }
+
+        .icon-btn.delete { color: var(--text-secondary); }
+        .icon-btn.delete:hover {
+            color: #fff;
+            border-color: rgba(248, 113, 113, 0.6);
+            background: rgba(248, 113, 113, 0.12);
+        }
+
+        /* ============================================================
+           Output
+           ============================================================ */
+        .output-box {
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-inner);
+            padding: 18px;
+        }
 
         .loader-link {
+            display: block;
             color: var(--text-dim);
-            background-color: #000000;
+            background-color: #000;
             user-select: none;
             cursor: pointer;
             word-break: break-all;
-            font-size: 0.8rem;
+            font-size: 0.78rem;
+            line-height: 1.6;
             margin: 12px 0;
             padding: 14px;
             border: 1px dashed var(--border-subtle);
-            border-radius: var(--radius-inner);
-            display: block;
+            border-radius: var(--radius-sm);
         }
-        .loader-link.revealed { color: #ffffff; user-select: text; border-style: solid; border-color: var(--accent-white); }
+        .loader-link:hover { border-color: var(--border-hover); }
+        .loader-link.revealed {
+            color: var(--text-primary);
+            user-select: text;
+            border-style: solid;
+            border-color: var(--border-strong);
+            background-color: #060608;
+        }
 
-        .vault-list { display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
+        /* ============================================================
+           Vault
+           ============================================================ */
+        .vault-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 560px;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
+
         .vault-item {
-            background: rgba(5, 5, 5, 0.95);
+            background: var(--bg-input);
             border: 1px solid var(--border-subtle);
-            padding: 18px;
+            padding: 16px;
             border-radius: var(--radius-inner);
             display: flex;
             flex-direction: column;
             gap: 12px;
         }
+        .vault-item:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
 
+        /* ============================================================
+           Owner panel
+           ============================================================ */
         .owner-panel {
             grid-column: 1 / -1;
-            background: var(--bg-surface);
-            border: 1px solid var(--accent-white);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 140px), var(--bg-surface);
+            border: 1px solid var(--border-strong);
             display: none;
         }
         .owner-panel.active { display: block; }
 
+        /* ============================================================
+           Modals
+           ============================================================ */
         .modal-overlay {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px);
-            display: none; justify-content: center; align-items: center; z-index: 1000;
+            position: fixed;
+            inset: 0;
+            background: rgba(4, 4, 6, 0.8);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            z-index: 1000;
         }
         .modal-overlay.active { display: flex; }
-        .modal-card { background: var(--bg-card); border: 1px solid var(--accent-white); border-radius: var(--radius-main); padding: 32px; width: 100%; max-width: 440px; }
 
+        .modal-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-main);
+            padding: 28px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: var(--shadow-lg);
+            animation: modal-in var(--transition-base) both;
+        }
+
+        @keyframes modal-in {
+            from { opacity: 0; transform: translateY(10px) scale(0.985); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        /* ============================================================
+           Restricted view
+           ============================================================ */
         .restricted-view {
             display: none;
             min-height: 100vh;
             width: 100%;
             align-items: center;
             justify-content: center;
+            padding: 24px;
             position: relative;
             z-index: 10;
         }
@@ -404,23 +696,21 @@
 
         .restricted-card {
             background: var(--bg-surface);
-            border: 1px dashed var(--border-subtle);
+            border: 1px solid var(--border-subtle);
             border-radius: var(--radius-main);
-            padding: 40px 48px;
+            padding: 44px 48px;
             text-align: center;
-            max-width: 520px;
-            width: 90%;
-            box-shadow: 0 0 32px rgba(255, 255, 255, 0.03);
+            max-width: 540px;
+            width: 100%;
+            box-shadow: var(--shadow-lg);
+            animation: modal-in var(--transition-base) both;
         }
-        .restricted-card:hover {
-            border-color: var(--border-hover);
-            box-shadow: 0 0 40px rgba(255, 255, 255, 0.06);
-        }
+
         .restricted-title {
-            font-size: 1.1rem;
+            font-size: 1rem;
             font-weight: 800;
-            letter-spacing: 3px;
-            color: #ffffff;
+            letter-spacing: 0.16em;
+            color: #fff;
             margin-bottom: 14px;
             display: flex;
             align-items: center;
@@ -430,32 +720,547 @@
         .restricted-title::before,
         .restricted-title::after {
             content: "//";
-            color: var(--text-secondary);
+            color: var(--text-dim);
             font-weight: 500;
         }
+
         .restricted-subtitle {
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             color: var(--text-secondary);
-            letter-spacing: 0.5px;
-            line-height: 1.5;
+            letter-spacing: 0.02em;
+            line-height: 1.65;
         }
 
+        /* ============================================================
+           Shell
+           ============================================================ */
         .main-app-container { display: flex; flex-direction: column; min-height: 100vh; }
         .main-app-container.hidden { display: none; }
 
-        @media (max-width: 960px) {
-            main { grid-template-columns: 1fr; }
-            .hud-bar { grid-template-columns: repeat(2, 1fr); }
-            header { padding: 16px 20px; }
+        /* ============================================================
+           Accessibility
+           ============================================================ */
+        :focus-visible {
+            outline: 2px solid #fff;
+            outline-offset: 2px;
+            border-radius: var(--radius-sm);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+            }
+        }
+
+        /* ============================================================
+           Responsive
+           ============================================================ */
+        @media (max-width: 1180px) {
+            main { grid-template-columns: minmax(0, 1fr); }
+            .vault-list { max-height: none; }
+        }
+
+        @media (max-width: 900px) {
+            :root { --header-h: 62px; }
+            header { padding: 0 20px; }
+            .hud-bar { padding: 0 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            main { padding: 20px 20px 48px; }
+            .card { padding: 22px; border-radius: var(--radius-inner); }
+            .restricted-card { padding: 34px 26px; }
+        }
+
+        @media (max-width: 620px) {
+            .logo { font-size: 1.15rem; }
+            .logo-badge { display: none; }
+            .hud-bar { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+            .discord-btn, .key-auth-btn { height: 36px; padding: 0 14px; font-size: 0.72rem; }
+            .btn-primary { width: 100%; }
+            textarea.ide-textarea { min-height: 260px; }
+            h2 { font-size: 0.82rem; letter-spacing: 0.07em; }
+        }
+
+        /* ============================================================
+           Detail layer — icons, states, feedback, chrome
+           ============================================================ */
+
+        /* --- HUD icon + live indicator --- */
+        .hud-top {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 2px;
+        }
+        .hud-icon {
+            width: 13px;
+            height: 13px;
+            stroke: var(--text-dim);
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            flex: none;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5);
+            flex: none;
+            animation: pulse 2.4s ease-out infinite;
+        }
+        @keyframes pulse {
+            0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45); }
+            70%  { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
+
+        .hud-inline { display: flex; align-items: center; gap: 8px; }
+
+        /* --- Section headers --- */
+        .card-index {
+            margin-left: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 2px 6px;
+            letter-spacing: 0.08em;
+            flex: none;
+        }
+
+        .card-rule {
+            height: 1px;
+            background: linear-gradient(90deg, var(--border-subtle), transparent);
+            margin: -12px 0 24px;
+        }
+
+        /* --- Empty states --- */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 40px 24px;
+            text-align: center;
+            border: 1px dashed var(--border-subtle);
+            border-radius: var(--radius-inner);
+            background: rgba(255, 255, 255, 0.012);
+        }
+        .empty-state svg {
+            width: 26px;
+            height: 26px;
+            stroke: var(--text-dim);
+            stroke-width: 1.5;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .empty-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .empty-hint {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            max-width: 32ch;
+            line-height: 1.6;
+        }
+
+        /* --- Loading skeleton --- */
+        .skeleton {
+            height: 84px;
+            border-radius: var(--radius-inner);
+            border: 1px solid var(--border-subtle);
+            background: linear-gradient(90deg, #0d0d10 0%, #16161b 50%, #0d0d10 100%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+            from { background-position: 200% 0; }
+            to   { background-position: -200% 0; }
+        }
+
+        /* --- Vault items --- */
+        .vault-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+        }
+        .vault-name {
+            color: #fff;
+            font-size: 0.88rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            word-break: break-word;
+        }
+        .vault-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 7px;
+            flex-wrap: wrap;
+        }
+        .chip {
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.045);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 3px 7px;
+            white-space: nowrap;
+        }
+        .chip-id { font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
+        .vault-actions { display: flex; gap: 8px; flex: none; }
+
+        /* --- Admin key rows --- */
+        .key-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-inner);
+            padding: 11px 14px;
+            font-size: 0.73rem;
+        }
+        .key-row:hover { border-color: var(--border-strong); }
+        .key-name { color: #fff; font-weight: 700; }
+        .key-secret {
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* --- Status message --- */
+        #statusMsg {
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--text-dim);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #statusMsg.is-pending { color: var(--text-secondary); }
+        #statusMsg.is-pending::before {
+            content: "";
+            width: 11px;
+            height: 11px;
+            border: 2px solid var(--border-strong);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex: none;
+        }
+        #statusMsg.is-success { color: var(--success); }
+        #statusMsg.is-error { color: var(--danger); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* --- Keyboard hint --- */
+        .kbd {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            border-bottom-width: 2px;
+            border-radius: var(--radius-sm);
+            padding: 2px 6px;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+        }
+        .deploy-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-top: 18px;
+            flex-wrap: wrap;
+        }
+        .deploy-hint { display: inline-flex; align-items: center; gap: 7px; font-size: 0.68rem; color: var(--text-dim); }
+
+        /* --- Custom checkboxes --- */
+        .option-toggle input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            border: 1px solid var(--border-hover);
+            border-radius: 4px;
+            background-color: #0a0a0d;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 11px;
+            transition: background-color var(--transition-fast), border-color var(--transition-fast);
+        }
+        .option-toggle input[type="checkbox"]:checked {
+            background-color: #fff;
+            border-color: #fff;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E");
+        }
+
+        /* --- Toasts --- */
+        .toast-stack {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 2000;
+            pointer-events: none;
+            max-width: min(360px, calc(100vw - 40px));
+        }
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-raised);
+            border: 1px solid var(--border-strong);
+            border-left: 3px solid var(--border-hover);
+            border-radius: var(--radius-inner);
+            padding: 12px 15px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            box-shadow: var(--shadow-lg);
+            animation: toast-in var(--transition-base) both;
+            pointer-events: auto;
+        }
+        .toast.is-success { border-left-color: var(--success); }
+        .toast.is-error { border-left-color: var(--danger); }
+        .toast.is-info { border-left-color: #fff; }
+        .toast.is-out { animation: toast-out 0.2s ease forwards; }
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateX(16px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes toast-out {
+            to { opacity: 0; transform: translateX(16px); }
+        }
+
+        /* --- Footer --- */
+        footer {
+            border-top: 1px solid var(--border-subtle);
+            background: rgba(8, 8, 10, 0.6);
+            margin-top: auto;
+            position: relative;
+            z-index: 1;
+        }
+        .footer-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            flex-wrap: wrap;
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            letter-spacing: 0.05em;
+        }
+        .footer-group { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .footer-sep { color: var(--border-strong); }
+
+        /* --- Loader block polish --- */
+        .output-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+
+        @media (max-width: 620px) {
+            .vault-head { flex-direction: column; }
+            .vault-actions { width: 100%; }
+            .vault-actions .icon-btn { flex: 1; }
+            .deploy-row { flex-direction: column; align-items: stretch; }
+            .deploy-row .btn-primary { width: 100%; }
+            .footer-inner { flex-direction: column; text-align: center; }
+            .toast-stack { right: 12px; left: 12px; bottom: 12px; max-width: none; }
+        }
+        /* ============================================================
+           Halloween decorations
+           Everything here is scoped under body.halloween, so the whole
+           seasonal layer is removed by deleting that one class.
+           ============================================================ */
+        body.halloween {
+            --hween-orange: #f97316;
+            --hween-amber: #fbbf24;
+            --hween-purple: #a855f7;
+        }
+
+        /* --- seasonal warmth on chrome that already exists --- */
+        body.halloween header { border-bottom-color: rgba(249, 115, 22, 0.34); }
+        body.halloween footer { border-top-color: rgba(249, 115, 22, 0.26); }
+        body.halloween .hud-card::before,
+        body.halloween .card::before {
+            background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.34), transparent);
+        }
+        body.halloween .hud-card:hover,
+        body.halloween .card:hover { border-color: rgba(249, 115, 22, 0.3); }
+        body.halloween .logo-badge {
+            color: var(--hween-amber);
+            border-color: rgba(249, 115, 22, 0.4);
+            background: rgba(249, 115, 22, 0.1);
+        }
+        body.halloween .card-index {
+            color: var(--hween-amber);
+            border-color: rgba(249, 115, 22, 0.4);
+            background: rgba(249, 115, 22, 0.08);
+        }
+        body.halloween .empty-state svg { stroke: var(--hween-amber); }
+        body.halloween ::selection { background: var(--hween-orange); color: #140a02; }
+
+        /* --- seasonal bar under the header --- */
+        .halloween-bar {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 9px 24px;
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--hween-amber);
+            background:
+                linear-gradient(90deg, rgba(249, 115, 22, 0.10), rgba(168, 85, 247, 0.10)),
+                #0b0809;
+            border-bottom: 1px solid rgba(249, 115, 22, 0.2);
+            position: relative;
+            z-index: 90;
+        }
+        body.halloween .halloween-bar { display: flex; }
+
+        .halloween-bar .pumpkin-icon {
+            width: 16px;
+            height: 16px;
+            stroke: var(--hween-orange);
+            stroke-width: 1.6;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            flex: none;
+        }
+        .halloween-bar .bar-sep { color: rgba(249, 115, 22, 0.55); }
+        .halloween-bar .bar-dim {
+            color: var(--text-dim);
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: none;
+        }
+
+        /* --- ambient layer: cobwebs + drifting bats --- */
+        .hween-decor {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 3;
+            display: none;
+            overflow: hidden;
+        }
+        body.halloween .hween-decor { display: block; }
+
+        .cobweb {
+            position: absolute;
+            width: 96px;
+            height: 96px;
+            stroke: rgba(255, 255, 255, 0.6);
+            stroke-width: 1;
+            fill: none;
+            opacity: 0.18;
+        }
+        .cobweb-tl { top: calc(var(--header-h) + 6px); left: -30px; }
+        .cobweb-tr { top: calc(var(--header-h) + 6px); right: -30px; transform: scaleX(-1); }
+
+        .bat {
+            position: absolute;
+            left: 0;
+            width: 20px;
+            height: 20px;
+            fill: rgba(249, 115, 22, 0.5);
+            opacity: 0;
+            animation: bat-fly linear infinite;
+            will-change: transform;
+        }
+        .bat-1 { top: 92px;  animation-duration: 54s; animation-delay: 0s; }
+        .bat-2 { top: 140px; width: 15px; height: 15px; animation-duration: 73s; animation-delay: -16s; }
+        .bat-3 { top: 116px; width: 12px; height: 12px; animation-duration: 91s; animation-delay: -44s; }
+
+        @keyframes bat-fly {
+            0%   { transform: translateX(-10vw) translateY(0) rotate(-6deg); opacity: 0; }
+            10%  { opacity: 0.5; }
+            50%  { transform: translateX(50vw) translateY(-18px) rotate(5deg); opacity: 0.5; }
+            90%  { opacity: 0.5; }
+            100% { transform: translateX(112vw) translateY(8px) rotate(-4deg); opacity: 0; }
+        }
+
+        @media (max-width: 900px) {
+            .cobweb { width: 84px; height: 84px; }
+            .bat-3 { display: none; }
+            .halloween-bar { font-size: 0.6rem; letter-spacing: 0.1em; gap: 8px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .bat { display: none; }
+        }
+
+        @media print {
+            .hween-decor, .halloween-bar { display: none !important; }
         }
     </style>
 </head>
 <body>
 
+    <script>
+        /* Seasonal theming.
+           Halloween is active from 1 October up to (but not including)
+           1 November, local time, then it disappears on its own.
+           Adjust the four constants below to widen, narrow or disable it.
+           This runs before any content paints, so the page never flickers. */
+        function halloweenActiveAt(date) {
+            var START_MONTH = 9;   /* 9 = October (months are 0-indexed) */
+            var START_DAY = 1;
+            var END_MONTH = 10;    /* 10 = November */
+            var END_DAY = 1;
+
+            var start = new Date(date.getFullYear(), START_MONTH, START_DAY);
+            var end = new Date(date.getFullYear(), END_MONTH, END_DAY);
+            return date >= start && date < end;
+        }
+
+        if (halloweenActiveAt(new Date())) {
+            document.body.classList.add('halloween');
+        }
+    </script>
+
     <div class="restricted-view" id="restrictedPage">
         <div class="restricted-card">
-            <h1 class="restricted-title">ACCESS RESTRICTED</h1>
-            <p class="restricted-subtitle" id="restrictedMessage">This loadstring source is protected and unlisted.</p>
+            <h1 class="restricted-title">BROWSER ACCESS BLOCKED</h1>
+            <p class="restricted-subtitle" id="restrictedMessage">This source is served only to non-browser clients. It is not encrypted.</p>
         </div>
     </div>
 
@@ -463,27 +1268,34 @@
         <header>
             <div class="logo">
                 NIX<span class="logo-highlight">6</span> 
-                <span class="logo-badge">ENGINE V3</span>
+                <span class="logo-badge">V1.1.0</span>
             </div>
             <div class="user-widget" id="userWidget"></div>
         </header>
 
+        <div class="halloween-bar" id="halloweenBar">
+            <svg class="pumpkin-icon" viewBox="0 0 24 24"><path d="M12 3.6c-.5 0-.9.4-.9.9v.9"/><path d="M12 5.4c-4.1 0-7.4 3-7.4 6.8S8 19 12 19s7.4-3 7.4-6.8S16.1 5.4 12 5.4Z"/><path d="M12 5.4V19"/><path d="M8.6 10.4 10.5 12l-1.9 1.6Z"/><path d="M15.4 10.4 13.5 12l1.9 1.6Z"/><path d="M10 15.7h4L12 17.8Z"/></svg>
+            <span>Halloween Edition</span>
+            <span class="bar-sep">/</span>
+            <span class="bar-dim" id="halloweenCountdown">Counting down to 31 October</span>
+        </div>
+
         <div class="hud-bar">
             <div class="hud-card">
-                <span class="hud-label">ENGINE STATUS</span>
-                <span class="hud-value">ONLINE</span>
+                <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="hud-label">ENGINE STATUS</span></div>
+                <span class="hud-value hud-inline"><span class="status-dot"></span>ONLINE</span>
             </div>
             <div class="hud-card">
-                <span class="hud-label">HOSTED VAULT SCRIPTS</span>
+                <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/></svg><span class="hud-label">HOSTED VAULT SCRIPTS</span></div>
                 <span class="hud-value" id="hudScriptCount">0</span>
             </div>
             <div class="hud-card">
-                <span class="hud-label">SECURITY MATRIX</span>
-                <span class="hud-value" style="color: #ffffff;">5 LAYERS ACTIVE</span>
+                <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M8 21H3v-5M3 21l7-7M16 3h5v5M21 3l-7 7"/></svg><span class="hud-label">TRANSFORM</span></div>
+                <span class="hud-value">REVERSIBLE XOR</span>
             </div>
             <div class="hud-card">
-                <span class="hud-label">SERVER LATENCY</span>
-                <span class="hud-value">12ms</span>
+                <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M7 11V7a5 5 0 0 1 9.9-1"/><rect x="3" y="11" width="18" height="11" rx="2"/></svg><span class="hud-label">SOURCE RECOVERABLE</span></div>
+                <span class="hud-value">YES</span>
             </div>
         </div>
 
@@ -491,7 +1303,7 @@
             <div class="card owner-panel" id="ownerPanel">
                 <h2>
                     <svg class="ui-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                    ADMIN CONTROL SYSTEM
+                    ADMIN CONTROL SYSTEM <span class="card-index">00</span>
                 </h2>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                     <div>
@@ -518,7 +1330,7 @@
             <div class="card">
                 <h2>
                     <svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    NIX6 SOURCE COMPILER & OBFUSCATOR
+                    NIX6 SOURCE OBFUSCATOR <span class="card-index">01</span>
                 </h2>
                 <div class="editor-container">
                     <input type="hidden" id="editId" value="">
@@ -542,12 +1354,12 @@
                         </div>
                     </div>
 
-                    <label style="margin-bottom: 8px; display: block;">PROTECTION MATRIX</label>
+                    <label style="margin-bottom: 8px; display: block;">TRANSFORM OPTIONS <span style="font-weight: 400; text-transform: none; color: var(--text-dim);">— not implemented; the current transform ignores these settings</span></label>
                     <div class="options-grid">
-                        <label class="option-toggle"><input type="checkbox" checked id="optMinify"> Minify Code</label>
-                        <label class="option-toggle"><input type="checkbox" checked id="optRename"> Variable Renaming</label>
-                        <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
-                        <label class="option-toggle"><input type="checkbox" checked id="optAntiTamper"> Anti-Tamper Shield</label>
+                        <label class="option-toggle"><input type="checkbox" checked disabled id="optMinify"> Minify Code</label>
+                        <label class="option-toggle"><input type="checkbox" checked disabled id="optRename"> Variable Renaming</label>
+                        <label class="option-toggle"><input type="checkbox" checked disabled id="optEncrypt"> Encrypt Strings</label>
+                        <label class="option-toggle"><input type="checkbox" checked disabled id="optAntiTamper"> Anti-Tamper Shield</label>
                     </div>
 
                     <div class="input-group">
@@ -561,9 +1373,12 @@
                         </div>
                     </div>
 
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
-                        <span id="statusMsg" style="font-size: 0.8rem; color: #ffffff; font-weight: 600;"></span>
-                        <button class="btn-primary" id="deployBtn" onclick="deployScript()">Compile & Deploy</button>
+                    <div class="deploy-row">
+                        <span id="statusMsg"></span>
+                        <div class="deploy-hint">
+                            <span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> to deploy
+                            <button class="btn-primary" id="deployBtn" onclick="deployScript()">Compile & Deploy</button>
+                        </div>
                     </div>
 
                     <div class="output-box" id="outputBox" style="display:none; margin-top: 24px;">
@@ -577,15 +1392,54 @@
             <div class="card">
                 <h2>
                     <svg class="ui-icon" viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/><path d="M12 12v4M10 14h4"/></svg>
-                    ENCRYPTED VAULT
+                    SCRIPT VAULT <span class="card-index">02</span>
                 </h2>
                 <div class="vault-list" id="vaultList">
-                    <div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">
-                        Login to inspect your hosted scripts.
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <span class="empty-title">Not signed in</span>
+                        <span class="empty-hint">Log in with Discord or an API key to inspect the scripts you have hosted.</span>
                     </div>
                 </div>
             </div>
         </main>
+
+        <footer>
+            <div class="footer-inner">
+                <div class="footer-group">
+                    <span>NIX6 ENGINE v1.1.0</span>
+                    <span class="footer-sep">/</span>
+                    <span>Transform: reversible XOR byte substitution</span>
+                </div>
+                <div class="footer-group">
+                    <span><span id="footerVaultCount">0</span> scripts hosted</span>
+                    <span class="footer-sep">/</span>
+                    <span>Not encryption &mdash; source is recoverable</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
+
+    <div class="hween-decor" aria-hidden="true">
+        <svg class="cobweb cobweb-tl" viewBox="0 0 100 100">
+            <path d="M0 0h92M0 0l80 46M0 0l46 80M0 0v92"/>
+            <path d="M22 0Q15.8 15.8 0 22"/>
+            <path d="M44 0Q31.7 31.7 0 44"/>
+            <path d="M66 0Q47.5 47.5 0 66"/>
+            <path d="M88 0Q63.4 63.4 0 88"/>
+        </svg>
+        <svg class="cobweb cobweb-tr" viewBox="0 0 100 100">
+            <path d="M0 0h92M0 0l80 46M0 0l46 80M0 0v92"/>
+            <path d="M22 0Q15.8 15.8 0 22"/>
+            <path d="M44 0Q31.7 31.7 0 44"/>
+            <path d="M66 0Q47.5 47.5 0 66"/>
+            <path d="M88 0Q63.4 63.4 0 88"/>
+        </svg>
+        <svg class="bat bat-1" viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg>
+        <svg class="bat bat-2" viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg>
+        <svg class="bat bat-3" viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg>
     </div>
 
     <div class="modal-overlay" id="keyModal">
@@ -648,6 +1502,19 @@
 
         function closeCustomAlert() {
             document.getElementById('customAlertModal').classList.remove('active');
+        }
+
+        function showToast(message, type = 'info', duration = 3200) {
+            const stack = document.getElementById('toastStack');
+            if (!stack) return;
+            const el = document.createElement('div');
+            el.className = 'toast is-' + type;
+            el.textContent = message;
+            stack.appendChild(el);
+            setTimeout(() => {
+                el.classList.add('is-out');
+                setTimeout(() => el.remove(), 220);
+            }, duration);
         }
 
         function showCustomConfirm(msg, title = "CONFIRM ACTION") {
@@ -714,7 +1581,7 @@
                 const token = urlParams.get('token');
                 const t = urlParams.get('t');
                 if (!token || !t || Math.abs(Math.floor(Date.now() / 1000) - parseInt(t)) > 300) {
-                    showRestrictedPage("This loadstring source is protected and unlisted.");
+                    showRestrictedPage("This source is served only to non-browser clients. It is not encrypted.");
                     return;
                 }
             }
@@ -834,6 +1701,7 @@
                 const data = await res.json();
                 if (data.success) {
                     document.getElementById('generatedKeyOutput').value = data.apiKey;
+                    showToast('API key generated.', 'success');
                     loadAdminKeys();
                 } else {
                     showCustomAlert(data.error || 'Failed to generate key.', 'SYSTEM ERROR');
@@ -848,9 +1716,18 @@
             const data = await res.json();
             if (data.success) {
                 const list = document.getElementById('activeKeysList');
+                if (!data.keys.length) {
+                    list.innerHTML = `
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-2 2l-2 2m2-2l2 2m-7 1a5 5 0 1 1-7 7 5 5 0 0 1 7-7z"/></svg>
+                            <span class="empty-title">No keys issued</span>
+                            <span class="empty-hint">Generate a key above to grant someone access to the compiler.</span>
+                        </div>`;
+                    return;
+                }
                 list.innerHTML = data.keys.map(k => `
-                    <div style="background: rgba(0,0,0,0.8); padding: 10px 14px; border-radius: var(--radius-inner); border: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem;">
-                        <span><strong style="color:#ffffff;">${k.username}:</strong> <code>${k.key}</code></span>
+                    <div class="key-row">
+                        <span class="key-secret"><span class="key-name">${k.username}</span> &middot; ${k.key}</span>
                         <button class="icon-btn delete" onclick="revokeKey('${k.key}')">Revoke</button>
                     </div>
                 `).join('');
@@ -870,7 +1747,7 @@
                 
                 const data = await res.json();
                 if (data.success) {
-                    showCustomAlert("Key successfully revoked.", "KEY REVOKED");
+                    showToast('Key revoked.', 'success');
                     loadAdminKeys();
                 } else {
                     showCustomAlert(data.error || "Failed to revoke key.", "REVOCATION ERROR");
@@ -884,7 +1761,7 @@
             const val = document.getElementById('generatedKeyOutput').value;
             if (val) {
                 navigator.clipboard.writeText(val);
-                showCustomAlert("System key copied to clipboard.", "KEY COPIED");
+                showToast('System key copied to clipboard.', 'success');
             }
         }
 
@@ -935,7 +1812,9 @@
                 return;
             }
 
-            statusMsg.innerText = editId ? 'Updating Script Build...' : 'Compiling Payload...';
+            statusMsg.className = 'is-pending';
+            statusMsg.innerText = editId ? 'Updating script build...' : 'Compiling payload...';
+            document.getElementById('deployBtn').disabled = true;
             try {
                 const payload = safeBase64Encode(scriptInput);
                 const res = await fetch('/api/obfuscate', {
@@ -950,30 +1829,45 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    statusMsg.innerText = editId ? 'Script Updated!' : 'Deployment Complete!';
+                    statusMsg.className = 'is-success';
+                    statusMsg.innerText = editId ? 'Script updated' : 'Deployment complete';
+                    showToast(editId ? 'Script build updated.' : 'Script deployed to the vault.', 'success');
                     document.getElementById('outputBox').style.display = 'block';
                     document.getElementById('loaderOutput').innerText = data.loader;
                     cancelEditMode();
                     loadVault();
                 } else {
-                    statusMsg.innerText = 'Error: ' + data.error;
+                    statusMsg.className = 'is-error';
+                    statusMsg.innerText = data.error || 'Deployment failed';
                     showCustomAlert(data.error || 'Deployment failed.', 'COMPILER ERROR');
                 }
             } catch (err) {
-                statusMsg.innerText = 'Network error during build.';
+                statusMsg.className = 'is-error';
+                statusMsg.innerText = 'Network error during build';
                 showCustomAlert('Network error during script build.', 'CONNECTION ERROR');
+            } finally {
+                document.getElementById('deployBtn').disabled = false;
             }
         }
 
         async function loadVault() {
+            const vaultList = document.getElementById('vaultList');
+            if (!cachedVaultScripts.length) {
+                vaultList.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+            }
             try {
                 const res = await fetch('/api/vault', { headers: getAuthHeaders() });
                 const data = await res.json();
-                const vaultList = document.getElementById('vaultList');
                 if (!data.success || !data.scripts || data.scripts.length === 0) {
                     cachedVaultScripts = [];
                     document.getElementById('hudScriptCount').innerText = '0';
-                    vaultList.innerHTML = `<div style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 30px;">Vault is currently empty.</div>`;
+                    document.getElementById('footerVaultCount').innerText = '0';
+                    vaultList.innerHTML = `
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/></svg>
+                            <span class="empty-title">Vault is empty</span>
+                            <span class="empty-hint">Scripts you deploy appear here with the loadstring that serves them.</span>
+                        </div>`;
                     return;
                 }
 
@@ -981,12 +1875,16 @@
                 document.getElementById('hudScriptCount').innerText = data.scripts.length;
                 vaultList.innerHTML = data.scripts.map(s => `
                     <div class="vault-item">
-                        <div style="display:flex; justify-content: space-between; align-items: center;">
+                        <div class="vault-head">
                             <div>
-                                <strong style="color:#fff; font-size:0.9rem;">${s.name}</strong>
-                                <div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">${s.fileType.toUpperCase()}</div>
+                                <div class="vault-name">${s.name}</div>
+                                <div class="vault-meta">
+                                    <span class="chip">${(s.fileType || 'luau').toUpperCase()}</span>
+                                    <span class="chip chip-id">${s.id}</span>
+                                    ${s.createdAt ? `<span class="chip">${s.createdAt}</span>` : ''}
+                                </div>
                             </div>
-                            <div style="display:flex; gap: 8px;">
+                            <div class="vault-actions">
                                 <button class="icon-btn" onclick="editVaultScript('${s.id}')">
                                     <svg class="ui-icon" style="width:12px;height:12px;" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                                     Edit
@@ -997,6 +1895,7 @@
                         <code class="loader-link" onclick="toggleReveal(this)">${s.loader}</code>
                     </div>
                 `).join('');
+                document.getElementById('footerVaultCount').innerText = data.scripts.length;
             } catch (e) {}
         }
 
@@ -1044,14 +1943,38 @@
             loadVault();
         }
 
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                if (document.getElementById('mainApp').classList.contains('hidden')) return;
+                if (document.querySelector('.modal-overlay.active')) return;
+                e.preventDefault();
+                deployScript();
+            }
+        });
+
         function toggleReveal(el) { el.classList.toggle('revealed'); }
         
         function copyLoader() { 
             navigator.clipboard.writeText(document.getElementById('loaderOutput').innerText); 
-            showCustomAlert('Loadstring copied to clipboard!', 'SUCCESS'); 
+            showToast('Loadstring copied to clipboard.', 'success'); 
+        }
+
+        function initHalloween() {
+            if (!document.body.classList.contains('halloween')) return;
+            const el = document.getElementById('halloweenCountdown');
+            if (!el) return;
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            let target = new Date(now.getFullYear(), 9, 31);
+            if (today > target) target = new Date(now.getFullYear() + 1, 9, 31);
+            const days = Math.round((target - today) / 86400000);
+            el.innerText = days === 0
+                ? 'Tonight is the night'
+                : (days === 1 ? '1 day to go' : days + ' days to go');
         }
 
         handleRouting();
+        initHalloween();
     </script>
 </body>
 </html>
