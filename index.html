@@ -519,8 +519,6 @@
             flex: none;
         }
 
-        /* the four options are intentionally non-functional — make them
-           read as inert rather than as controls that merely look off */
         .option-toggle:has(input:disabled) {
             opacity: 0.45;
             cursor: not-allowed;
@@ -531,6 +529,14 @@
             color: var(--text-secondary);
         }
         .option-toggle input[type="checkbox"]:disabled { cursor: not-allowed; }
+
+        .options-note {
+            font-size: 0.7rem;
+            line-height: 1.65;
+            color: var(--text-dim);
+            max-width: 760px;
+            margin: -10px 0 22px;
+        }
 
         /* ============================================================
            Buttons
@@ -1104,11 +1110,30 @@
            Halloween decorations
            Everything here is scoped under body.halloween, so the whole
            seasonal layer is removed by deleting that one class.
+           Two fixed layers do the work. .hween-atmos sits behind the page
+           content and only shades what is left of the background; the
+           seasonal light and everything alive lives in .hween-decor, in
+           front, because at desktop width the cards cover almost all of
+           the area behind them (a moon there was simply swallowed).
+           Every animation is transform/opacity only.
            ============================================================ */
         body.halloween {
             --hween-orange: #f97316;
             --hween-amber: #fbbf24;
             --hween-purple: #a855f7;
+            --hween-ember: #ff7a18;
+        }
+
+        /* --- the page by lantern light: warmer washes than the default --- */
+        body.halloween::before {
+            background:
+                radial-gradient(900px 520px at 12% -8%, rgba(249, 115, 22, 0.11), transparent 60%),
+                radial-gradient(780px 460px at 94% 2%, rgba(168, 85, 247, 0.11), transparent 62%);
+        }
+        body.halloween::after {
+            background-image:
+                linear-gradient(rgba(249, 115, 22, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(249, 115, 22, 0.03) 1px, transparent 1px);
         }
 
         /* --- seasonal warmth on chrome that already exists --- */
@@ -1132,6 +1157,10 @@
         }
         body.halloween .empty-state svg { stroke: var(--hween-amber); }
         body.halloween ::selection { background: var(--hween-orange); color: #140a02; }
+        body.halloween .btn-primary {
+            box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.28), 0 10px 30px rgba(249, 115, 22, 0.16);
+        }
+        body.halloween .status-dot { box-shadow: 0 0 10px 1px rgba(74, 222, 128, 0.55); }
 
         /* --- seasonal bar under the header --- */
         .halloween-bar {
@@ -1152,8 +1181,28 @@
             border-bottom: 1px solid rgba(249, 115, 22, 0.2);
             position: relative;
             z-index: 90;
+            overflow: hidden;
+            text-shadow: 0 0 14px rgba(249, 115, 22, 0.35);
         }
         body.halloween .halloween-bar { display: flex; }
+
+        /* a lantern passing behind the text */
+        .halloween-bar::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(100deg, transparent 32%, rgba(251, 191, 36, 0.16) 50%, transparent 68%);
+            transform: translateX(-100%);
+            pointer-events: none;
+        }
+        body.halloween .halloween-bar::after {
+            animation: bar-sweep 7s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+        }
+        @keyframes bar-sweep {
+            0%   { transform: translateX(-100%); }
+            55%  { transform: translateX(100%); }
+            100% { transform: translateX(100%); }
+        }
 
         .halloween-bar .pumpkin-icon {
             width: 16px;
@@ -1165,6 +1214,14 @@
             fill: none;
             flex: none;
         }
+        body.halloween .pumpkin-icon { animation: pumpkin-flicker 3.6s ease-in-out infinite; }
+        @keyframes pumpkin-flicker {
+            0%, 100% { filter: drop-shadow(0 0 4px rgba(249, 115, 22, 0.5)); opacity: 0.9; }
+            38%      { filter: drop-shadow(0 0 13px rgba(249, 115, 22, 0.95)); opacity: 1; }
+            44%      { filter: drop-shadow(0 0 5px rgba(249, 115, 22, 0.55)); opacity: 0.82; }
+            72%      { filter: drop-shadow(0 0 11px rgba(249, 115, 22, 0.85)); opacity: 1; }
+        }
+
         .halloween-bar .bar-sep { color: rgba(249, 115, 22, 0.55); }
         .halloween-bar .bar-dim {
             color: var(--text-dim);
@@ -1173,7 +1230,99 @@
             text-transform: none;
         }
 
-        /* --- ambient layer: cobwebs + drifting bats --- */
+        /* ============================================================
+           Layer 1 — shading, painted behind the page content
+           ============================================================ */
+        .hween-atmos {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            display: none;
+            overflow: hidden;
+        }
+        body.halloween .hween-atmos { display: block; }
+
+        /* low moon, hazed over the top right of the UI */
+        .hween-moon {
+            position: absolute;
+            top: 9vh;
+            right: 3%;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            background:
+                radial-gradient(circle at 42% 38%, rgba(255, 244, 214, 0.09), rgba(255, 232, 178, 0.035) 52%, transparent 74%),
+                radial-gradient(circle at 50% 50%, rgba(255, 236, 190, 0.03), transparent 62%);
+            box-shadow: 0 0 190px 60px rgba(255, 236, 190, 0.03);
+            animation: moon-breathe 13s ease-in-out infinite;
+        }
+        @keyframes moon-breathe {
+            0%, 100% { transform: scale(1);    opacity: 0.72; }
+            50%      { transform: scale(1.045); opacity: 1; }
+        }
+
+        /* two mist bands rolling against each other along the bottom */
+        .hween-fog {
+            position: absolute;
+            left: -25%;
+            right: -25%;
+            bottom: -18vh;
+            height: 58vh;
+            animation: fog-roll 46s ease-in-out infinite alternate;
+        }
+        .hween-fog-1 {
+            background:
+                radial-gradient(ellipse 62% 52% at 28% 74%, rgba(168, 85, 247, 0.14), transparent 68%),
+                radial-gradient(ellipse 52% 46% at 74% 82%, rgba(249, 115, 22, 0.10), transparent 70%);
+        }
+        .hween-fog-2 {
+            bottom: -24vh;
+            height: 62vh;
+            animation-duration: 71s;
+            animation-delay: -24s;
+            background:
+                radial-gradient(ellipse 58% 48% at 62% 78%, rgba(249, 115, 22, 0.12), transparent 70%),
+                radial-gradient(ellipse 66% 54% at 18% 86%, rgba(88, 28, 135, 0.20), transparent 72%);
+        }
+        @keyframes fog-roll {
+            from { transform: translate3d(-5%, 0, 0); }
+            to   { transform: translate3d(5%, -2vh, 0); }
+        }
+
+        /* something is watching from the dark */
+        .hween-eyes {
+            position: absolute;
+            left: 9%;
+            bottom: 22%;
+            display: flex;
+            gap: 26px;
+            animation: eyes-lurk 19s ease-in-out infinite;
+        }
+        .hween-eyes i {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--hween-amber);
+            box-shadow: 0 0 14px 3px rgba(249, 115, 22, 0.55);
+        }
+        @keyframes eyes-lurk {
+            0%, 72%, 100% { opacity: 0; }
+            79%           { opacity: 0.5; }
+            86%           { opacity: 0.26; }
+            92%           { opacity: 0.62; }
+        }
+
+        /* corners fall away into the dark */
+        .hween-vignette {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse 130% 100% at 50% 40%, transparent 42%, rgba(8, 4, 10, 0.5) 100%);
+        }
+
+        /* ============================================================
+           Layer 2 — light and life, painted in front of the page content
+           ============================================================ */
         .hween-decor {
             position: fixed;
             inset: 0;
@@ -1184,52 +1333,197 @@
         }
         body.halloween .hween-decor { display: block; }
 
+        /* --- cobwebs strung from the header corners --- */
         .cobweb {
             position: absolute;
-            width: 96px;
-            height: 96px;
+            width: 108px;
+            height: 108px;
             stroke: rgba(255, 255, 255, 0.6);
             stroke-width: 1;
             fill: none;
-            opacity: 0.18;
+            opacity: 0.26;
+            animation: web-sway 11s ease-in-out infinite;
         }
-        .cobweb-tl { top: calc(var(--header-h) + 6px); left: -30px; }
-        .cobweb-tr { top: calc(var(--header-h) + 6px); right: -30px; transform: scaleX(-1); }
+        .cobweb-tl { top: calc(var(--header-h) + 6px); left: -30px; transform-origin: top left; }
+        .cobweb-tr {
+            top: calc(var(--header-h) + 6px);
+            right: -30px;
+            transform-origin: top right;
+            scale: -1 1;
+            animation-duration: 14s;
+            animation-delay: -3s;
+        }
+        @keyframes web-sway {
+            0%, 100% { rotate: -0.8deg; }
+            50%      { rotate: 0.8deg; }
+        }
 
+        /* --- spiders hanging on fresh silk --- */
+        .spider {
+            position: absolute;
+            top: calc(var(--header-h) + 2px);
+            width: 1px;
+            transform-origin: 0 0;
+            animation: spider-dangle linear infinite;
+            will-change: transform;
+        }
+        .spider-thread {
+            position: absolute;
+            left: 0;
+            top: -320px;
+            width: 1px;
+            height: 320px;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.22));
+        }
+        .spider-body {
+            position: absolute;
+            left: -11px;
+            top: 0;
+            width: 22px;
+            height: 22px;
+            display: block;
+            filter: drop-shadow(0 0 5px rgba(249, 115, 22, 0.35));
+        }
+        .spider-1 { left: 17%; animation-duration: 47s; }
+        .spider-2 { left: 73%; animation-duration: 68s; animation-delay: -23s; }
+        .spider-2 .spider-body { left: -8px; width: 16px; height: 16px; }
+        .spider-2 .spider-thread { top: -260px; height: 260px; }
+        @keyframes spider-dangle {
+            0%   { transform: translateY(-104px) rotate(-2.5deg); }
+            6%   { transform: translateY(0) rotate(2deg); }
+            10%  { transform: translateY(0) rotate(-2deg); }
+            24%  { transform: translateY(34px) rotate(2.5deg); }
+            38%  { transform: translateY(26px) rotate(-2.5deg); }
+            54%  { transform: translateY(78px) rotate(2deg); }
+            66%  { transform: translateY(70px) rotate(-2deg); }
+            82%  { transform: translateY(28px) rotate(2.5deg); }
+            95%  { transform: translateY(-104px) rotate(-2deg); }
+            100% { transform: translateY(-104px) rotate(-2.5deg); }
+        }
+
+        /* --- bats: drifting flight path on the wrapper, flapping body inside --- */
         .bat {
             position: absolute;
             left: 0;
-            width: 20px;
-            height: 20px;
-            fill: rgba(249, 115, 22, 0.5);
             opacity: 0;
             animation: bat-fly linear infinite;
-            will-change: transform;
+            will-change: transform, opacity;
         }
-        .bat-1 { top: 92px;  animation-duration: 54s; animation-delay: 0s; }
-        .bat-2 { top: 140px; width: 15px; height: 15px; animation-duration: 73s; animation-delay: -16s; }
-        .bat-3 { top: 116px; width: 12px; height: 12px; animation-duration: 91s; animation-delay: -44s; }
-
+        .bat svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            fill: rgba(249, 115, 22, 0.68);
+            /* a warm halo so the wings read against the dark cards */
+            filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.45));
+            transform-origin: 50% 40%;
+            animation: bat-flap 0.34s ease-in-out infinite alternate;
+        }
+        .bat-rev { animation-name: bat-fly-rev; }
+        /* only the silhouette is mirrored: putting `scale` on the wrapper
+           would also flip its animated transform and send these bats the
+           same way as the others */
+        .bat-rev svg { scale: -1 1; }
+        .bat-1 { top: 92px;  width: 26px; height: 26px; animation-duration: 52s; animation-delay: -4s; }
+        .bat-2 { top: 150px; width: 15px; height: 15px; animation-duration: 71s; animation-delay: -19s; }
+        .bat-3 { top: 118px; width: 12px; height: 12px; animation-duration: 88s; animation-delay: -47s; }
+        .bat-4 { top: 214px; width: 17px; height: 17px; animation-duration: 63s; animation-delay: -33s; }
+        .bat-5 { top: 74px;  width: 13px; height: 13px; animation-duration: 96s; animation-delay: -61s; }
+        /* slightly out-of-step wingbeats read as more than one animal */
+        .bat-2 svg, .bat-4 svg { animation-duration: 0.44s; }
+        .bat-3 svg, .bat-5 svg { animation-duration: 0.28s; }
+        @keyframes bat-flap {
+            from { transform: scaleY(0.6) translateY(1.5px); }
+            to   { transform: scaleY(1) translateY(-1px); }
+        }
         @keyframes bat-fly {
-            0%   { transform: translateX(-10vw) translateY(0) rotate(-6deg); opacity: 0; }
-            10%  { opacity: 0.5; }
-            50%  { transform: translateX(50vw) translateY(-18px) rotate(5deg); opacity: 0.5; }
-            90%  { opacity: 0.5; }
-            100% { transform: translateX(112vw) translateY(8px) rotate(-4deg); opacity: 0; }
+            0%   { transform: translate(-12vw, 26px) rotate(-7deg); opacity: 0; }
+            8%   { opacity: 0.6; }
+            26%  { transform: translate(24vw, -14px) rotate(6deg); }
+            44%  { transform: translate(46vw, 12px) rotate(-3deg); }
+            62%  { transform: translate(68vw, -20px) rotate(5deg); }
+            80%  { opacity: 0.6; }
+            92%  { transform: translate(104vw, 6px) rotate(-6deg); opacity: 0.45; }
+            100% { transform: translate(116vw, 18px) rotate(-6deg); opacity: 0; }
         }
+        @keyframes bat-fly-rev {
+            0%   { transform: translate(112vw, 18px) rotate(6deg); opacity: 0; }
+            8%   { opacity: 0.55; }
+            26%  { transform: translate(76vw, -16px) rotate(-5deg); }
+            44%  { transform: translate(52vw, 10px) rotate(3deg); }
+            62%  { transform: translate(30vw, -18px) rotate(-6deg); }
+            80%  { opacity: 0.55; }
+            92%  { transform: translate(-6vw, 8px) rotate(5deg); opacity: 0.4; }
+            100% { transform: translate(-16vw, 20px) rotate(5deg); opacity: 0; }
+        }
+
+        /* --- embers drifting up off something burning below --- */
+        .ember {
+            position: absolute;
+            bottom: -2vh;
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: var(--hween-ember);
+            box-shadow: 0 0 8px 1px rgba(249, 115, 22, 0.7);
+            opacity: 0;
+            animation: ember-rise linear infinite;
+            will-change: transform, opacity;
+        }
+        .ember-1 { left: 6%;  animation-duration: 22s; animation-delay: -3s; }
+        .ember-2 { left: 21%; animation-duration: 29s; animation-delay: -14s; }
+        .ember-3 { left: 38%; animation-duration: 25s; animation-delay: -8s; }
+        .ember-4 { left: 54%; animation-duration: 33s; animation-delay: -21s; }
+        .ember-5 { left: 69%; animation-duration: 24s; animation-delay: -11s; }
+        .ember-6 { left: 83%; animation-duration: 31s; animation-delay: -26s; }
+        .ember-7 { left: 93%; animation-duration: 27s; animation-delay: -6s; }
+        @keyframes ember-rise {
+            0%   { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+            12%  { opacity: 0.75; }
+            50%  { transform: translate3d(14px, -38vh, 0) scale(1); opacity: 0.6; }
+            100% { transform: translate3d(-8px, -78vh, 0) scale(0.5); opacity: 0; }
+        }
+
+        /* --- a lamp that follows the pointer, lighting the page --- */
+        .hween-lantern {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 560px;
+            height: 560px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(249, 115, 22, 0.07), rgba(168, 85, 247, 0.04) 44%, transparent 68%);
+            opacity: 0;
+            transition: none;
+        }
+        body.halloween .hween-lantern { opacity: 1; }
 
         @media (max-width: 900px) {
             .cobweb { width: 84px; height: 84px; }
-            .bat-3 { display: none; }
+            .bat-3, .bat-5 { display: none; }
+            .spider-2 { display: none; }
+            .ember-5, .ember-6, .ember-7 { display: none; }
+            .hween-moon { width: 150px; height: 150px; right: 1%; }
+            .hween-eyes { left: 6%; bottom: 24%; }
             .halloween-bar { font-size: 0.6rem; letter-spacing: 0.1em; gap: 8px; }
         }
 
+        @media (max-width: 620px) {
+            .bat-4 { display: none; }
+            .ember-4 { display: none; }
+            .hween-moon, .hween-fog-2, .hween-eyes { display: none; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
-            .bat { display: none; }
+            .bat, .spider, .ember, .hween-eyes, .cobweb, .hween-moon, .hween-fog,
+            .pumpkin-icon, .halloween-bar::after { animation: none !important; }
+            .bat, .spider, .ember, .hween-eyes { display: none; }
+            .halloween-bar::after { display: none; }
+            .hween-lantern { display: none; }
         }
 
         @media print {
-            .hween-decor, .halloween-bar { display: none !important; }
+            .hween-atmos, .hween-decor, .halloween-bar { display: none !important; }
         }
     </style>
 </head>
@@ -1256,6 +1550,10 @@
             document.body.classList.add('halloween');
         }
     </script>
+
+    <div class="hween-atmos" aria-hidden="true">
+        <div class="hween-vignette"></div>
+    </div>
 
     <div class="restricted-view" id="restrictedPage">
         <div class="restricted-card">
@@ -1354,13 +1652,14 @@
                         </div>
                     </div>
 
-                    <label style="margin-bottom: 8px; display: block;">TRANSFORM OPTIONS <span style="font-weight: 400; text-transform: none; color: var(--text-dim);">— not implemented; the current transform ignores these settings</span></label>
+                    <label style="margin-bottom: 8px; display: block;">OBFUSCATION OPTIONS</label>
                     <div class="options-grid">
-                        <label class="option-toggle"><input type="checkbox" checked disabled id="optMinify"> Minify Code</label>
-                        <label class="option-toggle"><input type="checkbox" checked disabled id="optRename"> Variable Renaming</label>
-                        <label class="option-toggle"><input type="checkbox" checked disabled id="optEncrypt"> Encrypt Strings</label>
-                        <label class="option-toggle"><input type="checkbox" checked disabled id="optAntiTamper"> Anti-Tamper Shield</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optMinify"> Minify Code</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optRename"> Variable Renaming</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optAntiTamper"> Anti-Tamper Shield</label>
                     </div>
+                    <p class="options-note">Applied on the server while compiling. Minify and Variable Renaming rewrite the emitted source, so the payload is no longer a byte-for-byte copy of your script &mdash; the vault keeps your untouched copy for editing.</p>
 
                     <div class="input-group">
                         <label>LUAU / LUA SOURCE CODE</label>
@@ -1422,6 +1721,7 @@
 
     <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 
+    <!-- Seasonal layer: decorative only, never interactive. -->
     <div class="hween-decor" aria-hidden="true">
         <svg class="cobweb cobweb-tl" viewBox="0 0 100 100">
             <path d="M0 0h92M0 0l80 46M0 0l46 80M0 0v92"/>
@@ -1437,9 +1737,66 @@
             <path d="M66 0Q47.5 47.5 0 66"/>
             <path d="M88 0Q63.4 63.4 0 88"/>
         </svg>
-        <svg class="bat bat-1" viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg>
-        <svg class="bat bat-2" viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg>
-        <svg class="bat bat-3" viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg>
+
+        <div class="spider spider-1">
+            <span class="spider-thread"></span>
+            <svg class="spider-body" viewBox="0 0 24 24">
+                <g fill="none" stroke="rgba(249,115,22,0.72)" stroke-width="1.4" stroke-linecap="round">
+                    <path d="M9.6 10.2Q6 9 3.4 10.8"/>
+                    <path d="M9.3 11.8Q5.6 11.8 2.8 14.2"/>
+                    <path d="M9.5 13.2Q6.2 14.4 4 17"/>
+                    <path d="M9.9 14.4Q7.4 16.6 6 19"/>
+                    <path d="M14.4 10.2Q18 9 20.6 10.8"/>
+                    <path d="M14.7 11.8Q18.4 11.8 21.2 14.2"/>
+                    <path d="M14.5 13.2Q17.8 14.4 20 17"/>
+                    <path d="M14.1 14.4Q16.6 16.6 18 19"/>
+                </g>
+                <ellipse cx="12" cy="14" rx="3.2" ry="4" fill="rgba(249,115,22,0.82)"/>
+                <circle cx="12" cy="8.6" r="2.2" fill="rgba(249,115,22,0.9)"/>
+                <circle cx="11.2" cy="8.2" r="0.6" fill="#0b0809"/>
+                <circle cx="12.8" cy="8.2" r="0.6" fill="#0b0809"/>
+            </svg>
+        </div>
+        <div class="spider spider-2">
+            <span class="spider-thread"></span>
+            <svg class="spider-body" viewBox="0 0 24 24">
+                <g fill="none" stroke="rgba(249,115,22,0.72)" stroke-width="1.4" stroke-linecap="round">
+                    <path d="M9.6 10.2Q6 9 3.4 10.8"/>
+                    <path d="M9.3 11.8Q5.6 11.8 2.8 14.2"/>
+                    <path d="M9.5 13.2Q6.2 14.4 4 17"/>
+                    <path d="M9.9 14.4Q7.4 16.6 6 19"/>
+                    <path d="M14.4 10.2Q18 9 20.6 10.8"/>
+                    <path d="M14.7 11.8Q18.4 11.8 21.2 14.2"/>
+                    <path d="M14.5 13.2Q17.8 14.4 20 17"/>
+                    <path d="M14.1 14.4Q16.6 16.6 18 19"/>
+                </g>
+                <ellipse cx="12" cy="14" rx="3.2" ry="4" fill="rgba(249,115,22,0.82)"/>
+                <circle cx="12" cy="8.6" r="2.2" fill="rgba(249,115,22,0.9)"/>
+                <circle cx="11.2" cy="8.2" r="0.6" fill="#0b0809"/>
+                <circle cx="12.8" cy="8.2" r="0.6" fill="#0b0809"/>
+            </svg>
+        </div>
+
+        <span class="bat bat-1"><svg viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg></span>
+        <span class="bat bat-2"><svg viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg></span>
+        <span class="bat bat-3"><svg viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg></span>
+        <span class="bat bat-4 bat-rev"><svg viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg></span>
+        <span class="bat bat-5 bat-rev"><svg viewBox="0 0 24 24"><path d="M12 9c-.9 0-1.6.5-2.1 1.1C8.6 8.6 7 7.6 5 7.6c.8 1.1 1.3 2.4 1.3 3.8-1 .5-1.7 1.5-1.7 2.7 0 1.6 1.3 2.9 3 3.1.7 1.7 2.2 3 4 3.3-.3-1.5-.2-3 .3-4.4.5 1.4.6 2.9.3 4.4 1.8-.3 3.3-1.6 4-3.3 1.7-.2 3-1.5 3-3.1 0-1.2-.7-2.2-1.7-2.7 0-1.4.5-2.7 1.3-3.8-2 0-3.6 1-4.9 2.5C13.6 9.5 12.9 9 12 9z"/></svg></span>
+
+        <span class="ember ember-1"></span>
+        <span class="ember ember-2"></span>
+        <span class="ember ember-3"></span>
+        <span class="ember ember-4"></span>
+        <span class="ember ember-5"></span>
+        <span class="ember ember-6"></span>
+        <span class="ember ember-7"></span>
+
+        <div class="hween-moon"></div>
+        <div class="hween-fog hween-fog-1"></div>
+        <div class="hween-fog hween-fog-2"></div>
+        <div class="hween-eyes"><i></i><i></i></div>
+
+        <div class="hween-lantern" id="hweenLantern"></div>
     </div>
 
     <div class="modal-overlay" id="keyModal">
@@ -1787,6 +2144,35 @@
             window.location.href = '/auth/logout';
         }
 
+        /* The four obfuscation toggles are read straight off the form and sent
+           to the server, which is the side that can actually transform code. */
+        function readObfuscationOptions() {
+            const checked = (id) => {
+                const el = document.getElementById(id);
+                return !el || el.checked;
+            };
+            return {
+                minify: checked('optMinify'),
+                rename: checked('optRename'),
+                encryptStrings: checked('optEncrypt'),
+                antiTamper: checked('optAntiTamper')
+            };
+        }
+
+        /* Turns the server's report into a line of plain text: real counts of
+           what each pass changed, not a promise that it ran. */
+        function describeAppliedOptions(applied, stats) {
+            const on = Array.isArray(applied) ? applied : [];
+            if (on.length === 0) return 'No obfuscation options were applied.';
+            const count = (key) => (stats && Number(stats[key])) || 0;
+            const parts = [];
+            if (on.includes('minify')) parts.push(count('commentsRemoved') + ' comments stripped');
+            if (on.includes('rename')) parts.push(count('identifiersRenamed') + ' identifiers renamed');
+            if (on.includes('encryptStrings')) parts.push(count('stringsEncoded') + ' strings encoded');
+            if (on.includes('antiTamper')) parts.push('integrity check armed');
+            return parts.join(' / ');
+        }
+
         function safeBase64Encode(str) {
             const bytes = new TextEncoder().encode(str);
             let binString = "";
@@ -1815,6 +2201,7 @@
             statusMsg.className = 'is-pending';
             statusMsg.innerText = editId ? 'Updating script build...' : 'Compiling payload...';
             document.getElementById('deployBtn').disabled = true;
+            const options = readObfuscationOptions();
             try {
                 const payload = safeBase64Encode(scriptInput);
                 const res = await fetch('/api/obfuscate', {
@@ -1824,13 +2211,14 @@
                         scriptPayload: payload, 
                         scriptName, 
                         fileType, 
-                        editId
+                        editId,
+                        options
                     })
                 });
                 const data = await res.json();
                 if (data.success) {
                     statusMsg.className = 'is-success';
-                    statusMsg.innerText = editId ? 'Script updated' : 'Deployment complete';
+                    statusMsg.innerText = (editId ? 'Script updated' : 'Deployment complete') + ' — ' + describeAppliedOptions(data.applied, data.stats);
                     showToast(editId ? 'Script build updated.' : 'Script deployed to the vault.', 'success');
                     document.getElementById('outputBox').style.display = 'block';
                     document.getElementById('loaderOutput').innerText = data.loader;
@@ -1973,8 +2361,36 @@
                 : (days === 1 ? '1 day to go' : days + ' days to go');
         }
 
+        /* The lamp only follows a real pointer: no listener is attached on
+           touch devices, and reduced-motion users never get it at all. */
+        function initHalloweenLantern() {
+            if (!document.body.classList.contains('halloween')) return;
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+            const lamp = document.getElementById('hweenLantern');
+            if (!lamp) return;
+
+            let x = window.innerWidth * 0.5;
+            let y = window.innerHeight * 0.35;
+            let queued = false;
+
+            const paint = () => {
+                queued = false;
+                lamp.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0) translate(-50%, -50%)';
+            };
+
+            window.addEventListener('pointermove', (e) => {
+                x = e.clientX;
+                y = e.clientY;
+                if (!queued) { queued = true; requestAnimationFrame(paint); }
+            }, { passive: true });
+
+            paint();
+        }
+
         handleRouting();
         initHalloween();
+        initHalloweenLantern();
     </script>
 </body>
 </html>

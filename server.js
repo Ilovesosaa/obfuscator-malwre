@@ -124,10 +124,459 @@ async function saveVault(vault) {
     vaultDatabase = vault;
 }
 
+/* ============================================================
+   Obfuscation options
+
+   The four toggles in the UI used to be decorative and the server
+   ignored them. They now drive a real pass over the source before it
+   is XOR-wrapped:
+
+     minify         drop comments and squeeze whitespace (never inside a
+                    string; `--!` directives are kept)
+     rename         rename top-level local identifiers, but only when the
+                    name can be proven unambiguous (see renameIdentifiers)
+     encryptStrings emit short string literals as byte sequences that are
+                    rebuilt at runtime, so they are not readable in the payload
+     antiTamper     verify a checksum of the payload before running it
+
+   Everything here is deliberately conservative: a construct that cannot be
+   proven safe is skipped, and the counts are reported back to the UI.
+   ============================================================ */
+
+/* The four switches arrive from the UI as booleans. Anything missing counts as
+   on, which matches the checked boxes the form ships with. */
+function normalizeObfuscationOptions(raw) {
+    const input = raw && typeof raw === 'object' ? raw : {};
+    return {
+        minify: input.minify !== false,
+        rename: input.rename !== false,
+        encryptStrings: input.encryptStrings !== false,
+        antiTamper: input.antiTamper !== false
+    };
+}
+
+/* Shared by the server and the emitted payload. It is deliberately below
+   2^31 so that every intermediate value fits a signed 32-bit integer: an
+   implementation that does integer maths in 32 bits must reach the same
+   number as this one, or a legitimate script would refuse to run. */
+const INTEGRITY_MODULUS = 1000000007;
+
+const LUA_KEYWORDS = new Set([
+    'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function',
+    'if', 'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then',
+    'true', 'until', 'while', 'continue', 'export', 'type', 'typeof'
+]);
+
+/* Names the renamer never touches: the wrapper's own helper plus anything a
+   script may reach for by name through an executor or the Roblox globals. */
+const RESERVED_NAMES = new Set([
+    'game', 'workspace', 'script', 'task', 'Instance', 'Enum', 'Vector3',
+    'CFrame', 'Color3', 'UDim2', 'UDim', 'Ray', 'Region3', 'BrickColor',
+    'TweenInfo', 'Random', 'Players', 'print', 'warn', 'error', 'assert',
+    'pcall', 'xpcall', 'select', 'type', 'typeof', 'tostring', 'tonumber',
+    'ipairs', 'pairs', 'next', 'rawget', 'rawset', 'rawequal', 'setmetatable',
+    'getmetatable', 'unpack', 'table', 'string', 'math', 'os', 'io',
+    'coroutine', 'bit32', 'utf8', 'debug', 'require', 'loadstring', 'load',
+    'spawn', 'wait', 'delay', 'tick', 'self', '_G', '_ENV', 'NIX6_STR'
+]);
+
+/* Reads a long bracket ([==[ ... ]==]) starting at `at`. Returns null when the
+   bracket is not a long bracket, so the caller can treat it as plain code. */
+function readLongBracket(src, at) {
+    let k = at + 1;
+    let level = 0;
+    while (src[k] === '=') { level++; k++; }
+    if (src[k] !== '[') return null;
+    const closeMark = ']' + '='.repeat(level) + ']';
+    const close = src.indexOf(closeMark, k + 1);
+    if (close === -1) return null;
+    return { end: close + closeMark.length };
+}
+
+/* Splits source into code / string / comment runs. This is the only place that
+   needs to understand Lua's lexical structure; every transform works on the
+   runs, so nothing can ever be edited inside a string or comment by accident. */
+function scanLua(src) {
+    const segs = [];
+    let i = 0;
+    let codeStart = 0;
+    const n = src.length;
+    const pushCode = (end) => {
+        if (end > codeStart) segs.push({ type: 'code', text: src.slice(codeStart, end) });
+    };
+
+    while (i < n) {
+        const c = src[i];
+
+        if (c === '-' && src[i + 1] === '-') {
+            pushCode(i);
+            const long = readLongBracket(src, i + 2);
+            if (long) {
+                segs.push({ type: 'comment', text: src.slice(i, long.end) });
+                i = long.end;
+            } else {
+                let j = i;
+                while (j < n && src[j] !== '\n') j++;
+                segs.push({ type: 'comment', text: src.slice(i, j) });
+                i = j;
+            }
+            codeStart = i;
+            continue;
+        }
+
+        if (c === '"' || c === "'" || c === '`') {
+            pushCode(i);
+            let j = i + 1;
+            while (j < n) {
+                if (src[j] === '\\') { j += 2; continue; }
+                if (src[j] === c) { j++; break; }
+                if (src[j] === '\n') break;      // unterminated: stop at the line end
+                j++;
+            }
+            segs.push({ type: 'string', text: src.slice(i, j), quote: c });
+            i = j;
+            codeStart = i;
+            continue;
+        }
+
+        if (c === '[') {
+            const long = readLongBracket(src, i);
+            if (long) {
+                pushCode(i);
+                segs.push({ type: 'string', text: src.slice(i, long.end), quote: '[' });
+                i = long.end;
+                codeStart = i;
+                continue;
+            }
+        }
+
+        i++;
+    }
+
+    pushCode(n);
+    return segs;
+}
+
+function segmentsToText(segs) {
+    return segs.map((s) => s.text).join('');
+}
+
+/* 1 where the character is code, 0 inside a string or comment. */
+function buildMask(segs) {
+    const mask = new Uint8Array(segmentsToText(segs).length);
+    let at = 0;
+    for (const seg of segs) {
+        if (seg.type === 'code') mask.fill(1, at, at + seg.text.length);
+        at += seg.text.length;
+    }
+    return mask;
+}
+
+/* --- minify ------------------------------------------------------------- */
+function minifySource(src) {
+    const segs = scanLua(src);
+    const out = [];
+    let commentsRemoved = 0;
+
+    for (const seg of segs) {
+        if (seg.type === 'comment') {
+            if (/^--!\w/.test(seg.text)) { out.push(seg); continue; }   // --!strict etc.
+            commentsRemoved++;
+            continue;
+        }
+        if (seg.type !== 'code') { out.push(seg); continue; }
+        const lines = seg.text
+            .replace(/\r\n?/g, '\n')
+            .split('\n')
+            .map((line) => line.replace(/[ \t]+/g, ' ').replace(/[ \t]+$/, ''));
+        /* Blank lines go, but never the empty strings that merely mark where
+           this run starts or ends: those carry the newline separating it from
+           the string or comment next door, and losing one glues two tokens
+           together (`local n = "a"` + `print(n)` became `"a"print(n)`). */
+        const kept = lines.filter((line, index) =>
+            index === 0 || index === lines.length - 1 || line.trim() !== '');
+        out.push({ type: 'code', text: kept.join('\n') });
+    }
+
+    return { text: segmentsToText(out).replace(/^\n+/, '').replace(/\n+$/, ''), commentsRemoved };
+}
+
+/* --- rename ------------------------------------------------------------- */
+
+/* Block depth: 0 means "top level of the chunk". Only there can we prove a
+   single `local` stays in scope for the rest of the file. */
+function topLevelLocals(src, mask) {
+    const depthAt = new Array(src.length);
+    const wordRe = /\b(function|then|do|repeat|end|until)\b/g;
+    let depth = 0;
+    let last = 0;
+    let m;
+    while ((m = wordRe.exec(src)) !== null) {
+        depthAt.fill(depth, last, m.index);
+        const w = m[1];
+        if (w === 'end' || w === 'until') depth = Math.max(0, depth - 1);
+        else depth++;
+        depthAt.fill(mask[m.index] === 1 ? depth : depth, m.index, m.index + w.length);
+        last = m.index + w.length;
+    }
+    depthAt.fill(depth, last, src.length);
+
+    const declarations = new Map();      // name -> [{ index, stmtEnd, depth }]
+    const localRe = /\blocal\b/g;
+    while ((m = localRe.exec(src)) !== null) {
+        if (mask[m.index] !== 1) continue;
+        const depth = depthAt[m.index];
+        let i = m.index + m[0].length;
+        const skipWs = () => { while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++; };
+        const here = [];
+
+        skipWs();
+        if (src.startsWith('function', i) && !/[A-Za-z0-9_]/.test(src[i + 8] || '')) {
+            i += 8;
+            skipWs();
+            const nm = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i, i + 120));
+            if (nm) { here.push({ name: nm[0], index: i }); i += nm[0].length; }
+        } else {
+            for (;;) {
+                skipWs();
+                const nm = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i, i + 120));
+                if (!nm) break;
+                here.push({ name: nm[0], index: i });
+                i += nm[0].length;
+                skipWs();
+                if (src[i] === ':') {                       // Luau type annotation
+                    i++;
+                    let typeDepth = 0;
+                    while (i < src.length) {
+                        const c = src[i];
+                        if (c === '(' || c === '{') typeDepth++;
+                        else if (c === ')' || c === '}') { if (typeDepth === 0) break; typeDepth--; }
+                        else if (typeDepth === 0 && (c === ',' || c === '=' || c === '\n' || c === ';')) break;
+                        i++;
+                    }
+                    skipWs();
+                }
+                if (src[i] === ',') { i++; continue; }
+                break;
+            }
+        }
+
+        skipWs();
+        let stmtEnd = i;
+        if (src[i] === '=') {
+            let j = i + 1;
+            let d = 0;
+            while (j < src.length) {
+                const c = src[j];
+                if (c === '(' || c === '{' || c === '[') d++;
+                else if (c === ')' || c === '}' || c === ']') d--;
+                else if (d <= 0 && (c === '\n' || c === ';')) break;
+                j++;
+            }
+            stmtEnd = j;
+        }
+
+        for (const decl of here) {
+            if (!declarations.has(decl.name)) declarations.set(decl.name, []);
+            declarations.get(decl.name).push({
+                index: decl.index,
+                depth,
+                initializer: src.slice(i, stmtEnd)
+            });
+        }
+    }
+
+    return declarations;
+}
+
+function renameIdentifiers(src) {
+    const segs = scanLua(src);
+    const mask = buildMask(segs);
+
+    const occurrences = new Map();
+    const idRe = /[A-Za-z_][A-Za-z0-9_]*/g;
+    let m;
+    while ((m = idRe.exec(src)) !== null) {
+        if (mask[m.index] !== 1) continue;
+        if (!occurrences.has(m[0])) occurrences.set(m[0], []);
+        occurrences.get(m[0]).push(m.index);
+    }
+
+    const declarations = topLevelLocals(src, mask);
+    const newNames = new Map();
+    const skipped = [];
+
+    for (const [name, decls] of declarations) {
+        if (decls.length !== 1) { skipped.push(name); continue; }             // shadowed/redeclared
+        const decl = decls[0];
+        if (decl.depth !== 0) { skipped.push(name); continue; }               // scope may end early
+        if (LUA_KEYWORDS.has(name) || RESERVED_NAMES.has(name) || /^NIX6_/.test(name)) continue;
+        if (name.length < 2) continue;
+
+        const occ = occurrences.get(name) || [];
+        if (occ.length < 2) continue;                                          // nothing to gain
+        if (occ[0] < decl.index) { skipped.push(name); continue; }              // a global with the same name
+        if (new RegExp(`[.:]\\s*${name}\\b`).test(src)) { skipped.push(name); continue; }        // t.name / t:name
+        if (new RegExp(`[{,]\\s*${name}\\s*=`).test(src)) { skipped.push(name); continue; }       // { name = ... }
+        if (new RegExp(`\\bgoto\\s+${name}\\b|::\\s*${name}\\s*::`).test(src)) { skipped.push(name); continue; }
+        if (new RegExp(`\\b${name}\\b`).test(decl.initializer)) { skipped.push(name); continue; } // `local x = x or {}`
+
+        let fresh = '_' + Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 5);
+        while (occurrences.has(fresh) || /^\d/.test(fresh)) {
+            fresh = '_' + Math.random().toString(36).slice(2, 10);
+        }
+        newNames.set(name, fresh);
+    }
+
+    if (newNames.size === 0) return { text: src, renamed: [], skipped };
+
+    const edits = [];
+    for (const [name, fresh] of newNames) {
+        for (const index of occurrences.get(name)) edits.push([index, name.length, fresh]);
+    }
+    edits.sort((a, b) => a[0] - b[0]);
+
+    let out = '';
+    let last = 0;
+    for (const [index, len, fresh] of edits) {
+        out += src.slice(last, index) + fresh;
+        last = index + len;
+    }
+    out += src.slice(last);
+
+    return { text: out, renamed: [...newNames.keys()], skipped };
+}
+
+/* --- string literals ---------------------------------------------------- */
+
+/* Decodes a quoted Lua string literal into its runtime bytes. Returns null for
+   anything unusual (unknown escape, malformed) so the caller can leave the
+   literal exactly as it was. */
+function decodeQuotedLiteral(literal) {
+    const quote = literal[0];
+    if (quote !== '"' && quote !== "'") return null;
+    const body = literal.slice(1, literal.length - (literal[literal.length - 1] === quote ? 1 : 0));
+    const bytes = [];
+    for (let i = 0; i < body.length; i++) {
+        const c = body[i];
+        if (c !== '\\') {
+            for (const b of Buffer.from(c, 'utf8')) bytes.push(b);
+            continue;
+        }
+        const e = body[++i];
+        if (e === undefined) return null;
+        const simple = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '\\': 92, '"': 34, "'": 39, '\n': 10 };
+        if (Object.prototype.hasOwnProperty.call(simple, e)) { bytes.push(simple[e]); continue; }
+        if (e === 'x') {
+            const hex = /^[0-9a-fA-F]{1,2}/.exec(body.slice(i + 1));
+            if (!hex) return null;
+            bytes.push(parseInt(hex[0], 16));
+            i += hex[0].length;
+            continue;
+        }
+        if (e === 'z') { while (/[ \t\r\n\v\f]/.test(body[i + 1] || '')) i++; continue; }
+        if (e === 'u') {
+            const u = /^\{([0-9a-fA-F]+)\}/.exec(body.slice(i + 1));
+            if (!u) return null;
+            for (const b of Buffer.from(String.fromCodePoint(parseInt(u[1], 16)), 'utf8')) bytes.push(b);
+            i += u[0].length;
+            continue;
+        }
+        if (/[0-9]/.test(e)) {
+            const dec = /^[0-9]{1,3}/.exec(body.slice(i));
+            const code = parseInt(dec[0], 10);
+            if (code > 255) return null;
+            bytes.push(code);
+            i += dec[0].length - 1;
+            continue;
+        }
+        return null;                       // unknown escape: leave this literal alone
+    }
+    return bytes;
+}
+
+function encodeStrings(src) {
+    const segs = scanLua(src);
+    const out = [];
+    let encoded = 0;
+    let skipped = 0;
+
+    for (const seg of segs) {
+        if (seg.type !== 'string') { out.push(seg); continue; }
+        // long brackets ([==[..]==]) and Luau interpolated (`..{..}..`) strings
+        // keep their own decoding rules, so they are left readable.
+        if (seg.quote !== '"' && seg.quote !== "'") { skipped++; out.push(seg); continue; }
+        const bytes = decodeQuotedLiteral(seg.text);
+        if (!bytes || bytes.length === 0) { skipped++; out.push(seg); continue; }
+        encoded++;
+        /* Keep a space between the rebuilt call and what came before it: after
+           minify trimmed a trailing space, `x = 1 or "none"` would otherwise
+           come out as `x = 1 orNIX6_STR{...}`, which is one long identifier. */
+        const previous = out.length ? out[out.length - 1].text : '';
+        const separator = previous !== '' && !/[\s([{,;]$/.test(previous) ? ' ' : '';
+        out.push({ type: 'code', text: separator + 'NIX6_STR{' + bytes.join(',') + '}' });
+    }
+
+    if (encoded === 0) return { text: src, encoded, skipped };
+
+    const helper = [
+        'local NIX6_STR = function(_t)',
+        ' local _o = {}',
+        ' for _i = 1, #_t do _o[_i] = string.char(_t[_i]) end',
+        ' return table.concat(_o)',
+        'end',
+        ''
+    ].join('\n');
+
+    return { text: helper + segmentsToText(out), encoded, skipped };
+}
+
 // --- OBFUSCATION ENGINE (reversible XOR wrapper; not a VM, not encryption) ---
 class ObfuscatorEngine {
-    constructor(sourceCode) {
+    constructor(sourceCode, options) {
         this.source = sourceCode;
+        this.options = normalizeObfuscationOptions(options);
+        this.stats = {
+            commentsRemoved: 0,
+            identifiersRenamed: 0,
+            stringsEncoded: 0,
+            stringsSkipped: 0,
+            integrity: 0
+        };
+    }
+
+    /* Runs the enabled options over the source and records what each one did,
+       so the UI can report real numbers rather than a promise. */
+    prepareSource() {
+        let text = this.source;
+
+        if (this.options.minify) {
+            const result = minifySource(text);
+            text = result.text;
+            this.stats.commentsRemoved = result.commentsRemoved;
+        }
+        if (this.options.rename) {
+            const result = renameIdentifiers(text);
+            text = result.text;
+            this.stats.identifiersRenamed = result.renamed.length;
+        }
+        if (this.options.encryptStrings) {
+            const result = encodeStrings(text);
+            text = result.text;
+            this.stats.stringsEncoded = result.encoded;
+            this.stats.stringsSkipped = result.skipped;
+        }
+
+        return text;
+    }
+
+    appliedOptions() {
+        const applied = [];
+        if (this.options.minify) applied.push('minify');
+        if (this.options.rename) applied.push('rename');
+        if (this.options.encryptStrings) applied.push('encryptStrings');
+        if (this.options.antiTamper) applied.push('antiTamper');
+        return applied;
     }
 
     _randomId(length = 14) {
@@ -158,12 +607,24 @@ class ObfuscatorEngine {
     buildProtectedVM() {
         const op = this._generateOpCodes();
         const xorKey = Math.floor(Math.random() * 180) + 35;
-        const srcBytes = Buffer.from(this.source, 'utf-8');
-        const encBytes = [];
+        const prepared = this.prepareSource();
+        const srcBytes = Buffer.from(prepared, 'utf-8');
 
+        const encBytes = [];
         for (let i = 0; i < srcBytes.length; i++) {
             encBytes.push(srcBytes[i] ^ xorKey);
         }
+
+        /* Anti-tamper: position-weighted sum of the *encoded* bytes, which are
+           exactly what the payload carries. Summing those instead of the XOR
+           result keeps both sides in integer arithmetic, so the check cannot
+           drift on a runtime where bit32 is missing and the pure-Lua XOR
+           fallback (which returns floats) is doing the decoding. */
+        let integrity = 0;
+        for (let i = 0; i < encBytes.length; i++) {
+            integrity = (integrity + encBytes[i] * (i + 1)) % INTEGRITY_MODULUS;
+        }
+        this.stats.integrity = integrity;
 
         const v_vm = this._randomId();
         const v_bytecode = this._randomId();
@@ -179,14 +640,29 @@ class ObfuscatorEngine {
 
         const formattedBytes = '{' + encBytes.join(',') + '}';
 
-        return `-- [[ Nix6 obfuscation wrapper: reversible XOR of source bytes. Not encryption, not a security boundary. ]]
-local function ${v_vm}(...)
-    local ${v_env} = getfenv and getfenv() or _ENV
-    if debug and debug.getmetatable then
+        const tamperGuard = this.options.antiTamper ? `    if debug and debug.getmetatable then
         local _meta = debug.getmetatable(${v_env})
         if _meta then while true do end end
     end
 
+` : '';
+
+        /* The integrity check has to be emitted after the byte table and the
+           XOR helper exist, or it would read them as missing globals. */
+        const integrityCheck = this.options.antiTamper ? `    local _int = 0
+    for _i = 1, #${v_bytecode} do
+        _int = (_int + ${v_bytecode}[_i] * _i) % ${INTEGRITY_MODULUS}
+    end
+    if _int ~= ${integrity} then
+        error("Nix6: payload integrity check failed")
+    end
+
+` : '';
+
+        return `-- [[ Nix6 obfuscation wrapper: reversible XOR of source bytes. Not encryption, not a security boundary. ]]
+local function ${v_vm}(...)
+    local ${v_env} = getfenv and getfenv() or _ENV
+${tamperGuard}
     local ${v_bxor} = bit32 and bit32.bxor or function(a, b)
         local r, p = 0, 1
         while a > 0 or b > 0 do
@@ -208,7 +684,7 @@ local function ${v_vm}(...)
         return table.concat(_out)
     end
 
-    local ${v_consts} = {
+${integrityCheck}    local ${v_consts} = {
         [1] = ${v_decode}(${v_bytecode}, ${v_k})
     }
 
@@ -452,6 +928,7 @@ app.post('/api/obfuscate', async (req, res) => {
     }
 
     const { scriptPayload, scriptName, fileType, editId } = req.body;
+    const options = normalizeObfuscationOptions(req.body.options);
     if (!scriptPayload) {
         return res.status(400).json({ success: false, error: 'Script payload is missing.' });
     }
@@ -459,7 +936,7 @@ app.post('/api/obfuscate', async (req, res) => {
     try {
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
         
-        const engine = new ObfuscatorEngine(decodedCode);
+        const engine = new ObfuscatorEngine(decodedCode, options);
         const obfuscatedCode = engine.buildProtectedVM();
 
         const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -499,7 +976,13 @@ app.post('/api/obfuscate', async (req, res) => {
         }
 
         await saveVault(currentVault);
-        res.json({ success: true, loader: loaderString, id: scriptId });
+        res.json({
+            success: true,
+            loader: loaderString,
+            id: scriptId,
+            applied: engine.appliedOptions(),
+            stats: engine.stats
+        });
     } catch (err) {
         console.error('Obfuscation Error:', err);
         res.status(500).json({ success: false, error: 'Failed to process script deployment.' });
