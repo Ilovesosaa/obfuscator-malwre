@@ -145,6 +145,16 @@ async function saveVault(vault) {
 
 /* The four switches arrive from the UI as booleans. Anything missing counts as
    on, which matches the checked boxes the form ships with. */
+// Emoji character ranges for detection and preservation
+// Emoji are in these Unicode ranges (code points):
+// - 0x1F600-0x1F64F: Emoticons
+// - 0x1F300-0x1F5FF: Miscellaneous Symbols and Pictographs
+// - 0x1F680-0x1F6FF: Transport and Map Symbols
+// - 0x2600-0x26FF: Miscellaneous Symbols
+// - 0x2700-0x27BF: Dingbats
+// - 0xFE00-0xFE0F: Variation Selectors
+// - 0x1F900-0x1F9FF: Supplemental Symbols and Pictographs
+// - 0x1FA00-0x1FA6F: Chess Symbols
 function normalizeObfuscationOptions(raw) {
     const input = raw && typeof raw === 'object' ? raw : {};
     return {
@@ -153,6 +163,75 @@ function normalizeObfuscationOptions(raw) {
         encryptStrings: input.encryptStrings !== false,
         antiTamper: input.antiTamper !== false
     };
+}
+
+/* Checks if a Unicode code point is an emoji (simplified check).
+   Returns true if the code point falls within known emoji ranges.
+   This is used to preserve emoji strings during minify/encode passes.
+*/
+function isEmojiCodePoint(codePoint) {
+    // Comprehensive emoji range check - true emoji have specific code point ranges
+    if (codePoint >= 0x1F600 && codePoint <= 0x1F64F) return true; // Emoticons
+    if (codePoint >= 0x1F300 && codePoint <= 0x1F5FF) return true; // Misc Symbols & Pictographs
+    if (codePoint >= 0x1F680 && codePoint <= 0x1F6FF) return true; // Transport & Map
+    if (codePoint >= 0x2600 && codePoint <= 0x26FF) return true; // Misc Symbols
+    if (codePoint >= 0x2700 && codePoint <= 0x27BF) return true; // Dingbats
+    if (codePoint >= 0xFE00 && codePoint <= 0xFE0F) return true; // Variation Selectors
+    if (codePoint >= 0x1F900 && codePoint <= 0x1F9FF) return true; // Supplemental
+    if (codePoint >= 0x1FA00 && codePoint <= 0x1FA6F) return true; // Chess
+    if (codePoint >= 0x1F1E6 && codePoint <= 0x1F1FF) return true; // Regional Indicator (flags)
+    if (codePoint >= 0xE0020 && codePoint <= 0xE007F) return true; // Tag sequences (flags)
+    if (codePoint >= 0x2B00 && codePoint <= 0x2BFF) return true; // Stars, arrows
+    if (codePoint >= 0x1F000 && codePoint <= 0x1F0FF) return true; // Mahjong, playing cards
+    if (codePoint === 0x00A9 || codePoint === 0x00AE) return true; // (c), (r) forms
+    if (codePoint === 0x2122 || codePoint === 0x2139) return true; // tm, info
+    // NOTE: general punctuation (U+2000-U+206F), U+FEFF and U+FFFC-FFFD are
+    // deliberately NOT treated as emoji: they occur in ordinary prose, and
+    // flagging those strings would silently skip minify/string encoding for
+    // a large share of real scripts.
+    return false;
+}
+
+/* Extracts Unicode code points from a UTF-8 string, yielding numeric code
+   points. Handles every UTF-8 byte length, so skin tone modifiers, ZWJ
+   sequences and flags are read correctly. */
+function* extractCodePoints(src) {
+    const buf = Buffer.from(src, 'utf8');
+    let i = 0;
+    while (i < buf.length) {
+        const byte = buf[i];
+        let codePoint = 0;
+        if (byte < 0x80) {
+            // 1-byte: ASCII (0x00-0x7F)
+            codePoint = byte;
+            i++;
+        } else if (byte >= 0xC0 && byte <= 0xDF) {
+            // 2-byte sequence (U+0080 - U+07FF)
+            codePoint = (byte & 0x1F) << 6 | (buf[i + 1] & 0x3F);
+            i += 2;
+        } else if (byte >= 0xE0 && byte <= 0xEF) {
+            // 3-byte sequence (U+0800 - U+FFFF, most emoji)
+            codePoint = (byte & 0x0F) << 12 | (buf[i + 1] & 0x3F) << 6 | (buf[i + 2] & 0x3F);
+            i += 3;
+        } else if (byte >= 0xF0 && byte <= 0xF7) {
+            // 4-byte sequence (U+10000 and above, extended emoji)
+            codePoint = (byte & 0x07) << 18 | (buf[i + 1] & 0x3F) << 12 | (buf[i + 2] & 0x3F) << 6 | (buf[i + 3] & 0x3F);
+            i += 4;
+        } else {
+            // Continuation byte or invalid - skip
+            i++;
+            continue;
+        }
+        yield codePoint;
+    }
+}
+
+/* Returns true if str contains any emoji code point. Safe for long strings. */
+function stringContainsEmoji(str) {
+    for (const cp of extractCodePoints(str)) {
+        if (isEmojiCodePoint(cp)) return true;
+    }
+    return false;
 }
 
 /* Shared by the server and the emitted payload. It is deliberately below
@@ -270,13 +349,13 @@ function buildMask(segs) {
         at += seg.text.length;
     }
     return mask;
-}
-
-/* --- minify ------------------------------------------------------------- */
+}/* --- minify ------------------------------------------------------------- */
 function minifySource(src) {
     const segs = scanLua(src);
     const out = [];
     let commentsRemoved = 0;
+    let emojiPreserved = 0;
+    let tokensSqueezed = 0;
 
     for (const seg of segs) {
         if (seg.type === 'comment') {
@@ -285,6 +364,16 @@ function minifySource(src) {
             continue;
         }
         if (seg.type !== 'code') { out.push(seg); continue; }
+        // Preserve emoji strings - don't minify inside emoji strings
+        // Emoji strings contain multi-byte UTF-8 characters that would be corrupted
+        // if we strip whitespace/comments inside them
+        const hasEmoji = stringContainsEmoji(seg.text);
+        if (hasEmoji) {
+// For strings with emoji, keep the entire string intact
+            out.push(seg);
+            emojiPreserved++;
+            continue;
+        }
         const lines = seg.text
             .replace(/\r\n?/g, '\n')
             .split('\n')
@@ -295,10 +384,13 @@ function minifySource(src) {
            together (`local n = "a"` + `print(n)` became `"a"print(n)`). */
         const kept = lines.filter((line, index) =>
             index === 0 || index === lines.length - 1 || line.trim() !== '');
-        out.push({ type: 'code', text: kept.join('\n') });
+        // Squeeze consecutive spaces within kept lines
+        const squeezed = kept.map(line => line.replace(/ {2,}/g, ' '));
+        out.push({ type: 'code', text: squeezed.join('\n') });
+        tokensSqueezed += kept.length - squeezed.length;
     }
 
-    return { text: segmentsToText(out).replace(/^\n+/, '').replace(/\n+$/, ''), commentsRemoved };
+    return { text: segmentsToText(out).replace(/^\n+/, '').replace(/\n+$/, ''), commentsRemoved, emojiPreserved, tokensSqueezed };
 }
 
 /* --- rename ------------------------------------------------------------- */
@@ -493,9 +585,7 @@ function decodeQuotedLiteral(literal) {
         return null;                       // unknown escape: leave this literal alone
     }
     return bytes;
-}
-
-function encodeStrings(src) {
+}function encodeStrings(src) {
     const segs = scanLua(src);
     const out = [];
     let encoded = 0;
@@ -508,6 +598,9 @@ function encodeStrings(src) {
         if (seg.quote !== '"' && seg.quote !== "'") { skipped++; out.push(seg); continue; }
         const bytes = decodeQuotedLiteral(seg.text);
         if (!bytes || bytes.length === 0) { skipped++; out.push(seg); continue; }
+        // If the string contains emoji code points, preserve it as-is rather than encoding
+        // emoji would be corrupted if split into byte arrays for NIX6_STR encoding
+        if (stringContainsEmoji(seg.text)) { skipped++; out.push(seg); continue; }
         encoded++;
         /* Keep a space between the rebuilt call and what came before it: after
            minify trimmed a trailing space, `x = 1 or "none"` would otherwise
@@ -541,6 +634,8 @@ class ObfuscatorEngine {
             identifiersRenamed: 0,
             stringsEncoded: 0,
             stringsSkipped: 0,
+            emojiPreserved: 0,
+            tokensSqueezed: 0,
             integrity: 0
         };
     }
@@ -554,6 +649,8 @@ class ObfuscatorEngine {
             const result = minifySource(text);
             text = result.text;
             this.stats.commentsRemoved = result.commentsRemoved;
+            this.stats.emojiPreserved = result.emojiPreserved || 0;
+            this.stats.tokensSqueezed = result.tokensSqueezed || 0;
         }
         if (this.options.rename) {
             const result = renameIdentifiers(text);
@@ -719,9 +816,104 @@ return ${v_vm}(...)`;
     }
 }
 
-// Discord OAuth2 Configuration
-const CLIENT_ID = process.env.DISCORD_CLIENT_ID || 'YOUR_DISCORD_CLIENT_ID';
-const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'YOUR_DISCORD_CLIENT_SECRET';
+// --- Discord OAuth2 Configuration ---
+// Values are read once per cold start. Dashboard env vars are routinely pasted
+// with stray quotes or trailing newlines, and both make Discord reject the
+// token exchange with a bare {"error":"invalid_client"}, so normalise them here.
+function envValue(name) {
+    const raw = process.env[name];
+    if (typeof raw !== 'string') return '';
+    return raw.trim().replace(/^['"]+|['"]+$/g, '').trim();
+}
+
+const CLIENT_ID = envValue('DISCORD_CLIENT_ID');
+const CLIENT_SECRET_RAW = process.env.DISCORD_CLIENT_SECRET;
+const CLIENT_SECRET = envValue('DISCORD_CLIENT_SECRET');
+const DISCORD_REDIRECT_URI = envValue('DISCORD_REDIRECT_URI');
+
+const DISCORD_CLIENT_ID_VALID = /^\d{17,20}$/.test(CLIENT_ID);
+const DISCORD_SECRET_SANITIZED =
+    typeof CLIENT_SECRET_RAW === 'string' && CLIENT_SECRET_RAW !== CLIENT_SECRET;
+// A real OAuth2 client secret is 32 characters of [A-Za-z0-9_-]. The Client
+// Public Key is 64 hex characters and a Bot Token contains dots; both are
+// commonly pasted by mistake and both produce "invalid_client".
+const DISCORD_SECRET_LOOKS_LIKE_PUBLIC_KEY = /^[0-9a-fA-F]{64}$/.test(CLIENT_SECRET);
+const DISCORD_SECRET_LOOKS_LIKE_BOT_TOKEN = /^[\w-]+\.[\w-]{6}\.[\w-]{27,}$/.test(CLIENT_SECRET);
+const DISCORD_CREDENTIALS_OK =
+    DISCORD_CLIENT_ID_VALID && CLIENT_SECRET.length > 0 &&
+    !DISCORD_SECRET_LOOKS_LIKE_PUBLIC_KEY && !DISCORD_SECRET_LOOKS_LIKE_BOT_TOKEN;
+
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function buildRedirectUri(req) {
+    if (DISCORD_REDIRECT_URI) return DISCORD_REDIRECT_URI;
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https')
+        .split(',')[0].trim();
+    const host = String(req.headers['x-forwarded-host'] || req.get('host') || '')
+        .split(',')[0].trim();
+    return `${proto}://${host}/auth/discord/callback`;
+}
+
+function sendAuthErrorPage(res, status, title, message, hints) {
+    const hintsHtml = (hints || [])
+        .filter(Boolean)
+        .map((hint) => `<li>${escapeHtml(hint)}</li>`)
+        .join('');
+    res.status(status);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nix6 // Discord Login Failed</title>
+    <style>
+        body { background: #0a0a0c; color: #f4f4f5; font-family: ui-monospace, Menlo, Consolas, monospace; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; }
+        .box { border: 1px solid #2a2a30; background: #121216; padding: 28px 32px; border-radius: 12px; max-width: 720px; line-height: 1.6; }
+        h1 { font-size: 1.1rem; margin: 0 0 12px; letter-spacing: 0.04em; color: #ff8a65; }
+        p { margin: 0 0 14px; color: #d4d4d8; }
+        code { background: #1c1c22; padding: 2px 6px; border-radius: 5px; color: #ffd479; }
+        ul { margin: 0 0 18px; padding-left: 20px; color: #b8b8c0; }
+        li { margin-bottom: 8px; }
+        a { display: inline-block; margin-top: 6px; color: #0a0a0c; background: #f4f4f5; padding: 9px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>${escapeHtml(title)}</h1>
+        <p>${escapeHtml(message)}</p>
+        ${hintsHtml ? `<ul>${hintsHtml}</ul>` : ''}
+        <a href="/">Back to Nix6</a>
+    </div>
+</body>
+</html>`);
+}
+
+function discordConfigHints() {
+    const hints = [];
+    if (!DISCORD_CLIENT_ID_VALID) {
+        hints.push('DISCORD_CLIENT_ID is missing or not a Discord application ID. Set it to the Application ID from the Discord Developer Portal.');
+    }
+    if (!CLIENT_SECRET) {
+        hints.push('DISCORD_CLIENT_SECRET is missing. Set it to the OAuth2 Client Secret from the Discord Developer Portal.');
+    }
+    if (DISCORD_SECRET_LOOKS_LIKE_PUBLIC_KEY) {
+        hints.push('DISCORD_CLIENT_SECRET looks like the Client Public Key (64 hex characters). Use the OAuth2 Client Secret instead.');
+    }
+    if (DISCORD_SECRET_LOOKS_LIKE_BOT_TOKEN) {
+        hints.push('DISCORD_CLIENT_SECRET looks like a Bot Token. Use the OAuth2 Client Secret instead.');
+    }
+    hints.push('After changing the variable, redeploy so the new value is picked up.');
+    return hints;
+}
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -805,20 +997,75 @@ if (fs.existsSync(publicPath)) {
 
 // --- AUTHENTICATION ROUTES ---
 
+// Non-secret view of the OAuth configuration, for debugging a failed login.
+app.get('/api/auth/diagnostics', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+        ready: DISCORD_CREDENTIALS_OK,
+        clientIdPresent: Boolean(CLIENT_ID),
+        clientIdLooksValid: DISCORD_CLIENT_ID_VALID,
+        clientSecretPresent: Boolean(CLIENT_SECRET),
+        clientSecretWasSanitized: DISCORD_SECRET_SANITIZED,
+        clientSecretLength: CLIENT_SECRET.length,
+        clientSecretLooksLikePublicKey: DISCORD_SECRET_LOOKS_LIKE_PUBLIC_KEY,
+        clientSecretLooksLikeBotToken: DISCORD_SECRET_LOOKS_LIKE_BOT_TOKEN,
+        redirectUri: buildRedirectUri(req)
+    });
+});
+
 app.get('/auth/discord', (req, res) => {
-    const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
-    const redirectUri = `${hostProtocol}://${req.get('host')}/auth/discord/callback`;
-    
+    if (!DISCORD_CREDENTIALS_OK) {
+        return sendAuthErrorPage(
+            res,
+            500,
+            'Discord login is not configured',
+            'This deployment is missing usable Discord OAuth credentials, so the login cannot start.',
+            discordConfigHints()
+        );
+    }
+
+    const redirectUri = buildRedirectUri(req);
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify`;
     res.redirect(discordAuthUrl);
 });
 
 app.get('/auth/discord/callback', async (req, res) => {
-    const code = req.query.code;
-    if (!code) return res.status(400).send('No code provided from Discord.');
+    const code = typeof req.query.code === 'string' ? req.query.code : '';
+    const oauthError = typeof req.query.error === 'string' ? req.query.error : '';
+    const oauthErrorDescription =
+        typeof req.query.error_description === 'string' ? req.query.error_description : '';
 
-    const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
-    const redirectUri = `${hostProtocol}://${req.get('host')}/auth/discord/callback`;
+    if (oauthError) {
+        return sendAuthErrorPage(
+            res,
+            400,
+            'Discord rejected the login',
+            `${oauthError}${oauthErrorDescription ? ': ' + oauthErrorDescription : ''}`,
+            ['Start the login again from the Nix6 homepage.']
+        );
+    }
+
+    if (!DISCORD_CREDENTIALS_OK) {
+        return sendAuthErrorPage(
+            res,
+            500,
+            'Discord login is not configured',
+            'This deployment is missing usable Discord OAuth credentials, so the authorization code cannot be exchanged.',
+            discordConfigHints()
+        );
+    }
+
+    if (!code) {
+        return sendAuthErrorPage(
+            res,
+            400,
+            'No code provided from Discord',
+            'Discord did not return an authorization code.',
+            ['Start the login again from the Nix6 homepage.']
+        );
+    }
+
+    const redirectUri = buildRedirectUri(req);
 
     try {
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -833,15 +1080,67 @@ app.get('/auth/discord/callback', async (req, res) => {
             }),
         });
 
-        const tokenData = await tokenResponse.json();
-        if (!tokenData.access_token) return res.status(400).send('Failed to obtain access token from Discord: ' + JSON.stringify(tokenData));
+        let tokenData = {};
+        try {
+            tokenData = await tokenResponse.json();
+        } catch (parseError) {
+            tokenData = {};
+        }
+
+        if (!tokenResponse.ok || !tokenData.access_token) {
+            const discordError = tokenData.error || `http_${tokenResponse.status}`;
+            console.error('[discord-oauth] token exchange failed', {
+                status: tokenResponse.status,
+                discordError,
+                redirectUri,
+                clientIdPresent: Boolean(CLIENT_ID),
+                clientSecretPresent: Boolean(CLIENT_SECRET),
+                clientSecretWasSanitized: DISCORD_SECRET_SANITIZED,
+                clientSecretLooksLikePublicKey: DISCORD_SECRET_LOOKS_LIKE_PUBLIC_KEY,
+                clientSecretLooksLikeBotToken: DISCORD_SECRET_LOOKS_LIKE_BOT_TOKEN
+            });
+
+            const hints = [];
+            if (discordError === 'invalid_client') {
+                hints.push(`Discord did not accept the credentials for client ID ${CLIENT_ID}.`);
+                hints.push('The OAuth2 Client Secret in this deployment does not match that application, or it was reset in the Discord Developer Portal.');
+                hints.push('Fix it in Discord Developer Portal > your app > OAuth2 > Reset Secret, then update the DISCORD_CLIENT_SECRET environment variable and redeploy.');
+            } else if (discordError === 'invalid_grant') {
+                hints.push('The authorization code was already used or has expired. Start the login again.');
+                hints.push(`The redirect URI sent was ${redirectUri}. It must match the one registered in the Discord Developer Portal exactly.`);
+            } else {
+                hints.push(`The redirect URI sent was ${redirectUri}. It must match the one registered in the Discord Developer Portal exactly.`);
+            }
+
+            return sendAuthErrorPage(
+                res,
+                400,
+                'Failed to obtain access token from Discord',
+                JSON.stringify(tokenData),
+                hints
+            );
+        }
 
         const userResponse = await fetch('https://discord.com/api/users/@me', {
-            headers: { authorization: `${tokenData.token_type} ${tokenData.access_token}` },
+            headers: { authorization: `${tokenData.token_type || 'Bearer'} ${tokenData.access_token}` },
         });
 
         const userData = await userResponse.json();
-        
+
+        if (!userResponse.ok || !userData.id) {
+            console.error('[discord-oauth] user lookup failed', {
+                status: userResponse.status,
+                error: userData && userData.error
+            });
+            return sendAuthErrorPage(
+                res,
+                502,
+                'Discord did not return your profile',
+                JSON.stringify(userData),
+                ['Try signing in again in a moment.']
+            );
+        }
+
         req.session.user = {
             id: userData.id,
             username: userData.username,
@@ -857,7 +1156,13 @@ app.get('/auth/discord/callback', async (req, res) => {
         res.redirect(`/?discord_id=${userData.id}&discord_user=${encodeURIComponent(userData.username)}&discord_avatar=${encodeURIComponent(avatarUrl)}`);
     } catch (error) {
         console.error('Auth Error:', error);
-        res.status(500).send('Internal Authentication Error');
+        return sendAuthErrorPage(
+            res,
+            500,
+            'Internal Authentication Error',
+            'The server could not reach Discord to finish the login.',
+            ['Try signing in again in a moment.']
+        );
     }
 });
 
