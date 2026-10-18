@@ -2222,9 +2222,15 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    statusMsg.className = 'is-success';
-                    statusMsg.innerText = (editId ? 'Script updated' : 'Deployment complete') + ' — ' + describeAppliedOptions(data.applied, data.stats);
-                    showToast(editId ? 'Script build updated.' : 'Script deployed to the vault.', 'success');
+                    /* A deployment that only reached memory disappears with the
+                       next cold start, so it is reported as a warning rather
+                       than a clean success. */
+                    const unsaved = data.persisted === false;
+                    statusMsg.className = unsaved ? 'is-error' : 'is-success';
+                    statusMsg.innerText = (editId ? 'Script updated' : 'Deployment complete')
+                        + ' — ' + describeAppliedOptions(data.applied, data.stats)
+                        + (unsaved ? ' — WARNING: vault storage is not configured, this script will be lost on the next deploy' : ' — saved to the vault');
+                    showToast(unsaved ? 'Deployed, but nothing was saved to storage.' : (editId ? 'Script build updated.' : 'Script deployed to the vault.'), unsaved ? 'error' : 'success');
                     document.getElementById('outputBox').style.display = 'block';
                     document.getElementById('loaderOutput').innerText = data.loader;
                     cancelEditMode();

@@ -11,117 +11,184 @@ const PORT = process.env.PORT || 3000;
 // Owner Discord ID
 const OWNER_DISCORD_ID = "1257596807857569793";
 
-// File path for local persistent storage fallback
-const KEYS_FILE = path.join(__dirname, 'keys.json');
+// Storage backends for the vault and the API-key list. The document names are
+// the same in every backend so a deployment can be moved between them.
+const { put: blobPut, get: blobGet, BlobNotFoundError } = require('@vercel/blob');
 
-// GitHub Gist Environment Variables
+// GitHub Gist remains supported for anyone who already set these up.
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const KEYS_GIST_ID = process.env.KEYS_GIST_ID;
 const VAULT_GIST_ID = process.env.VAULT_GIST_ID;
 
-// Helper to load keys (Gist primary for Vercel, fallback to local fs)
+// Where the local-file backend writes. Vercel's filesystem is read-only apart
+// from /tmp, so on a serverless host this backend is for development only.
+const DATA_DIR = process.env.NIX6_DATA_DIR || __dirname;
+let vaultDatabase = [];
+let keyDatabase = [];
+
+/* Vercel injects BLOB_STORE_ID for a connected store, together with a
+   short-lived OIDC token. A long-lived BLOB_READ_WRITE_TOKEN is used when one
+   exists, since it also works outside a Vercel request. */
+function blobCredentials() {
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+        return { token: process.env.BLOB_READ_WRITE_TOKEN };
+    }
+    if (process.env.BLOB_STORE_ID && (process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL)) {
+        return { storeId: process.env.BLOB_STORE_ID };
+    }
+    return null;
+}
+
+function gistIdFor(name) {
+    if (name === 'vault.json') return VAULT_GIST_ID;
+    if (name === 'keys.json') return KEYS_GIST_ID;
+    return null;
+}
+
+function canWriteLocal() {
+    try {
+        fs.accessSync(DATA_DIR, fs.constants.W_OK);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+/* Which backend is actually in use, so a silent fall back to memory shows up in
+   /api/storage instead of being discovered when scripts go missing. */
+function storageBackend() {
+    if (blobCredentials()) return 'vercel-blob';
+    if (GITHUB_TOKEN && (KEYS_GIST_ID || VAULT_GIST_ID)) return 'github-gist';
+    if (canWriteLocal()) return 'local-file';
+    return 'memory';
+}
+
+async function streamToText(stream) {
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    return Buffer.concat(chunks).toString('utf8');
+}
+
+async function readDocument(name) {
+    const credentials = blobCredentials();
+    if (credentials) {
+        try {
+            const result = await blobGet(name, { access: 'private', useCache: false, ...credentials });
+            if (!result || !result.stream) return null;
+            return JSON.parse(await streamToText(result.stream));
+        } catch (err) {
+            if (err instanceof BlobNotFoundError || /not.?found/i.test(err.message || '')) return null;
+            throw err;
+        }
+    }
+
+    const gistId = gistIdFor(name);
+    if (GITHUB_TOKEN && gistId) {
+        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'User-Agent': 'Vercel-Nix6-App'
+            }
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const content = data.files && data.files[name] && data.files[name].content;
+        return content ? JSON.parse(content) : null;
+    }
+
+    const file = path.join(DATA_DIR, name);
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+/* Writes are chained per document: two requests that both read-modify-write the
+   vault cannot interleave their uploads and lose one of them. */
+const writeChains = new Map();
+
+function serializeWrite(name, task) {
+    const previous = writeChains.get(name) || Promise.resolve();
+    const next = previous.then(task, task);
+    writeChains.set(name, next.catch(() => {}));
+    return next;
+}
+
+async function writeDocument(name, value) {
+    const json = JSON.stringify(value, null, 2);
+
+    const credentials = blobCredentials();
+    if (credentials) {
+        const result = await blobPut(name, json, {
+            access: 'private',
+            addRandomSuffix: false,
+            allowOverwrite: true,
+            contentType: 'application/json',
+            ...credentials
+        });
+        return { persisted: true, backend: 'vercel-blob', pathname: result.pathname };
+    }
+
+    const gistId = gistIdFor(name);
+    if (GITHUB_TOKEN && gistId) {
+        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'Vercel-Nix6-App'
+            },
+            body: JSON.stringify({ files: { [name]: { content: json } } })
+        });
+        if (!res.ok) throw new Error(`Gist write failed with ${res.status}`);
+        return { persisted: true, backend: 'github-gist' };
+    }
+
+    if (canWriteLocal()) {
+        fs.writeFileSync(path.join(DATA_DIR, name), json);
+        return { persisted: true, backend: 'local-file' };
+    }
+
+    return { persisted: false, backend: 'memory' };
+}
+
+/* Helper to load keys (persistent backend, then in-process cache) */
 async function loadKeys() {
-    if (GITHUB_TOKEN && KEYS_GIST_ID) {
-        try {
-            const res = await fetch(`https://api.github.com/gists/${KEYS_GIST_ID}`, {
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'User-Agent': 'Vercel-Nix6-App'
-                }
-            });
-            const data = await res.json();
-            const content = data.files['keys.json']?.content;
-            return content ? JSON.parse(content) : [];
-        } catch (e) {
-            console.error('Error fetching keys from Gist:', e);
-            return [];
-        }
-    }
-
-    if (!fs.existsSync(KEYS_FILE)) {
-        try { fs.writeFileSync(KEYS_FILE, JSON.stringify([])); } catch (e) {}
-        return [];
-    }
     try {
-        return JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
+        const stored = await readDocument('keys.json');
+        if (Array.isArray(stored)) {
+            keyDatabase = stored;
+            return stored;
+        }
     } catch (e) {
-        return [];
+        console.error('Key load error:', e.message);
     }
+    return keyDatabase;
 }
 
-// Helper to save keys (Gist primary for Vercel, fallback to local fs)
+/* Helper to save keys. Resolves to { persisted, backend } so callers can tell
+   the user when a write only reached memory. */
 async function saveKeys(keys) {
-    if (GITHUB_TOKEN && KEYS_GIST_ID) {
-        try {
-            await fetch(`https://api.github.com/gists/${KEYS_GIST_ID}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'Vercel-Nix6-App'
-                },
-                body: JSON.stringify({
-                    files: {
-                        'keys.json': { content: JSON.stringify(keys, null, 2) }
-                    }
-                })
-            });
-            return;
-        } catch (e) {
-            console.error('Error saving keys to Gist:', e);
-        }
-    }
-
-    try {
-        fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
-    } catch (e) {
-        console.error('Local FS write error:', e);
-    }
+    keyDatabase = keys;
+    return serializeWrite('keys.json', () => writeDocument('keys.json', keys));
 }
 
-// Helper to load vault scripts
+/* Helper to load vault scripts */
 async function loadVault() {
-    if (GITHUB_TOKEN && VAULT_GIST_ID) {
-        try {
-            const res = await fetch(`https://api.github.com/gists/${VAULT_GIST_ID}`, {
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'User-Agent': 'Vercel-Nix6-App'
-                }
-            });
-            const data = await res.json();
-            const content = data.files['vault.json']?.content;
-            return content ? JSON.parse(content) : [];
-        } catch (e) {
-            return [];
+    try {
+        const stored = await readDocument('vault.json');
+        if (Array.isArray(stored)) {
+            vaultDatabase = stored;
+            return stored;
         }
+    } catch (e) {
+        console.error('Vault load error:', e.message);
     }
     return vaultDatabase;
 }
 
-// Helper to save vault scripts
+/* Helper to save vault scripts. Called on every create, edit and delete. */
 async function saveVault(vault) {
-    if (GITHUB_TOKEN && VAULT_GIST_ID) {
-        try {
-            await fetch(`https://api.github.com/gists/${VAULT_GIST_ID}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'Vercel-Nix6-App'
-                },
-                body: JSON.stringify({
-                    files: {
-                        'vault.json': { content: JSON.stringify(vault, null, 2) }
-                    }
-                })
-            });
-            return;
-        } catch (e) {
-            console.error('Error saving vault to Gist:', e);
-        }
-    }
     vaultDatabase = vault;
+    return serializeWrite('vault.json', () => writeDocument('vault.json', vault));
 }
 
 /* ============================================================
@@ -1161,8 +1228,6 @@ app.use(session({
     cookie: { secure: false }
 }));
 
-let vaultDatabase = [];
-
 // --- MIDDLEWARE ---
 
 function requireOwner(req, res, next) {
@@ -1230,6 +1295,24 @@ if (fs.existsSync(publicPath)) {
 // and keys.json, so mounting it publishes the API-key store and the server
 // source to anyone. index.html is served explicitly by the '/' route above, and
 // only the dedicated ./public directory is exposed as static content.
+
+// --- STORAGE STATUS ---
+
+app.get('/api/storage', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const backend = storageBackend();
+    let vaultCount = null;
+    try {
+        vaultCount = (await loadVault()).length;
+    } catch (e) {
+        vaultCount = null;
+    }
+    res.json({
+        backend,
+        persistent: backend !== 'memory',
+        vaultCount
+    });
+});
 
 // --- AUTHENTICATION ROUTES ---
 
@@ -1426,9 +1509,13 @@ app.post('/api/admin/generate-key', requireOwner, async (req, res) => {
     const keyData = { key: newApiKey, username: username, createdAt: new Date().toISOString() };
     
     keys.push(keyData);
-    await saveKeys(keys);
-
-    res.json({ success: true, apiKey: newApiKey });
+    try {
+        const saved = await saveKeys(keys);
+        return res.json({ success: true, apiKey: newApiKey, persisted: saved.persisted, backend: saved.backend });
+    } catch (err) {
+        console.error('Key save error:', err);
+        return res.status(500).json({ success: false, error: 'Could not persist the new key: ' + err.message });
+    }
 });
 
 app.get('/api/admin/keys', requireOwner, async (req, res) => {
@@ -1441,9 +1528,13 @@ app.post('/api/admin/revoke-key', requireOwner, async (req, res) => {
     let keys = await loadKeys();
     
     keys = keys.filter(k => k.key !== key);
-    await saveKeys(keys);
-
-    res.json({ success: true, message: 'Key revoked.' });
+    try {
+        const saved = await saveKeys(keys);
+        return res.json({ success: true, message: 'Key revoked.', persisted: saved.persisted, backend: saved.backend });
+    } catch (err) {
+        console.error('Key save error:', err);
+        return res.status(500).json({ success: false, error: 'Could not persist the revocation: ' + err.message });
+    }
 });
 
 app.get('/api/verify-key', async (req, res) => {
@@ -1516,13 +1607,28 @@ app.post('/api/obfuscate', async (req, res) => {
             });
         }
 
-        await saveVault(currentVault);
+        /* Persist before answering. The loader URL is useless if the entry
+           never reached storage, so the response reports which happened. */
+        let persisted = true;
+        let storageError = null;
+        try {
+            const saved = await saveVault(currentVault);
+            persisted = saved.persisted;
+        } catch (err) {
+            persisted = false;
+            storageError = err.message;
+            console.error('Vault save error:', err);
+        }
+
         res.json({
             success: true,
             loader: loaderString,
             id: scriptId,
             applied: engine.appliedOptions(),
-            stats: engine.stats
+            stats: engine.stats,
+            persisted,
+            storageError,
+            backend: storageBackend()
         });
     } catch (err) {
         console.error('Obfuscation Error:', err);
@@ -1552,8 +1658,13 @@ app.post('/api/delete', async (req, res) => {
     
     if (index !== -1) {
         currentVault.splice(index, 1);
-        await saveVault(currentVault);
-        res.json({ success: true });
+        try {
+            const saved = await saveVault(currentVault);
+            return res.json({ success: true, persisted: saved.persisted, backend: saved.backend });
+        } catch (err) {
+            console.error('Vault save error:', err);
+            return res.status(500).json({ success: false, error: 'Could not persist the delete: ' + err.message });
+        }
     } else {
         res.status(403).json({ success: false, error: 'Script not found or unauthorized.' });
     }
@@ -1601,6 +1712,9 @@ module.exports = app;
 /* Exposed so scripts/verify-engine.js can exercise the engine without starting
    a listener. The module itself is still the Express handler. */
 module.exports.ObfuscatorEngine = ObfuscatorEngine;
+/* Exposed so the storage layer can be exercised directly, including against
+   the real blob store. */
+module.exports.storage = { storageBackend, loadVault, saveVault, loadKeys, saveKeys };
 
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
