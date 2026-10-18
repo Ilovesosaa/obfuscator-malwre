@@ -2168,8 +2168,13 @@
             const parts = [];
             if (on.includes('minify')) parts.push(count('commentsRemoved') + ' comments stripped');
             if (on.includes('rename')) parts.push(count('identifiersRenamed') + ' identifiers renamed');
-            if (on.includes('encryptStrings')) parts.push(count('stringsEncoded') + ' strings encoded');
+            if (on.includes('encryptStrings')) {
+                const encoded = count('stringsEncoded');
+                const unicode = count('unicodeStrings');
+                parts.push(encoded + ' strings encoded' + (unicode ? ' (' + unicode + ' unicode-safe)' : ''));
+            }
             if (on.includes('antiTamper')) parts.push('integrity check armed');
+            if (count('payloadBytes')) parts.push((count('payloadBytes') / 1024).toFixed(1) + ' KB payload');
             return parts.join(' / ');
         }
 

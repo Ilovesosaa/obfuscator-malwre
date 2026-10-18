@@ -274,7 +274,11 @@ function readLongBracket(src, at) {
 
 /* Splits source into code / string / comment runs. This is the only place that
    needs to understand Lua's lexical structure; every transform works on the
-   runs, so nothing can ever be edited inside a string or comment by accident. */
+   runs, so nothing can ever be edited inside a string or comment by accident.
+
+   Everything is handled as UTF-16 sequences here: emoji, flags, ZWJ families,
+   CJK and combining marks all survive because no pass ever splits a surrogate
+   pair or slices a multi-byte character. */
 function scanLua(src) {
     const segs = [];
     let i = 0;
@@ -307,9 +311,19 @@ function scanLua(src) {
             pushCode(i);
             let j = i + 1;
             while (j < n) {
-                if (src[j] === '\\') { j += 2; continue; }
+                if (src[j] === '\\') {
+                    /* \z swallows the following whitespace, newlines included,
+                       so a literal may legally continue on the next line. */
+                    if (src[j + 1] === 'z') {
+                        j += 2;
+                        while (j < n && /\s/.test(src[j])) j++;
+                        continue;
+                    }
+                    j += 2;
+                    continue;
+                }
                 if (src[j] === c) { j++; break; }
-                if (src[j] === '\n') break;      // unterminated: stop at the line end
+                if (src[j] === '\n' && c !== '`') break;   // unterminated: stop at the line end
                 j++;
             }
             segs.push({ type: 'string', text: src.slice(i, j), quote: c });
@@ -349,81 +363,154 @@ function buildMask(segs) {
         at += seg.text.length;
     }
     return mask;
-}/* --- minify ------------------------------------------------------------- */
+}
+
+/* --- minify ------------------------------------------------------------- */
+
+const CODE_TOKEN_RE = /\s+|0[xX][0-9a-fA-F]+|0[bB][01]+|[0-9]+\.?[0-9]*(?:[eE][+-]?[0-9]+)?|\.[0-9]+(?:[eE][+-]?[0-9]+)?|[A-Za-z_][A-Za-z0-9_]*|\.\.\.|\.\.|==|~=|<=|>=|::|\+=|-=|\*=|\/=|%=|\^=|\.\.=|\/\/=|\/\/|<<|>>|[\s\S]/g;
+
+const isWordChar = (ch) => ch !== undefined && /[A-Za-z0-9_]/.test(ch);
+
+/* The only place a separator is required: two word characters would fuse into
+   one identifier/number, `-` + `-` would open a comment, `[` + `[` would open a
+   long string, and a number followed by `.` would become a malformed numeral. */
+function tokensNeedSpace(prev, next) {
+    if (!prev || !next) return false;
+    const a = prev[prev.length - 1];
+    const b = next[0];
+    if (isWordChar(a) && isWordChar(b)) return true;
+    if (a === '-' && b === '-') return true;
+    if (a === '[' && (b === '[' || b === '=')) return true;
+    if (a === '.' && b === '.') return true;
+    if (/[0-9.]/.test(a) && b === '.') return true;
+    if (a === '/' && b === '/') return true;
+    if (a === ':' && b === ':') return true;
+    if (a === '<' && b === '<') return true;
+    if (a === '>' && b === '>') return true;
+    return false;
+}
+
+/* Squeezes one run of code down to the shortest token stream that still lexes
+   the same way. Non-ASCII never appears in a code run (it lives in strings and
+   comments), so this cannot damage a multi-byte character. */
+function minifyCodeRun(text) {
+    /* One line at a time. Newlines are statement boundaries in Lua, so they
+       are kept (a blank line is dropped only between two real lines):
+       joining statements would make `local x = 1` fuse with the next call
+       once the string encoder rebuilds the literal in between. */
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    const squeezed = lines.map((line) => {
+        const tokens = [];
+        const re = new RegExp(CODE_TOKEN_RE.source, 'g');
+        let m;
+        while ((m = re.exec(line)) !== null) {
+            if (/^\s+$/.test(m[0])) continue;
+            tokens.push(m[0]);
+        }
+        let out = '';
+        let prev = '';
+        for (const tok of tokens) {
+            if (tokensNeedSpace(prev, tok)) out += ' ';
+            out += tok;
+            prev = tok;
+        }
+        return out;
+    });
+    const kept = squeezed.filter((line, index) =>
+        index === 0 || index === squeezed.length - 1 || line !== '');
+    return kept.join('\n');
+}
+
 function minifySource(src) {
     const segs = scanLua(src);
     const out = [];
     let commentsRemoved = 0;
-    let emojiPreserved = 0;
     let tokensSqueezed = 0;
 
     for (const seg of segs) {
         if (seg.type === 'comment') {
-            if (/^--!\w/.test(seg.text)) { out.push(seg); continue; }   // --!strict etc.
+            /* --!strict and --!nocheck are compiler directives, not prose, and
+               they only work on the first line, so they survive. */
+            if (/^--!/.test(seg.text)) { out.push(seg); continue; }
             commentsRemoved++;
             continue;
         }
         if (seg.type !== 'code') { out.push(seg); continue; }
-        // Preserve emoji strings - don't minify inside emoji strings
-        // Emoji strings contain multi-byte UTF-8 characters that would be corrupted
-        // if we strip whitespace/comments inside them
-        const hasEmoji = stringContainsEmoji(seg.text);
-        if (hasEmoji) {
-// For strings with emoji, keep the entire string intact
-            out.push(seg);
-            emojiPreserved++;
-            continue;
-        }
-        const lines = seg.text
-            .replace(/\r\n?/g, '\n')
-            .split('\n')
-            .map((line) => line.replace(/[ \t]+/g, ' ').replace(/[ \t]+$/, ''));
-        /* Blank lines go, but never the empty strings that merely mark where
-           this run starts or ends: those carry the newline separating it from
-           the string or comment next door, and losing one glues two tokens
-           together (`local n = "a"` + `print(n)` became `"a"print(n)`). */
-        const kept = lines.filter((line, index) =>
-            index === 0 || index === lines.length - 1 || line.trim() !== '');
-        // Squeeze consecutive spaces within kept lines
-        const squeezed = kept.map(line => line.replace(/ {2,}/g, ' '));
-        out.push({ type: 'code', text: squeezed.join('\n') });
-        tokensSqueezed += kept.length - squeezed.length;
+
+        const before = (seg.text.match(/\s+/g) || []).length;
+        const text = minifyCodeRun(seg.text);
+        const after = (text.match(/\s/g) || []).length;
+        if (before > after) tokensSqueezed += before - after;
+        out.push({ type: 'code', text });
     }
 
-    return { text: segmentsToText(out).replace(/^\n+/, '').replace(/\n+$/, ''), commentsRemoved, emojiPreserved, tokensSqueezed };
+    return {
+        text: segmentsToText(out).replace(/^\s+/, '').replace(/\s+$/, ''),
+        commentsRemoved,
+        tokensSqueezed
+    };
 }
 
 /* --- rename ------------------------------------------------------------- */
 
-/* Block depth: 0 means "top level of the chunk". Only there can we prove a
-   single `local` stays in scope for the rest of the file. */
-function topLevelLocals(src, mask) {
-    const depthAt = new Array(src.length);
-    const wordRe = /\b(function|then|do|repeat|end|until)\b/g;
+/* Depth of every character, plus the position of each block closer.
+
+   Lua's block keywords pair up one-to-one if you count `then`, `do`,
+   `function`, `repeat` as openers and `end`, `until` as closers, with
+   `elseif` first closing the branch before it. `for`/`while` open through
+   their `do`, so they are not counted themselves. Keywords used as table
+   fields (`t.end`) are skipped because the previous character is `.` or `:`. */
+function computeBlockBounds(src, mask) {
+    const depthAt = new Int32Array(src.length);
+    const closers = [];
+    const re = /\b[A-Za-z_][A-Za-z0-9_]*\b/g;
     let depth = 0;
     let last = 0;
     let m;
-    while ((m = wordRe.exec(src)) !== null) {
-        depthAt.fill(depth, last, m.index);
-        const w = m[1];
-        if (w === 'end' || w === 'until') depth = Math.max(0, depth - 1);
-        else depth++;
-        depthAt.fill(mask[m.index] === 1 ? depth : depth, m.index, m.index + w.length);
-        last = m.index + w.length;
-    }
-    depthAt.fill(depth, last, src.length);
 
-    const declarations = new Map();      // name -> [{ index, stmtEnd, depth }]
+    while ((m = re.exec(src)) !== null) {
+        const word = m[0];
+        depthAt.fill(depth, last, m.index);
+
+        if (mask[m.index] === 1) {
+            const prevChar = src[m.index - 1];
+            const isField = prevChar === '.' || prevChar === ':';
+            if (!isField) {
+                if (word === 'then' || word === 'do' || word === 'function' || word === 'repeat') {
+                    depth++;
+                } else if (word === 'elseif') {
+                    if (depth > 0) depth--;
+                } else if (word === 'end' || word === 'until') {
+                    closers.push({ index: m.index, depthBefore: depth });
+                    if (depth > 0) depth--;
+                }
+            }
+        }
+
+        depthAt.fill(depth, m.index, m.index + word.length);
+        last = m.index + word.length;
+    }
+
+    depthAt.fill(depth, last, src.length);
+    return { depthAt, closers };
+}
+
+/* Every `local` declaration, with the range in which the name is in scope. */
+function localDeclarations(src, mask) {
+    const { depthAt, closers } = computeBlockBounds(src, mask);
+    const declarations = new Map();      // name -> [{ index, depth, blockEnd, initializer }]
     const localRe = /\blocal\b/g;
+    let m;
+
     while ((m = localRe.exec(src)) !== null) {
         if (mask[m.index] !== 1) continue;
         const depth = depthAt[m.index];
         let i = m.index + m[0].length;
-        const skipWs = () => { while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++; };
+        const skipWs = () => { while (i < src.length && /\s/.test(src[i])) i++; };
         const here = [];
 
         skipWs();
-        if (src.startsWith('function', i) && !/[A-Za-z0-9_]/.test(src[i + 8] || '')) {
+        if (src.startsWith('function', i) && !isWordChar(src[i + 8])) {
             i += 8;
             skipWs();
             const nm = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i, i + 120));
@@ -441,8 +528,8 @@ function topLevelLocals(src, mask) {
                     let typeDepth = 0;
                     while (i < src.length) {
                         const c = src[i];
-                        if (c === '(' || c === '{') typeDepth++;
-                        else if (c === ')' || c === '}') { if (typeDepth === 0) break; typeDepth--; }
+                        if (c === '(' || c === '{' || c === '<') typeDepth++;
+                        else if (c === ')' || c === '}' || c === '>') { if (typeDepth === 0) break; typeDepth--; }
                         else if (typeDepth === 0 && (c === ',' || c === '=' || c === '\n' || c === ';')) break;
                         i++;
                     }
@@ -468,11 +555,23 @@ function topLevelLocals(src, mask) {
             stmtEnd = j;
         }
 
+        /* The enclosing block ends at the first closer that closes the level
+           this declaration sits at. If the file has unbalanced blocks we bail
+           out and treat the block as running to the end of the file. */
+        let blockEnd = src.length;
+        for (const closer of closers) {
+            if (closer.index > m.index && closer.depthBefore === depth) {
+                blockEnd = closer.index;
+                break;
+            }
+        }
+
         for (const decl of here) {
             if (!declarations.has(decl.name)) declarations.set(decl.name, []);
             declarations.get(decl.name).push({
                 index: decl.index,
                 depth,
+                blockEnd,
                 initializer: src.slice(i, stmtEnd)
             });
         }
@@ -494,20 +593,23 @@ function renameIdentifiers(src) {
         occurrences.get(m[0]).push(m.index);
     }
 
-    const declarations = topLevelLocals(src, mask);
+    const declarations = localDeclarations(src, mask);
     const newNames = new Map();
     const skipped = [];
 
     for (const [name, decls] of declarations) {
-        if (decls.length !== 1) { skipped.push(name); continue; }             // shadowed/redeclared
+        /* A name declared twice anywhere may be shadowed, and resolving that
+           correctly needs a full scope tree - so it is left alone. */
+        if (decls.length !== 1) { skipped.push(name); continue; }
         const decl = decls[0];
-        if (decl.depth !== 0) { skipped.push(name); continue; }               // scope may end early
         if (LUA_KEYWORDS.has(name) || RESERVED_NAMES.has(name) || /^NIX6_/.test(name)) continue;
         if (name.length < 2) continue;
 
         const occ = occurrences.get(name) || [];
         if (occ.length < 2) continue;                                          // nothing to gain
-        if (occ[0] < decl.index) { skipped.push(name); continue; }              // a global with the same name
+        if (occ[0] < decl.index) { skipped.push(name); continue; }              // used before declaration
+        if (occ[occ.length - 1] >= decl.blockEnd) { skipped.push(name); continue; }  // used past the block
+
         if (new RegExp(`[.:]\\s*${name}\\b`).test(src)) { skipped.push(name); continue; }        // t.name / t:name
         if (new RegExp(`[{,]\\s*${name}\\s*=`).test(src)) { skipped.push(name); continue; }       // { name = ... }
         if (new RegExp(`\\bgoto\\s+${name}\\b|::\\s*${name}\\s*::`).test(src)) { skipped.push(name); continue; }
@@ -541,41 +643,58 @@ function renameIdentifiers(src) {
 
 /* --- string literals ---------------------------------------------------- */
 
-/* Decodes a quoted Lua string literal into its runtime bytes. Returns null for
-   anything unusual (unknown escape, malformed) so the caller can leave the
-   literal exactly as it was. */
+/* Decodes a quoted Lua string literal into its runtime bytes.
+
+   The body is walked by code point (`Array.from`), never by UTF-16 unit, so an
+   emoji becomes its real UTF-8 bytes instead of two lone surrogates. That is
+   what lets emoji strings be encoded instead of skipped. */
 function decodeQuotedLiteral(literal) {
     const quote = literal[0];
     if (quote !== '"' && quote !== "'") return null;
-    const body = literal.slice(1, literal.length - (literal[literal.length - 1] === quote ? 1 : 0));
+    const closed = literal[literal.length - 1] === quote;
+    const body = literal.slice(1, closed ? literal.length - 1 : literal.length);
+    const chars = Array.from(body);
     const bytes = [];
-    for (let i = 0; i < body.length; i++) {
-        const c = body[i];
-        if (c !== '\\') {
-            for (const b of Buffer.from(c, 'utf8')) bytes.push(b);
+    const simple = {
+        a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11,
+        '\\': 92, '"': 34, "'": 39, '\n': 10
+    };
+
+    for (let i = 0; i < chars.length; i++) {
+        const ch = chars[i];
+        if (ch !== '\\') {
+            for (const b of Buffer.from(ch, 'utf8')) bytes.push(b);
             continue;
         }
-        const e = body[++i];
+
+        const e = chars[++i];
         if (e === undefined) return null;
-        const simple = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '\\': 92, '"': 34, "'": 39, '\n': 10 };
         if (Object.prototype.hasOwnProperty.call(simple, e)) { bytes.push(simple[e]); continue; }
+
+        const rest = chars.slice(i + 1).join('');
+
         if (e === 'x') {
-            const hex = /^[0-9a-fA-F]{1,2}/.exec(body.slice(i + 1));
+            const hex = /^[0-9a-fA-F]{1,2}/.exec(rest);
             if (!hex) return null;
             bytes.push(parseInt(hex[0], 16));
             i += hex[0].length;
             continue;
         }
-        if (e === 'z') { while (/[ \t\r\n\v\f]/.test(body[i + 1] || '')) i++; continue; }
+        if (e === 'z') {
+            while (i + 1 < chars.length && /\s/.test(chars[i + 1])) i++;
+            continue;
+        }
         if (e === 'u') {
-            const u = /^\{([0-9a-fA-F]+)\}/.exec(body.slice(i + 1));
+            const u = /^\{([0-9a-fA-F]+)\}/.exec(rest);
             if (!u) return null;
-            for (const b of Buffer.from(String.fromCodePoint(parseInt(u[1], 16)), 'utf8')) bytes.push(b);
+            const codePoint = parseInt(u[1], 16);
+            if (codePoint > 0x10FFFF) return null;
+            for (const b of Buffer.from(String.fromCodePoint(codePoint), 'utf8')) bytes.push(b);
             i += u[0].length;
             continue;
         }
         if (/[0-9]/.test(e)) {
-            const dec = /^[0-9]{1,3}/.exec(body.slice(i));
+            const dec = /^[0-9]{1,3}/.exec(chars.slice(i).join(''));
             const code = parseInt(dec[0], 10);
             if (code > 255) return null;
             bytes.push(code);
@@ -584,58 +703,169 @@ function decodeQuotedLiteral(literal) {
         }
         return null;                       // unknown escape: leave this literal alone
     }
+
     return bytes;
-}function encodeStrings(src) {
+}
+
+/* A [[...]] long string. Lua drops a newline immediately after the opening
+   bracket, so the decoder has to drop it too or the runtime value changes. */
+function decodeLongStringLiteral(literal) {
+    const open = /^\[(=*)\[/.exec(literal);
+    if (!open) return null;
+    const level = open[1].length;
+    const openLen = level + 2;
+    const closeLen = level + 2;
+    let body = literal.slice(openLen, literal.length - closeLen);
+    if (body.startsWith('\r\n')) body = body.slice(2);
+    else if (body.startsWith('\n')) body = body.slice(1);
+    return Array.from(Buffer.from(body, 'utf8'));
+}
+
+const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/* A different alphabet per build, so a stock base64 decoder finds noise. */
+function shuffleAlphabet() {
+    const chars = B64_ALPHABET.split('');
+    for (let i = chars.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = chars[i];
+        chars[i] = chars[j];
+        chars[j] = tmp;
+    }
+    return chars.join('');
+}
+
+function base64EncodeBytes(bytes, alphabet) {
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 3) {
+        const b1 = bytes[i];
+        const b2 = i + 1 < bytes.length ? bytes[i + 1] : null;
+        const b3 = i + 2 < bytes.length ? bytes[i + 2] : null;
+        out += alphabet[b1 >> 2];
+        out += alphabet[((b1 & 3) << 4) | ((b2 === null ? 0 : b2) >> 4)];
+        out += b2 === null ? '=' : alphabet[((b2 & 15) << 2) | ((b3 === null ? 0 : b3) >> 6)];
+        out += b3 === null ? '=' : alphabet[b3 & 63];
+    }
+    return out;
+}
+
+/* The runtime half of the string encoder. Every literal becomes
+   NIX6_D("<base64>", key), decoded in groups of four by gsub, so the cost is a
+   quarter of the old one-char-at-a-time loop and the emitted text is ~1.37x the
+   original bytes instead of the ~3.5x a decimal byte table cost. */
+function buildStringHelper(alphabet) {
+    return [
+        'local NIX6_AL = "' + alphabet + '"',
+        'local NIX6_M = {}',
+        'for NIX6_I = 1, #NIX6_AL do NIX6_M[string.byte(NIX6_AL, NIX6_I)] = NIX6_I - 1 end',
+        'local function NIX6_BX(_a, _b)',
+        ' local _r, _p = 0, 1',
+        ' while _a > 0 or _b > 0 do',
+        '  local _x, _y = _a % 2, _b % 2',
+        '  if _x ~= _y then _r = _r + _p end',
+        '  _a, _b, _p = (_a - _x) / 2, (_b - _y) / 2, _p * 2',
+        ' end',
+        ' return _r',
+        'end',
+        'local NIX6_XOR = bit32 and bit32.bxor or NIX6_BX',
+        'local function NIX6_D(_s, _k)',
+        ' return (_s:gsub("(....)", function(_q)',
+        '  local _a, _b = NIX6_M[string.byte(_q, 1)], NIX6_M[string.byte(_q, 2)]',
+        '  local _c, _d = NIX6_M[string.byte(_q, 3)], NIX6_M[string.byte(_q, 4)]',
+        '  local _1 = _a * 4 + math.floor(_b / 16)',
+        '  local _o = string.char(NIX6_XOR(_1, _k))',
+        '  if _c then',
+        '   _o = _o .. string.char(NIX6_XOR((_b % 16) * 16 + math.floor(_c / 4), _k))',
+        '   if _d then',
+        '    _o = _o .. string.char(NIX6_XOR((_c % 4) * 64 + _d, _k))',
+        '   end',
+        '  end',
+        '  return _o',
+        ' end))',
+        'end',
+        ''
+    ].join('\n');
+}
+
+/* Replaces every literal the runtime can rebuild exactly with
+   NIX6_D("<base64>", key). Byte-exact for UTF-8, so emoji, CJK, combining
+   marks and embedded NULs all come back identical. Interpolated strings are
+   left alone: they contain live expressions, not just bytes. */
+function encodeStrings(src) {
     const segs = scanLua(src);
     const out = [];
     let encoded = 0;
     let skipped = 0;
+    let unicodeStrings = 0;
+    const alphabet = shuffleAlphabet();
 
     for (const seg of segs) {
         if (seg.type !== 'string') { out.push(seg); continue; }
-        // long brackets ([==[..]==]) and Luau interpolated (`..{..}..`) strings
-        // keep their own decoding rules, so they are left readable.
-        if (seg.quote !== '"' && seg.quote !== "'") { skipped++; out.push(seg); continue; }
-        const bytes = decodeQuotedLiteral(seg.text);
+
+        let bytes = null;
+        if (seg.quote === '"' || seg.quote === "'") {
+            bytes = decodeQuotedLiteral(seg.text);
+        } else if (seg.quote === '[') {
+            bytes = decodeLongStringLiteral(seg.text);
+        }
+        // `quote === '`'` means a Luau interpolated string: expressions inside.
         if (!bytes || bytes.length === 0) { skipped++; out.push(seg); continue; }
-        // If the string contains emoji code points, preserve it as-is rather than encoding
-        // emoji would be corrupted if split into byte arrays for NIX6_STR encoding
-        if (stringContainsEmoji(seg.text)) { skipped++; out.push(seg); continue; }
+
+        if (bytes.length !== Buffer.byteLength(seg.text, 'utf8') || stringContainsEmoji(seg.text)) {
+            unicodeStrings++;
+        }
+
+        const key = 1 + Math.floor(Math.random() * 255);
+        const xored = Uint8Array.from(bytes, (b) => b ^ key);
+        const literal = 'NIX6_D("' + base64EncodeBytes(xored, alphabet) + '",' + key + ')';
+
         encoded++;
         /* Keep a space between the rebuilt call and what came before it: after
            minify trimmed a trailing space, `x = 1 or "none"` would otherwise
-           come out as `x = 1 orNIX6_STR{...}`, which is one long identifier. */
+           come out as `x = 1 orNIX6_D(...)`, which is one long identifier. */
         const previous = out.length ? out[out.length - 1].text : '';
         const separator = previous !== '' && !/[\s([{,;]$/.test(previous) ? ' ' : '';
-        out.push({ type: 'code', text: separator + 'NIX6_STR{' + bytes.join(',') + '}' });
+        out.push({ type: 'code', text: separator + literal });
     }
 
-    if (encoded === 0) return { text: src, encoded, skipped };
+    if (encoded === 0) return { text: src, encoded, skipped, unicodeStrings };
 
-    const helper = [
-        'local NIX6_STR = function(_t)',
-        ' local _o = {}',
-        ' for _i = 1, #_t do _o[_i] = string.char(_t[_i]) end',
-        ' return table.concat(_o)',
-        'end',
-        ''
-    ].join('\n');
+    /* The helper goes after any leading --! directive so Luau still sees it as
+       the first statement of the chunk. A comment run does not include its own
+       newline, so the helper needs one prepended or the whole first line would
+       be swallowed by the directive comment. */
+    let insertAt = 0;
+    while (insertAt < out.length) {
+        const seg = out[insertAt];
+        if (seg.type === 'comment' && /^\s*--!/.test(seg.text)) { insertAt++; continue; }
+        if (seg.type === 'code' && seg.text.trim() === '') { insertAt++; continue; }
+        break;
+    }
+    const previousSeg = insertAt > 0 ? out[insertAt - 1] : null;
+    const helper = buildStringHelper(alphabet);
+    const helperText = previousSeg && previousSeg.type === 'comment' ? '\n' + helper : helper;
+    out.splice(insertAt, 0, { type: 'code', text: helperText });
 
-    return { text: helper + segmentsToText(out), encoded, skipped };
+    return { text: segmentsToText(out), encoded, skipped, unicodeStrings };
 }
 
 // --- OBFUSCATION ENGINE (reversible XOR wrapper; not a VM, not encryption) ---
 class ObfuscatorEngine {
     constructor(sourceCode, options) {
-        this.source = sourceCode;
+        /* A byte-order mark is not part of the program: if it reaches the
+           lexer it becomes a stray token and shifts the first line, which is
+           exactly where --!strict has to sit. */
+        this.source = String(sourceCode == null ? '' : sourceCode).replace(/^\uFEFF/, '');
         this.options = normalizeObfuscationOptions(options);
         this.stats = {
             commentsRemoved: 0,
             identifiersRenamed: 0,
             stringsEncoded: 0,
             stringsSkipped: 0,
-            emojiPreserved: 0,
+            unicodeStrings: 0,
             tokensSqueezed: 0,
+            payloadBytes: 0,
+            sourceBytes: 0,
             integrity: 0
         };
     }
@@ -649,7 +879,6 @@ class ObfuscatorEngine {
             const result = minifySource(text);
             text = result.text;
             this.stats.commentsRemoved = result.commentsRemoved;
-            this.stats.emojiPreserved = result.emojiPreserved || 0;
             this.stats.tokensSqueezed = result.tokensSqueezed || 0;
         }
         if (this.options.rename) {
@@ -662,6 +891,7 @@ class ObfuscatorEngine {
             text = result.text;
             this.stats.stringsEncoded = result.encoded;
             this.stats.stringsSkipped = result.skipped;
+            this.stats.unicodeStrings = result.unicodeStrings || 0;
         }
 
         return text;
@@ -701,41 +931,50 @@ class ObfuscatorEngine {
         };
     }
 
+    /* Builds the delivered artifact: source is minified/renamed/encoded, then
+       serialised as XORed bytes inside a base64 string with a per-build
+       shuffled alphabet. The wrapper decodes it at runtime and runs it, so the
+       payload on disk is neither readable Lua nor decodable with a stock tool. */
+    /* Builds the delivered artifact: source is minified/renamed/encoded, then
+       serialised as XORed bytes inside a base64 string with a per-build
+       shuffled alphabet. The wrapper decodes it with gsub in groups of four,
+       so the payload on disk is neither readable Lua nor decodable with a
+       stock tool, and decoding stays linear in the payload size. */
     buildProtectedVM() {
-        const op = this._generateOpCodes();
-        const xorKey = Math.floor(Math.random() * 180) + 35;
         const prepared = this.prepareSource();
-        const srcBytes = Buffer.from(prepared, 'utf-8');
+        /* Kept for the offline verifier: it is exactly what the wrapper must
+           decode back out of the artifact. */
+        this.lastPrepared = prepared;
+        const srcBytes = Buffer.from(prepared, 'utf8');
 
-        const encBytes = [];
-        for (let i = 0; i < srcBytes.length; i++) {
-            encBytes.push(srcBytes[i] ^ xorKey);
-        }
+        const xorKey = 1 + Math.floor(Math.random() * 255);
+        const xored = Uint8Array.from(srcBytes, (b) => b ^ xorKey);
 
-        /* Anti-tamper: position-weighted sum of the *encoded* bytes, which are
-           exactly what the payload carries. Summing those instead of the XOR
-           result keeps both sides in integer arithmetic, so the check cannot
-           drift on a runtime where bit32 is missing and the pure-Lua XOR
-           fallback (which returns floats) is doing the decoding. */
+        /* Anti-tamper: position-weighted sum of the plain source bytes, so the
+           check reads the same string the loader is about to compile. Both
+           sides stay in integers well under 2^53. */
         let integrity = 0;
-        for (let i = 0; i < encBytes.length; i++) {
-            integrity = (integrity + encBytes[i] * (i + 1)) % INTEGRITY_MODULUS;
+        for (let i = 0; i < srcBytes.length; i++) {
+            integrity = (integrity + srcBytes[i] * (i + 1)) % INTEGRITY_MODULUS;
         }
         this.stats.integrity = integrity;
+        this.stats.sourceBytes = srcBytes.length;
 
+        const alphabet = shuffleAlphabet();
+        const payload = base64EncodeBytes(xored, alphabet);
+        this.stats.payloadBytes = payload.length;
+
+        const op = this._generateOpCodes();
         const v_vm = this._randomId();
-        const v_bytecode = this._randomId();
-        const v_consts = this._randomId();
-        const v_k = this._randomId();
-        const v_pc = this._randomId();
-        const v_reg = this._randomId();
-        const v_instr = this._randomId();
-        const v_op = this._randomId();
+        const v_map = this._randomId();
+        const v_alpha = this._randomId();
+        const v_payload = this._randomId();
+        const v_key = this._randomId();
         const v_bxor = this._randomId();
-        const v_decode = this._randomId();
+        const v_text = this._randomId();
+        const v_instr = this._randomId();
+        const v_pc = this._randomId();
         const v_env = this._randomId();
-
-        const formattedBytes = '{' + encBytes.join(',') + '}';
 
         const tamperGuard = this.options.antiTamper ? `    if debug and debug.getmetatable then
         local _meta = debug.getmetatable(${v_env})
@@ -744,75 +983,72 @@ class ObfuscatorEngine {
 
 ` : '';
 
-        /* The integrity check has to be emitted after the byte table and the
-           XOR helper exist, or it would read them as missing globals. */
         const integrityCheck = this.options.antiTamper ? `    local _int = 0
-    for _i = 1, #${v_bytecode} do
-        _int = (_int + ${v_bytecode}[_i] * _i) % ${INTEGRITY_MODULUS}
+    for _m = 1, #${v_text} do
+        _int = (_int + string.byte(${v_text}, _m) * _m) % ${INTEGRITY_MODULUS}
     end
     if _int ~= ${integrity} then
         error("Nix6: payload integrity check failed")
     end
-
 ` : '';
 
-        return `-- [[ Nix6 obfuscation wrapper: reversible XOR of source bytes. Not encryption, not a security boundary. ]]
+        return `-- [[ Nix6 protected payload: base64 over XORed source bytes. Not encryption, not a security boundary. ]]
 local function ${v_vm}(...)
     local ${v_env} = getfenv and getfenv() or _ENV
-${tamperGuard}
-    local ${v_bxor} = bit32 and bit32.bxor or function(a, b)
-        local r, p = 0, 1
-        while a > 0 or b > 0 do
-            local aa, bb = a % 2, b % 2
-            if aa ~= bb then r = r + p end
-            a, b, p = (a - aa) / 2, (b - bb) / 2, p * 2
+${tamperGuard}    local ${v_bxor} = bit32 and bit32.bxor or function(_a, _b)
+        local _r, _p = 0, 1
+        while _a > 0 or _b > 0 do
+            local _x, _y = _a % 2, _b % 2
+            if _x ~= _y then _r = _r + _p end
+            _a, _b, _p = (_a - _x) / 2, (_b - _y) / 2, _p * 2
         end
-        return r
+        return _r
     end
 
-    local ${v_k} = ${xorKey}
-    local ${v_bytecode} = ${formattedBytes}
-
-    local function ${v_decode}(_t, _key)
-        local _out = {}
-        for _i = 1, #_t do
-            table.insert(_out, string.char(${v_bxor}(_t[_i], _key)))
-        end
-        return table.concat(_out)
+    local ${v_alpha} = "${alphabet}"
+    local ${v_map} = {}
+    for _i = 1, #${v_alpha} do
+        ${v_map}[string.byte(${v_alpha}, _i)] = _i - 1
     end
 
-${integrityCheck}    local ${v_consts} = {
-        [1] = ${v_decode}(${v_bytecode}, ${v_k})
-    }
+    local ${v_key} = ${xorKey}
+    local ${v_text} = ([==[${payload}]==]):gsub("(....)", function(_q)
+        local _a = ${v_map}[string.byte(_q, 1)]
+        local _b = ${v_map}[string.byte(_q, 2)]
+        local _c = ${v_map}[string.byte(_q, 3)]
+        local _d = ${v_map}[string.byte(_q, 4)]
+        local _o = string.char(${v_bxor}(_a * 4 + math.floor(_b / 16), ${v_key}))
+        if _c then
+            _o = _o .. string.char(${v_bxor}((_b % 16) * 16 + math.floor(_c / 4), ${v_key}))
+            if _d then
+                _o = _o .. string.char(${v_bxor}((_c % 4) * 64 + _d, ${v_key}))
+            end
+        end
+        return _o
+    end)
 
-    local ${v_instr} = {
+    if #${v_text} ~= ${srcBytes.length} then
+        error("Nix6: payload length mismatch")
+    end
+${integrityCheck}    local ${v_instr} = {
         {${op.OP_EXEC_CHUNK}, 1}
     }
-
-    local ${v_reg} = {}
     local ${v_pc} = 1
 
     while ${v_pc} <= #${v_instr} do
-        local _curr = ${v_instr}[${v_pc}]
-        local ${v_op} = _curr[1]
-
-        if ${v_op} == ${op.OP_EXEC_CHUNK} then
-            local _code = ${v_consts}[_curr[2]]
+        if ${v_instr}[${v_pc}][1] == ${op.OP_EXEC_CHUNK} then
             local _loader = loadstring or load
-            if _loader then
-                local _compiled, _err = _loader(_code)
-                if _compiled then
-                    return _compiled(...)
-                else
-                    error(_err or "VM Instruction Fault")
-                end
+            local _compiled, _err = _loader(${v_text})
+            if _compiled then
+                return _compiled(...)
             end
+            error(_err or "VM Instruction Fault")
         end
-
         ${v_pc} = ${v_pc} + 1
     end
 end
-return ${v_vm}(...)`;
+return ${v_vm}(...)
+`;
     }
 }
 
@@ -1361,6 +1597,10 @@ app.get('/raw/:id', async (req, res) => {
 });
 
 module.exports = app;
+
+/* Exposed so scripts/verify-engine.js can exercise the engine without starting
+   a listener. The module itself is still the Express handler. */
+module.exports.ObfuscatorEngine = ObfuscatorEngine;
 
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
