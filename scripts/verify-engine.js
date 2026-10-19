@@ -416,6 +416,85 @@ const runtimeSamples = [
     }
 ];
 
+/* 8. Runtime targets: every loader must point at the right primitive for its
+      runtime, and must be quoted safely no matter what the host header held. */
+{
+    const api = require('../server.js').__engine;
+    const URL = 'https://nix6.example/raw/abc123';
+    const loaders = {};
+    for (const target of Object.keys(api.RUN_TARGETS)) {
+        const loader = api.buildLoader(target, URL);
+        loaders[target] = loader;
+        check(target + ' loader is non-empty', typeof loader === 'string' && loader.length > 40);
+        check(target + ' loader embeds the payload URL', loader.includes(URL));
+        check(target + ' loader resolves a compile function',
+            /loadstring or load|_g\.loadstring/.test(loader));
+    }
+
+    check('executor target fetches with game:HttpGet', loaders.executor.includes('game:HttpGet'));
+    check('studio target uses HttpService:GetAsync', loaders.studio.includes('HttpService'));
+    for (const target of ['lua51', 'lua54']) {
+        check(target + ' target uses luasocket', loaders[target].includes('socket.http'));
+        check(target + ' target falls back to a CLI fetcher',
+            loaders[target].includes('curl') && loaders[target].includes('wget'));
+    }
+    check('universal target probes executors', loaders.auto.includes('game:HttpGet'));
+    check('universal target probes request shims', loaders.auto.includes('http_request'));
+    check('universal target probes desktop HTTP', loaders.auto.includes('socket.http'));
+    check('universal target probes a CLI fetcher', loaders.auto.includes('io.popen'));
+
+    /* A quote in the URL would end the Lua string and turn the loader into a
+       syntax error; it must be escaped before it is embedded. */
+    const hostile = api.buildLoader('executor', 'https://nix6.example/raw/a"b\\c\nd');
+    check('quotes in the URL are escaped', !hostile.includes('a"b') && hostile.includes('%22'));
+    check('newlines in the URL are stripped', !hostile.includes('\nd'));
+
+    check('legacy luau maps to the universal target', api.normalizeTarget('luau') === 'auto');
+    check('legacy lua maps to lua54', api.normalizeTarget('lua') === 'lua54');
+    check('unknown target falls back to universal', api.normalizeTarget('nonsense') === 'auto');
+}
+
+/* 9. Dialect warnings: Luau-only syntax must be flagged for Lua targets, and
+      strings/comments must not trigger them. */
+{
+    const api = require('../server.js').__engine;
+    const luauOnly = 'local x: number = 1\nfor i = 1, 3 do if i == 2 then continue end end\nlocal s = `n={x}`';
+    const luaWarnings = api.compatibilityWarnings(luauOnly, 'lua51');
+    check('type annotations warn on Lua targets', luaWarnings.some((w) => w.includes('type annotations')));
+    check('continue warns on Lua targets', luaWarnings.some((w) => w.includes('continue')));
+    check('interpolated strings warn on Lua targets', luaWarnings.some((w) => w.includes('interpolated')));
+    check('Luau target does not warn about Luau syntax',
+        api.compatibilityWarnings(luauOnly, 'auto').length === 0);
+
+    /* The same tokens inside a string or comment are data, not syntax. */
+    const quoted = 'local a = "x += 1 // continue"\n-- local b: number = 2';
+    check('compound assignment in a string is not flagged',
+        !api.compatibilityWarnings(quoted, 'lua51').some((w) => w.includes('compound')));
+    check('comments do not trigger Luau warnings',
+        !api.compatibilityWarnings(quoted, 'lua51').some((w) => w.includes('type annotations')));
+
+    const luaOnly = 'setfenv(1, {})\nlocal t = unpack({1, 2})';
+    const luauWarnings = api.compatibilityWarnings(luaOnly, 'auto');
+    check('setfenv warns on Luau targets', luauWarnings.some((w) => w.includes('setfenv')));
+    check('global unpack warns on Luau targets', luauWarnings.some((w) => w.includes('unpack')));
+    check('Lua target does not warn about Lua syntax',
+        api.compatibilityWarnings(luaOnly, 'lua54').length === 0);
+}
+
+/* 10. The emitted wrapper must stay portable: no bit32-only path, a loader
+       lookup that survives a missing loadstring, and a shebang strip (load()
+       on a string rejects a chunk that starts with '#'). */
+{
+    const { artifact } = build('print("portable")', ALL);
+    check('bit32 is optional', artifact.includes('type(bit32) == "table"'));
+    check('LuaJIT bit library is used when present', artifact.includes('type(bit) == "table"'));
+    check('pure-Lua xor fallback remains', artifact.includes('math.floor((_a - _x) / 2)'));
+    check('loader falls back to getgenv', artifact.includes('_g.loadstring or _g.load'));
+    check('missing loader reports a clear error', artifact.includes('exposes no load() or loadstring()'));
+    check('shebang is stripped before compiling', artifact.includes('string.char(10)'));
+    check('compile failures are pcall-guarded', artifact.includes('pcall(_loader'));
+}
+
 function findLuau() {
     const local = path.join(__dirname, '..', '.tools', 'luau');
     if (fs.existsSync(local)) return local;

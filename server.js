@@ -237,6 +237,249 @@ function normalizeObfuscationOptions(raw) {
     };
 }
 
+/* Runtime targets. The payload itself is plain Lua in every case; what changes
+   is how the vault hands it back. Executors fetch with game:HttpGet, Studio has
+   to go through HttpService, and a desktop Lua install only has whatever HTTP
+   library it shipped with -- so each target gets a loader that matches the
+   fetch and load functions actually present there. `auto` probes at runtime, so
+   one link works in an executor, a sandbox and a plain interpreter. */
+const RUN_TARGETS = {
+    auto: {
+        id: 'auto',
+        label: 'Universal (auto)',
+        ext: 'luau',
+        legacyFileType: 'luau',
+        note: 'Probes the runtime for an HTTP helper, then compiles with loadstring or load.'
+    },
+    executor: {
+        id: 'executor',
+        label: 'Roblox executor',
+        ext: 'luau',
+        legacyFileType: 'luau',
+        note: 'Fetches with game:HttpGet and compiles with the executor loadstring.'
+    },
+    studio: {
+        id: 'studio',
+        label: 'Roblox Studio',
+        ext: 'luau',
+        legacyFileType: 'luau',
+        note: 'Fetches with HttpService:GetAsync; Studio must allow loadstring.'
+    },
+    lua51: {
+        id: 'lua51',
+        label: 'Lua 5.1 / LuaJIT',
+        ext: 'lua',
+        legacyFileType: 'lua',
+        note: 'Fetches with socket.http, curl or wget and compiles with loadstring.'
+    },
+    lua54: {
+        id: 'lua54',
+        label: 'Lua 5.2 - 5.5',
+        ext: 'lua',
+        legacyFileType: 'lua',
+        note: 'Same fetch chain as 5.1, compiled with load on 5.2 and newer.'
+    }
+};
+
+/* Vault entries written before targets existed stored `luau` / `lua`. */
+const LEGACY_TARGETS = { luau: 'auto', lua: 'lua54' };
+
+function normalizeTarget(raw) {
+    const key = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (RUN_TARGETS[key]) return key;
+    if (LEGACY_TARGETS[key]) return LEGACY_TARGETS[key];
+    return 'auto';
+}
+
+function targetInfo(raw) {
+    return RUN_TARGETS[normalizeTarget(raw)];
+}
+
+/* URLs are embedded in quoted Lua strings, so anything that could close the
+   quote or start a new line is percent-encoded rather than trusted. */
+function luaSafeUrl(url) {
+    return String(url).replace(/[\r\n\t]/g, '').replace(/"/g, '%22').replace(/\\/g, '%5C');
+}
+
+/* Desktop Lua has no built-in HTTP. Rather than pretend otherwise, try the
+   three things a normal install can have: luasocket, a local curl, then wget. */
+function desktopFetchLua(url) {
+    const u = luaSafeUrl(url);
+    return `local _url = "${u}"
+local _src = nil
+
+local _ok, _http = pcall(require, "socket.http")
+if _ok and type(_http) == "table" then
+    local _okReq, _body, _code = pcall(_http.request, _url)
+    if _okReq and type(_body) == "string" and (_code == nil or _code == 200) then
+        _src = _body
+    end
+end
+
+if not _src and io and io.popen then
+    local _okPipe, _p = pcall(io.popen, 'curl -fsSL "${u}"')
+    if _okPipe and _p then
+        _src = _p:read("*a")
+        _p:close()
+    end
+end
+
+if not _src or _src == "" then
+    if io and io.popen then
+        local _okPipe, _p = pcall(io.popen, 'wget -qO- "${u}"')
+        if _okPipe and _p then
+            _src = _p:read("*a")
+            _p:close()
+        end
+    end
+end
+
+if not _src or _src == "" then
+    error("Nix6: no HTTP client available - install luasocket or curl/wget") 
+end
+`;
+}
+
+/* The snippet a user pastes into their runtime. Kept in one place so every
+   target is auditable next to the others. */
+function buildLoader(rawTarget, rawUrl) {
+    const target = normalizeTarget(rawTarget);
+    const url = luaSafeUrl(rawUrl);
+
+    if (target === 'executor') {
+        return `-- Nix6 loader (Roblox executor)\nlocal _src = game:HttpGet("${url}")\nlocal _load = loadstring or load\nassert(_load, "Nix6: this executor exposes no loadstring")\nreturn assert(_load(_src, "@nix6"))()`;
+    }
+
+    if (target === 'studio') {
+        return `-- Nix6 loader (Roblox Studio - enable LoadStringEnabled first)\nlocal _src = game:GetService("HttpService"):GetAsync("${url}")\nlocal _load = loadstring or load\nassert(_load, "Nix6: Studio needs LoadStringEnabled to compile this")\nreturn assert(_load(_src, "@nix6"))()`;
+    }
+
+    if (target === 'lua51' || target === 'lua54') {
+        return `-- Nix6 loader (desktop ${target === 'lua51' ? 'Lua 5.1 / LuaJIT' : 'Lua 5.2 - 5.5'})\n` +
+            desktopFetchLua(rawUrl) +
+            `local _load = loadstring or load\nassert(_load, "Nix6: this interpreter exposes no load/loadstring")\nlocal _chunk, _err = _load(_src, "@nix6")\nif not _chunk then error("Nix6: " .. tostring(_err)) end\nreturn _chunk()`;
+    }
+
+    /* auto: one link for every runtime. Each probe is pcall-guarded because a
+       missing global is an error in some sandboxes and nil in others. */
+    return `-- Nix6 universal loader: fetches with whatever this runtime exposes.
+local _url = "${url}"
+local _src = nil
+local _errors = {}
+
+local function _try(_fn)
+    local _ok, _body = pcall(_fn)
+    if _ok and type(_body) == "string" and #_body > 0 then return _body end
+    if not _ok then _errors[#_errors + 1] = tostring(_body) end
+    return nil
+end
+
+if type(game) ~= "nil" then
+    _src = _try(function() return game:HttpGet(_url) end)
+    if not _src then
+        _src = _try(function() return game:GetService("HttpService"):GetAsync(_url) end)
+    end
+end
+
+if not _src then
+    local _genv = (type(getgenv) == "function" and getgenv()) or _G
+    local _syn = type(_genv) == "table" and _genv.syn or nil
+    local _req = nil
+    if type(_genv) == "table" then
+        _req = _genv.request or _genv.http_request or _genv.http or (_syn and _syn.request)
+    end
+    if _req then
+        _src = _try(function()
+            local _r = _req({ Url = _url, Method = "GET" })
+            return _r and (_r.Body or _r.body or _r)
+        end)
+    end
+end
+
+if not _src then
+    local _okHttp, _http = pcall(require, "socket.http")
+    if _okHttp and type(_http) == "table" then
+        _src = _try(function() return (_http.request(_url)) end)
+    end
+end
+
+if not _src then
+    local _okNet, _net = pcall(require, "internet")
+    if _okNet and type(_net) == "table" then
+        _src = _try(function() return _net.request(_url) end)
+    end
+end
+
+if not _src and io and io.popen then
+    _src = _try(function()
+        local _p = io.popen('curl -fsSL "${url}"')
+        local _b = _p:read("*a")
+        _p:close()
+        return _b
+    end)
+end
+
+if not _src and io and io.popen then
+    _src = _try(function()
+        local _p = io.popen('wget -qO- "${url}"')
+        local _b = _p:read("*a")
+        _p:close()
+        return _b
+    end)
+end
+
+if not _src or _src == "" then
+    error("Nix6: no HTTP helper in this runtime (" .. table.concat(_errors, "; ") .. ")")
+end
+
+local _load = loadstring or load
+if not _load and type(getgenv) == "function" then
+    local _g = getgenv()
+    if type(_g) == "table" then _load = _g.loadstring or _g.load end
+end
+if not _load then error("Nix6: this runtime exposes no load/loadstring") end
+
+local _chunk, _err = _load(_src, "@nix6")
+if not _chunk then error("Nix6: " .. tostring(_err)) end
+return _chunk()`;
+}
+
+/* Constructs that exist in one dialect but not the other. A warning here is
+   cheap; the alternative is a script that only fails once it reaches a user's
+   executor, after the vault has already stored it. */
+const DIALECT_CHECKS = {
+    luau: [
+        { re: /\bsetfenv\s*\(/, label: 'setfenv() is not available in Luau' },
+        { re: /\bgetfenv\s*\(/, label: 'getfenv() is not available in Luau' },
+        { re: /\bmodule\s*\(/, label: 'module() does not exist in Luau' },
+        { re: /(^|[^\w.])unpack\s*\(/, label: 'global unpack() is gone in Luau; use table.unpack' }
+    ],
+    lua: [
+        { re: /`/, label: 'interpolated strings are Luau-only', raw: true },
+        { re: /(^|[^\w.])(\+=|-=|\*=|\/=|%=|\^=|\.\.=)/, label: 'compound assignment is Luau-only' },
+        { re: /\bcontinue\b/, label: 'continue is Luau-only' },
+        { re: /::\s*[A-Za-z_]/, label: 'type casts (::) are Luau-only' },
+        { re: /\b(?:local|function)\b[^\n]*\b[a-zA-Z_]\w*\s*:\s*(?:number|string|boolean|any|thread|table|function|nil|[A-Z]\w*)/, label: 'type annotations are Luau-only' },
+        { re: /\\u\{/, label: '\\u{...} escapes are Luau-only', raw: true }
+    ]
+};
+
+function compatibilityWarnings(source, rawTarget) {
+    const target = normalizeTarget(rawTarget);
+    const dialect = target === 'lua51' || target === 'lua54' ? 'lua' : 'luau';
+    const checks = DIALECT_CHECKS[dialect] || [];
+    const segs = scanLua(String(source == null ? '' : source));
+    const code = segs.map((s) => (s.type === 'code' ? s.text : ' '.repeat(s.text.length))).join('');
+    const warnings = [];
+    for (const check of checks) {
+        /* Backticks and \u{...} live inside what the scanner calls a string, so
+           those two read the raw text; everything else reads code only. */
+        const haystack = check.raw ? String(source) : code;
+        if (check.re.test(haystack)) warnings.push(check.label);
+    }
+    return warnings;
+}
+
 /* Checks if a Unicode code point is an emoji (simplified check).
    Returns true if the code point falls within known emoji ranges.
    This is used to preserve emoji strings during minify/encode passes.
@@ -1519,15 +1762,20 @@ class ObfuscatorEngine {
            length and integrity checks below are the real anti-tamper. */
         return `-- [[ Nix6 protected payload: base64 over XORed source bytes. Not encryption, not a security boundary. ]]
 local function ${v_vm}(...)
-    local ${v_bxor} = bit32 and bit32.bxor or function(_a, _b)
-        local _r, _p = 0, 1
-        while _a > 0 or _b > 0 do
-            local _x, _y = _a % 2, _b % 2
-            if _x ~= _y then _r = _r + _p end
-            _a, _b, _p = (_a - _x) / 2, (_b - _y) / 2, _p * 2
+    -- Three bit backends, in speed order: Luau/Roblox (bit32), LuaJIT/Lua 5.1
+    -- with the bit library, then a pure-Lua fallback that only needs integer
+    -- arithmetic. Every operand here is a byte, so the slow path stays cheap.
+    local ${v_bxor} = (type(bit32) == "table" and bit32.bxor)
+        or (type(bit) == "table" and bit.bxor)
+        or function(_a, _b)
+            local _r, _p = 0, 1
+            while _a > 0 or _b > 0 do
+                local _x, _y = _a % 2, _b % 2
+                if _x ~= _y then _r = _r + _p end
+                _a, _b, _p = math.floor((_a - _x) / 2), math.floor((_b - _y) / 2), _p * 2
+            end
+            return _r
         end
-        return _r
-    end
 
     local ${v_alpha} = "${alphabet}"
     local ${v_map} = {}
@@ -1560,7 +1808,16 @@ local function ${v_vm}(...)
     if #${v_text} ~= ${srcBytes.length} then
         error("Nix6: payload length mismatch")
     end
-${integrityCheck}    local ${v_instr} = {
+${integrityCheck}    -- A shebang is only understood by the file loader, not by load()/loadstring()
+    -- on a string, so a chunk that starts with one would fail to compile in
+    -- every environment. Drop that single line here; the payload keeps the
+    -- original bytes for the vault.
+    if string.sub(${v_text}, 1, 1) == "#" then
+        local _nl = string.find(${v_text}, string.char(10), 1, true)
+        ${v_text} = _nl and string.sub(${v_text}, _nl + 1) or ""
+    end
+
+    local ${v_instr} = {
         {${op.OP_EXEC_CHUNK}, 1}
     }
     local ${v_pc} = 1
@@ -1568,11 +1825,22 @@ ${integrityCheck}    local ${v_instr} = {
     while ${v_pc} <= #${v_instr} do
         if ${v_instr}[${v_pc}][1] == ${op.OP_EXEC_CHUNK} then
             local _loader = loadstring or load
-            local _compiled, _err = _loader(${v_text})
-            if _compiled then
-                return _compiled(...)
+            if not _loader and type(getgenv) == "function" then
+                local _g = getgenv()
+                if type(_g) == "table" then _loader = _g.loadstring or _g.load end
             end
-            error(_err or "VM Instruction Fault")
+            if not _loader and type(debug) == "table" then
+                _loader = debug.loadstring
+            end
+            if not _loader then
+                error("Nix6: this runtime exposes no load() or loadstring()")
+            end
+            local _ok, _chunk, _err = pcall(_loader, ${v_text})
+            if not _ok then error(tostring(_chunk)) end
+            if type(_chunk) ~= "function" then
+                error(tostring(_err or "VM Instruction Fault"))
+            end
+            return _chunk(...)
         end
         ${v_pc} = ${v_pc} + 1
     end
@@ -2024,6 +2292,10 @@ app.post('/api/obfuscate', async (req, res) => {
 
     const { scriptPayload, scriptName, fileType, editId } = req.body;
     const options = normalizeObfuscationOptions(req.body.options);
+    /* `fileType` is the pre-targets field. New builds send `target`; old vault
+       entries and old clients keep working through normalizeTarget(). */
+    const target = normalizeTarget(req.body.target || fileType);
+    const info = targetInfo(target);
     if (!scriptPayload) {
         return res.status(400).json({ success: false, error: 'Script payload is missing.' });
     }
@@ -2033,6 +2305,7 @@ app.post('/api/obfuscate', async (req, res) => {
         
         const engine = new ObfuscatorEngine(decodedCode, options);
         const obfuscatedCode = engine.buildProtectedVM();
+        const warnings = compatibilityWarnings(decodedCode, target);
 
         const hostProtocol = req.headers['x-forwarded-proto'] || req.protocol;
         const hostUrl = `${hostProtocol}://${req.get('host')}`;
@@ -2047,22 +2320,28 @@ app.post('/api/obfuscate', async (req, res) => {
                 return res.status(403).json({ success: false, error: 'Script not found or unauthorized to edit.' });
             }
             existingScript.name = scriptName || 'Untitled Script';
-            existingScript.fileType = fileType || 'luau';
+            existingScript.fileType = info.legacyFileType;
+            existingScript.target = target;
             existingScript.code = obfuscatedCode;
             existingScript.rawPayload = scriptPayload;
+            /* Rebuild the loader: the user may have switched target, and a
+               Studio loader pointing at an executor build (or the reverse)
+               fails in a way that looks like a broken payload. */
+            loaderString = buildLoader(target, `${hostUrl}/raw/${existingScript.id}`);
+            existingScript.loader = loaderString;
             scriptId = existingScript.id;
-            loaderString = existingScript.loader;
         } else {
             scriptId = crypto.randomBytes(6).toString('hex');
             const rawLink = `${hostUrl}/raw/${scriptId}`;
-            loaderString = `loadstring(game:HttpGet("${rawLink}"))()`;
+            loaderString = buildLoader(target, rawLink);
 
             currentVault.push({
                 id: scriptId,
                 ownerId: user.id,
                 ownerName: user.username,
                 name: scriptName || 'Untitled Script',
-                fileType: fileType || 'luau',
+                fileType: info.legacyFileType,
+                target,
                 code: obfuscatedCode,
                 rawPayload: scriptPayload,
                 loader: loaderString,
@@ -2087,6 +2366,9 @@ app.post('/api/obfuscate', async (req, res) => {
             success: true,
             loader: loaderString,
             id: scriptId,
+            target,
+            targetLabel: info.label,
+            warnings,
             applied: engine.appliedOptions(),
             stats: engine.stats,
             persisted,
@@ -2192,5 +2474,9 @@ module.exports.__engine = {
     encodeNumbers,
     encodeStrings,
     renameIdentifiers,
-    computeBlockBounds
+    computeBlockBounds,
+    buildLoader,
+    normalizeTarget,
+    compatibilityWarnings,
+    RUN_TARGETS
 };

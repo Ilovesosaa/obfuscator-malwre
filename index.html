@@ -2151,12 +2151,16 @@
                         </div>
                         <div class="input-group">
                             <label>ENVIRONMENT</label>
-                            <select id="fileType">
-                                <option value="luau">Luau (Roblox Studio)</option>
-                                <option value="lua">Standard Lua 5.1</option>
+                            <select id="fileType" onchange="updateTargetHint()">
+                                <option value="auto">Universal (auto)</option>
+                                <option value="executor">Roblox executor</option>
+                                <option value="studio">Roblox Studio</option>
+                                <option value="lua51">Lua 5.1 / LuaJIT</option>
+                                <option value="lua54">Lua 5.2 - 5.5</option>
                             </select>
                         </div>
                     </div>
+                    <p class="options-note" id="targetHint" style="margin: -6px 0 18px;"></p>
 
                     <label style="margin-bottom: 8px; display: block;">OBFUSCATION OPTIONS</label>
                     <div class="options-grid">
@@ -2720,6 +2724,46 @@
             return new TextDecoder().decode(bytes);
         }
 
+        /* Mirrors RUN_TARGETS in server.js. The chip is a label, the hint is
+           the one line that tells the user what their runtime needs to fetch
+           and compile the payload. */
+        const TARGET_META = {
+            auto: { chip: 'UNIVERSAL', ext: 'luau', hint: 'Probes the runtime for an HTTP helper, then compiles with loadstring or load. Works in executors, Studio with loadstring enabled, and desktop Lua with luasocket/curl.' },
+            executor: { chip: 'EXECUTOR', ext: 'luau', hint: 'Fetches with game:HttpGet and compiles with the executor loadstring. This is the usual Roblox-injected path.' },
+            studio: { chip: 'STUDIO', ext: 'luau', hint: 'Fetches with HttpService:GetAsync. Roblox Studio must have LoadStringEnabled turned on or the chunk cannot compile.' },
+            lua51: { chip: 'LUA 5.1', ext: 'lua', hint: 'Desktop Lua 5.1 / LuaJIT: needs luasocket, curl or wget on PATH to fetch the payload.' },
+            lua54: { chip: 'LUA 5.4', ext: 'lua', hint: 'Desktop Lua 5.2-5.5: same fetch chain as 5.1, compiled with load instead of loadstring.' }
+        };
+
+        function normalizeTargetValue(value) {
+            const key = String(value || '').toLowerCase();
+            if (TARGET_META[key]) return key;
+            if (key === 'luau') return 'auto';
+            if (key === 'lua') return 'lua54';
+            return 'auto';
+        }
+
+        function targetLabel(value) {
+            return TARGET_META[normalizeTargetValue(value)].chip;
+        }
+
+        function targetChip(value) {
+            return TARGET_META[normalizeTargetValue(value)].chip;
+        }
+
+        function targetFilename(value) {
+            return TARGET_META[normalizeTargetValue(value)].ext === 'lua' ? 'MAIN.LUA' : 'MAIN.LUAU';
+        }
+
+        function updateTargetHint() {
+            const select = document.getElementById('fileType');
+            const hint = document.getElementById('targetHint');
+            if (!select || !hint) return;
+            const meta = TARGET_META[normalizeTargetValue(select.value)];
+            hint.innerText = meta.hint;
+            document.getElementById('ideFilename').innerText = meta.ext === 'lua' ? 'MAIN.LUA' : 'MAIN.LUAU';
+        }
+
         async function deployScript() {
             const scriptName = document.getElementById('scriptName').value;
             const fileType = document.getElementById('fileType').value;
@@ -2749,6 +2793,7 @@
                         scriptPayload: payload, 
                         scriptName, 
                         fileType, 
+                        target: fileType,
                         editId,
                         options
                     })
@@ -2760,10 +2805,15 @@
                        than a clean success. */
                     const unsaved = data.persisted === false;
                     statusMsg.className = unsaved ? 'is-error' : 'is-success';
+                    const notes = Array.isArray(data.warnings) ? data.warnings : [];
                     statusMsg.innerText = (editId ? 'Script updated' : 'Deployment complete')
                         + ' — ' + describeAppliedOptions(data.applied, data.stats)
-                        + (unsaved ? ' — WARNING: vault storage is not configured, this script will be lost on the next deploy' : ' — saved to the vault');
+                        + (unsaved ? ' — WARNING: vault storage is not configured, this script will be lost on the next deploy' : ' — saved to the vault')
+                        + (notes.length ? ' — ⚠ ' + notes.join('; ') : '');
                     showToast(unsaved ? 'Deployed, but nothing was saved to storage.' : (editId ? 'Script build updated.' : 'Script deployed to the vault.'), unsaved ? 'error' : 'success');
+                    if (notes.length) {
+                        showToast('Compatibility: ' + notes.join('; '), 'error');
+                    }
                     const outputBox = document.getElementById('outputBox');
                     outputBox.style.display = 'block';
                     outputBox.classList.remove('is-fresh');
@@ -2817,7 +2867,7 @@
                             <div>
                                 <div class="vault-name">${s.name}</div>
                                 <div class="vault-meta">
-                                    <span class="chip">${(s.fileType || 'luau').toUpperCase()}</span>
+                                    <span class="chip" title="${targetLabel(s.target || s.fileType)}">${targetChip(s.target || s.fileType)}</span>
                                     <span class="chip chip-id">${s.id}</span>
                                     ${s.createdAt ? `<span class="chip">${s.createdAt}</span>` : ''}
                                 </div>
@@ -2843,7 +2893,8 @@
 
             document.getElementById('editId').value = script.id;
             document.getElementById('scriptName').value = script.name || '';
-            document.getElementById('fileType').value = script.fileType || 'luau';
+            document.getElementById('fileType').value = normalizeTargetValue(script.target || script.fileType);
+            updateTargetHint();
             
             try {
                 document.getElementById('scriptInput').value = script.rawPayload ? safeBase64Decode(script.rawPayload) : (script.code || '');
@@ -2854,7 +2905,7 @@
             document.getElementById('editingBanner').classList.add('active');
             document.getElementById('editingNameDisplay').innerText = script.name || 'Untitled Script';
             document.getElementById('deployBtn').innerText = 'Save & Update Build';
-            document.getElementById('ideFilename').innerText = (script.fileType === 'lua' ? 'MAIN.LUA' : 'MAIN.LUAU');
+            document.getElementById('ideFilename').innerText = targetFilename(document.getElementById('fileType').value);
             
             updateEditorStats();
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2866,6 +2917,8 @@
             document.getElementById('scriptInput').value = '';
             document.getElementById('editingBanner').classList.remove('active');
             document.getElementById('deployBtn').innerText = 'Compile & Deploy';
+            document.getElementById('fileType').value = 'auto';
+            updateTargetHint();
             document.getElementById('ideFilename').innerText = 'MAIN.LUAU';
             updateEditorStats();
         }
@@ -3125,6 +3178,7 @@
         handleRouting();
         initHalloween();
         initHalloweenLantern();
+        updateTargetHint();
         initMotion();
     </script>
 </body>
