@@ -27,7 +27,7 @@
 
             --text-primary: #f4f4f5;
             --text-secondary: #a1a1aa;
-            --text-dim: #71717a;
+            --text-dim: #7e7e8a;
 
             --success: #4ade80;
             --danger: #f87171;
@@ -48,6 +48,14 @@
             --transition-base: 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 
             --header-h: 68px;
+
+            /* accent system — one cool pair for the default theme, replaced
+               with the seasonal pair under body.halloween */
+            --accent: #7dd3fc;
+            --accent-2: #c4b5fd;
+            --spot-rgb: 125, 211, 252;
+            --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+            --reveal-delay: 0s;
         }
 
         * {
@@ -112,7 +120,8 @@
         body::after {
             content: "";
             position: fixed;
-            inset: 0;
+            /* oversized so the crawl can move it without exposing an edge */
+            inset: -48px;
             background-image:
                 linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
@@ -533,9 +542,11 @@
         .options-note {
             font-size: 0.7rem;
             line-height: 1.65;
-            color: var(--text-dim);
+            color: var(--text-secondary);
             max-width: 760px;
             margin: -10px 0 22px;
+            padding-left: 13px;
+            border-left: 1px solid rgba(var(--spot-rgb), 0.38);
         }
 
         /* ============================================================
@@ -780,7 +791,12 @@
         @media (max-width: 620px) {
             .logo { font-size: 1.15rem; }
             .logo-badge { display: none; }
-            .hud-bar { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+            /* two compact rows of metrics instead of four tall ones, so the
+               actual tool starts higher on a phone screen */
+            .hud-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 20px; margin-top: 20px; }
+            .hud-card { padding: 12px 13px; gap: 5px; }
+            .hud-label { font-size: 0.52rem; letter-spacing: 0.08em; line-height: 1.45; }
+            .hud-value { font-size: 0.85rem; }
             .discord-btn, .key-auth-btn { height: 36px; padding: 0 14px; font-size: 0.72rem; }
             .btn-primary { width: 100%; }
             textarea.ide-textarea { min-height: 260px; }
@@ -1002,7 +1018,35 @@
             margin-top: 18px;
             flex-wrap: wrap;
         }
-        .deploy-hint { display: inline-flex; align-items: center; gap: 7px; font-size: 0.68rem; color: var(--text-dim); }
+        .deploy-actions {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-left: auto;
+        }
+        .deploy-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            white-space: nowrap;
+        }
+
+        /* identifier + environment: two columns on desktop, one on phones.
+           The environment column keeps enough width for the longest option
+           label so it never clips under the chevron at the narrow end. */
+        .field-row {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(216px, 1fr);
+            gap: 16px;
+        }
+        .field-row select { font-size: 0.86rem; padding-right: 34px; }
+        .owner-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
 
         /* --- Custom checkboxes --- */
         .option-toggle input[type="checkbox"] {
@@ -1102,10 +1146,450 @@
             .vault-actions { width: 100%; }
             .vault-actions .icon-btn { flex: 1; }
             .deploy-row { flex-direction: column; align-items: stretch; }
+            .deploy-actions { flex-direction: column-reverse; align-items: stretch; margin-left: 0; gap: 10px; }
+            .deploy-hint { justify-content: center; }
             .deploy-row .btn-primary { width: 100%; }
-            .footer-inner { flex-direction: column; text-align: center; }
+            .field-row, .owner-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+            .footer-inner { flex-direction: column; text-align: center; gap: 10px; padding: 22px 20px; }
+            /* stack the footer facts instead of leaving slashes on their own line */
+            .footer-group { flex-direction: column; gap: 6px; }
+            .footer-sep { display: none; }
             .toast-stack { right: 12px; left: 12px; bottom: 12px; max-width: none; }
         }
+        /* ============================================================
+           Motion and accent
+
+           Decorative motion only: every property animated here is a
+           transform, an opacity or a background-position, so it stays
+           composited and never forces layout. All of it is switched off
+           by the reduced-motion block at the bottom of this section.
+           ============================================================ */
+
+        html { scroll-behavior: smooth; }
+
+        /* --- ambient light: the washes drift, the grid crawls --- */
+        body::before { animation: aurora-drift 28s ease-in-out infinite alternate; }
+        body::after { animation: grid-crawl 48s linear infinite; }
+
+        @keyframes aurora-drift {
+            from { transform: translate3d(-1.4%, -1%, 0) scale(1.03); opacity: 0.85; }
+            to   { transform: translate3d(1.4%, 1.4%, 0) scale(1.07); opacity: 1; }
+        }
+        /* transform, not background-position, so the grid is composited
+           instead of repainting the whole viewport every frame */
+        @keyframes grid-crawl {
+            from { transform: translate3d(0, 0, 0); }
+            to   { transform: translate3d(48px, 48px, 0); }
+        }
+
+        /* --- reading progress, pinned above the sticky header --- */
+        .scroll-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            transform: scaleX(0);
+            transform-origin: 0 50%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            box-shadow: 0 0 12px rgba(var(--spot-rgb), 0.5);
+            pointer-events: none;
+            z-index: 300;
+        }
+
+        /* --- reveal on scroll (only when JS is running) --- */
+        .js .reveal {
+            opacity: 0;
+            translate: 0 16px;
+            transition: opacity 0.6s var(--ease-out) var(--reveal-delay),
+                        translate 0.6s var(--ease-out) var(--reveal-delay);
+        }
+        .js .reveal.is-visible { opacity: 1; translate: 0 0; }
+        .hud-bar .hud-card:nth-child(1) { --reveal-delay: 0.02s; }
+        .hud-bar .hud-card:nth-child(2) { --reveal-delay: 0.09s; }
+        .hud-bar .hud-card:nth-child(3) { --reveal-delay: 0.16s; }
+        .hud-bar .hud-card:nth-child(4) { --reveal-delay: 0.23s; }
+        main > .card:nth-child(1) { --reveal-delay: 0.1s; }
+        main > .card:nth-child(2) { --reveal-delay: 0.18s; }
+        main > .card:nth-child(3) { --reveal-delay: 0.26s; }
+        .footer-inner.reveal { --reveal-delay: 0.08s; }
+
+        /* --- header reacts once the page is scrolled --- */
+        header {
+            transition: box-shadow var(--transition-base),
+                        border-color var(--transition-base),
+                        background-color var(--transition-base);
+        }
+        header.is-scrolled {
+            background: rgba(8, 8, 10, 0.86);
+            border-bottom-color: var(--border-strong);
+            box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+        }
+
+        /* --- cards: pointer spotlight (set by JS), lift and accent rim --- */
+        .card:not(.owner-panel) {
+            --mx: -260px;
+            --my: -260px;
+            background-image:
+                radial-gradient(340px circle at var(--mx) var(--my), rgba(var(--spot-rgb), 0.08), transparent 72%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 120px);
+            background-color: var(--bg-surface);
+        }
+        .hud-card {
+            --mx: -260px;
+            --my: -260px;
+            background-image:
+                radial-gradient(240px circle at var(--mx) var(--my), rgba(var(--spot-rgb), 0.1), transparent 72%),
+                linear-gradient(180deg, var(--bg-raised), var(--bg-surface));
+            background-color: var(--bg-raised);
+        }
+        .hud-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(var(--spot-rgb), 0.4);
+            box-shadow: var(--shadow-md);
+        }
+        .card:hover { border-color: rgba(var(--spot-rgb), 0.28); }
+        .card:hover .card-index {
+            color: var(--accent);
+            border-color: rgba(var(--spot-rgb), 0.42);
+        }
+
+        /* the hairline on top of every card gets a slow travelling glint */
+        .card::before,
+        .hud-card::before {
+            background: linear-gradient(90deg, transparent 15%, rgba(var(--spot-rgb), 0.55) 50%, transparent 85%);
+            background-size: 220% 100%;
+            animation: hairline-sweep 9s linear infinite;
+        }
+        @keyframes hairline-sweep {
+            from { background-position: 220% 0; }
+            to   { background-position: -120% 0; }
+        }
+
+        /* --- logo: gradient fill with a slow shimmer --- */
+        @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+            .logo-highlight {
+                background: linear-gradient(110deg, var(--accent) 0%, var(--accent-2) 42%, var(--accent) 85%);
+                background-size: 220% 100%;
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+                color: transparent;
+                text-shadow: none;
+                animation: logo-shimmer 7s linear infinite;
+            }
+        }
+        @keyframes logo-shimmer { to { background-position: -220% 0; } }
+
+        /* --- the side column rides along beside the tall form on wide screens --- */
+        .side-col {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .side-col > .card:last-child { margin-bottom: 0; }
+        @media (min-width: 1181px) {
+            .side-col {
+                position: sticky;
+                top: calc(var(--header-h) + 24px);
+            }
+        }
+
+        /* --- build pipeline: a compact map of what the server does --- */
+        .pipeline { list-style: none; }
+        .pipeline li {
+            --i: 0;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 0 7px 24px;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+        }
+        .pipeline li::before {
+            content: "";
+            position: absolute;
+            left: 4px;
+            top: 50%;
+            width: 8px;
+            height: 8px;
+            margin-top: -4px;
+            border-radius: 50%;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-hover);
+            animation: step-lit 5s ease-in-out infinite;
+            animation-delay: calc(var(--i) * 0.34s);
+        }
+        .pipeline li::after {
+            content: "";
+            position: absolute;
+            left: 7.5px;
+            top: calc(50% + 8px);
+            bottom: -8px;
+            width: 1px;
+            background: var(--border-subtle);
+        }
+        .pipeline li:last-child::after { display: none; }
+        @keyframes step-lit {
+            0%, 100% { background: var(--bg-surface); border-color: var(--border-hover); box-shadow: none; }
+            8%, 24%  { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px rgba(var(--spot-rgb), 0.7); }
+        }
+        .step-meta {
+            margin-left: auto;
+            font-size: 0.58rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+        }
+        .pipeline-note {
+            margin-top: 14px;
+            font-size: 0.66rem;
+            line-height: 1.65;
+            color: var(--text-dim);
+        }
+        /* once the grid collapses, the pipeline would be a lonely full-width
+           list, so the single-column layout keeps just the form and vault */
+        @media (max-width: 1180px) {
+            .pipeline-card { display: none; }
+        }
+
+        /* --- HUD --- */
+        .hud-value { font-variant-numeric: tabular-nums; }
+        .hud-icon { transition: stroke var(--transition-fast), transform var(--transition-fast); }
+        .hud-card:hover .hud-icon { stroke: var(--accent); transform: translateY(-1px) scale(1.12); }
+
+        /* --- primary action: tinted glass + sheen on hover --- */
+        .btn-primary {
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, #b9edff 0%, #f2fbff 44%, #ded7ff 100%);
+            border-color: rgba(255, 255, 255, 0.72);
+            color: #06070d;
+            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.75) inset,
+                        0 8px 24px rgba(var(--spot-rgb), 0.12);
+        }
+        .btn-primary::after {
+            content: "";
+            position: absolute;
+            top: -20%;
+            bottom: -20%;
+            left: -70%;
+            width: 45%;
+            background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+            transform: skewX(-18deg);
+            pointer-events: none;
+            /* a slow glint every few seconds keeps the primary action alive
+               without turning the page into a light show */
+            animation: cta-idle-sheen 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        @keyframes cta-idle-sheen {
+            0%, 62%   { transform: skewX(-18deg) translateX(0);      opacity: 0; }
+            68%       { opacity: 0.9; }
+            86%, 100% { transform: skewX(-18deg) translateX(500%);   opacity: 0; }
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, #d0f4ff 0%, #fbfeff 44%, #eae3ff 100%);
+            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset,
+                        0 16px 34px rgba(var(--spot-rgb), 0.24);
+        }
+        .btn-primary:hover:not(:disabled)::after { animation: btn-sheen 0.85s var(--ease-out); }
+        @keyframes btn-sheen {
+            from { transform: skewX(-18deg) translateX(0); }
+            to   { transform: skewX(-18deg) translateX(500%); }
+        }
+
+        /* --- inputs pick up the accent instead of plain white --- */
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        select:focus,
+        textarea:focus {
+            border-color: rgba(var(--spot-rgb), 0.7);
+            box-shadow: 0 0 0 3px rgba(var(--spot-rgb), 0.1),
+                        0 0 26px rgba(var(--spot-rgb), 0.1);
+        }
+        .ide-wrapper:focus-within {
+            border-color: rgba(var(--spot-rgb), 0.7);
+            animation: focus-breathe 3.6s ease-in-out infinite;
+        }
+        @keyframes focus-breathe {
+            0%, 100% {
+                box-shadow: 0 0 0 3px rgba(var(--spot-rgb), 0.08),
+                            0 0 20px rgba(var(--spot-rgb), 0.08);
+            }
+            50% {
+                box-shadow: 0 0 0 3px rgba(var(--spot-rgb), 0.16),
+                            0 0 34px rgba(var(--spot-rgb), 0.16);
+            }
+        }
+        :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+            outline: 2px solid rgba(var(--spot-rgb), 0.8);
+            outline-offset: 2px;
+        }
+
+        /* --- option toggles --- */
+        .option-toggle { transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast); }
+        .option-toggle:hover { transform: translateY(-1px); }
+        .option-toggle:has(input:checked) {
+            border-color: rgba(var(--spot-rgb), 0.36);
+            background: linear-gradient(180deg, rgba(var(--spot-rgb), 0.09), rgba(var(--spot-rgb), 0.02));
+            color: var(--text-primary);
+        }
+        .option-toggle input[type="checkbox"]:checked { animation: check-pop 0.32s var(--ease-out); }
+        @keyframes check-pop {
+            0%   { transform: scale(0.7); }
+            55%  { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        /* --- vault rows arrive one after another --- */
+        .vault-item {
+            animation: rise-in 0.5s var(--ease-out) backwards;
+            animation-delay: calc(var(--i, 0) * 45ms);
+        }
+        .vault-item:hover {
+            transform: translateY(-2px);
+            border-color: rgba(var(--spot-rgb), 0.32);
+            box-shadow: var(--shadow-md);
+        }
+        @keyframes rise-in { from { opacity: 0; transform: translateY(12px); } }
+
+        .empty-state svg { animation: float-soft 5s ease-in-out infinite; }
+        @keyframes float-soft { 50% { transform: translateY(-5px); } }
+
+        /* --- seasonal theme uses the same motion, warm hues --- */
+        body.halloween .btn-primary {
+            background: linear-gradient(135deg, #ffd28f 0%, #fb923c 52%, #fbbf24 100%);
+            border-color: rgba(255, 255, 255, 0.55);
+            color: #190a02;
+        }
+        body.halloween .btn-primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, #ffdda8 0%, #fd9d47 52%, #fcd34d 100%);
+        }
+
+        /* --- a second, wider light source that trails the pointer --- */
+        .ambient-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 780px;
+            height: 780px;
+            margin: -390px 0 0 -390px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(var(--spot-rgb), 0.1), rgba(var(--spot-rgb), 0.03) 45%, transparent 68%);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 0;
+            will-change: transform, opacity;
+            transition: opacity 0.6s var(--ease-out);
+        }
+        .ambient-glow.is-live { opacity: 1; }
+
+        /* ============================================================
+           Compile feedback
+
+           Deploying is the one moment the page is working rather than
+           idling, so it is the one moment allowed to be loud: a scan head
+           runs down the editor and the button pulses.
+           ============================================================ */
+        .ide-wrapper::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: -42%;
+            height: 42%;
+            pointer-events: none;
+            opacity: 0;
+            background: linear-gradient(180deg, transparent, rgba(var(--spot-rgb), 0.06) 45%, rgba(var(--spot-rgb), 0.17));
+            border-bottom: 1px solid rgba(var(--spot-rgb), 0.45);
+            box-shadow: 0 6px 24px rgba(var(--spot-rgb), 0.18);
+        }
+        .is-compiling .ide-wrapper::after {
+            opacity: 1;
+            animation: scan-sweep 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+        }
+        @keyframes scan-sweep {
+            from { transform: translate3d(0, 0, 0); }
+            to   { transform: translate3d(0, 340%, 0); }
+        }
+        .is-compiling .ide-wrapper {
+            border-color: rgba(var(--spot-rgb), 0.55);
+            box-shadow: 0 0 0 3px rgba(var(--spot-rgb), 0.08),
+                        0 0 30px rgba(var(--spot-rgb), 0.14);
+        }
+        .is-compiling .ide-header span:last-child { color: var(--accent); }
+
+        /* the button is disabled while the request is in flight; keeping most
+           of its weight reads as "working", not "unavailable" */
+        #deployBtn.is-busy,
+        #deployBtn.is-busy:disabled { opacity: 0.85; cursor: progress; }
+        #deployBtn.is-busy::after {
+            animation: btn-sheen 1.1s linear infinite;
+            opacity: 0.9;
+        }
+
+        /* --- a finished build lands rather than appears --- */
+        .output-box.is-fresh {
+            animation: output-in 0.55s var(--ease-out) both;
+        }
+        .output-box.is-fresh .loader-link {
+            animation: output-line 0.5s var(--ease-out) 0.12s both;
+        }
+        @keyframes output-in {
+            from { opacity: 0; transform: translateY(14px); }
+        }
+        @keyframes output-line {
+            from { opacity: 0; transform: translateY(6px); }
+        }
+        .loader-link.revealed { box-shadow: 0 0 0 1px rgba(var(--spot-rgb), 0.25), 0 10px 30px rgba(0, 0, 0, 0.5); }
+
+        /* --- status text and section icons answer the pointer --- */
+        #statusMsg.is-success { animation: status-pop 0.45s var(--ease-out); }
+        @keyframes status-pop {
+            0%   { transform: translateY(4px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+        .card h2 .ui-icon { transition: transform 0.45s var(--ease-out), stroke 0.45s var(--ease-out); }
+        .card:hover h2 .ui-icon { transform: rotate(-10deg) scale(1.08); stroke: var(--accent); }
+        .card:hover h2 { letter-spacing: 0.115em; }
+        h2 { transition: letter-spacing 0.5s var(--ease-out); }
+
+        /* ============================================================
+           Reduced motion
+
+           The spinner in #statusMsg is functional feedback and stays; the
+           decorative loops above do not.
+           ============================================================ */
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            body::before,
+            body::after,
+            .logo-highlight,
+            .card::before,
+            .hud-card::before,
+            .empty-state svg,
+            .vault-item,
+            .option-toggle input[type="checkbox"]:checked,
+            .ide-wrapper:focus-within,
+            .ambient-glow,
+            .output-box.is-fresh,
+            .output-box.is-fresh .loader-link,
+            .card h2,
+            .card h2 .ui-icon,
+            #statusMsg.is-success,
+            .is-compiling .ide-wrapper::after,
+            .btn-primary::after {
+                animation: none !important;
+            }
+            .ambient-glow { display: none; }
+            .output-box.is-fresh { opacity: 1; transform: none; }
+            .js .reveal,
+            .js .reveal.is-visible { opacity: 1; translate: none; transition: none; }
+            .scroll-progress { display: none; }
+        }
+
         /* ============================================================
            Halloween decorations
            Everything here is scoped under body.halloween, so the whole
@@ -1122,6 +1606,13 @@
             --hween-amber: #fbbf24;
             --hween-purple: #a855f7;
             --hween-ember: #ff7a18;
+
+            /* the shared accent tokens are cool by default; here they turn
+               warm so every glint, focus ring and spotlight in the motion
+               layer matches the seasonal palette instead of fighting it */
+            --accent: #fbbf24;
+            --accent-2: #f97316;
+            --spot-rgb: 249, 115, 22;
         }
 
         /* --- the page by lantern light: warmer washes than the default --- */
@@ -1528,6 +2019,8 @@
     </style>
 </head>
 <body>
+    <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+    <div class="ambient-glow" id="ambientGlow" aria-hidden="true"></div>
 
     <script>
         /* Seasonal theming.
@@ -1549,6 +2042,19 @@
         if (halloweenActiveAt(new Date())) {
             document.body.classList.add('halloween');
         }
+
+        /* Reveal-on-scroll is opt-in from CSS only when this class is present,
+           so a browser without JS still renders every card. If the motion
+           layer never starts — say an unrelated handler threw first — the
+           class is dropped so no section can stay invisible. */
+        document.documentElement.classList.add('js');
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                if (!document.documentElement.hasAttribute('data-motion')) {
+                    document.documentElement.classList.remove('js');
+                }
+            }, 1500);
+        });
     </script>
 
     <div class="hween-atmos" aria-hidden="true">
@@ -1579,31 +2085,31 @@
         </div>
 
         <div class="hud-bar">
-            <div class="hud-card">
+            <div class="hud-card reveal">
                 <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="hud-label">ENGINE STATUS</span></div>
                 <span class="hud-value hud-inline"><span class="status-dot"></span>ONLINE</span>
             </div>
-            <div class="hud-card">
+            <div class="hud-card reveal">
                 <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/></svg><span class="hud-label">HOSTED VAULT SCRIPTS</span></div>
                 <span class="hud-value" id="hudScriptCount">0</span>
             </div>
-            <div class="hud-card">
+            <div class="hud-card reveal">
                 <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M8 21H3v-5M3 21l7-7M16 3h5v5M21 3l-7 7"/></svg><span class="hud-label">TRANSFORM</span></div>
                 <span class="hud-value">REVERSIBLE XOR</span>
             </div>
-            <div class="hud-card">
+            <div class="hud-card reveal">
                 <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M7 11V7a5 5 0 0 1 9.9-1"/><rect x="3" y="11" width="18" height="11" rx="2"/></svg><span class="hud-label">SOURCE RECOVERABLE</span></div>
                 <span class="hud-value">YES</span>
             </div>
         </div>
 
         <main>
-            <div class="card owner-panel" id="ownerPanel">
+            <div class="card owner-panel reveal" id="ownerPanel">
                 <h2>
                     <svg class="ui-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                     ADMIN CONTROL SYSTEM <span class="card-index">00</span>
                 </h2>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                <div class="owner-grid">
                     <div>
                         <div class="input-group">
                             <label>CLIENT IDENTIFIER / NAME</label>
@@ -1625,7 +2131,7 @@
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card reveal">
                 <h2>
                     <svg class="ui-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                     NIX6 SOURCE OBFUSCATOR <span class="card-index">01</span>
@@ -1638,7 +2144,7 @@
                         <button class="icon-btn" style="padding: 4px 10px; font-size: 0.7rem;" onclick="cancelEditMode()">Cancel Edit Mode</button>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                    <div class="field-row">
                         <div class="input-group">
                             <label>SCRIPT IDENTIFIER</label>
                             <input type="text" id="scriptName" placeholder="e.g. Rayfield UI / Custom Script">
@@ -1675,8 +2181,10 @@
 
                     <div class="deploy-row">
                         <span id="statusMsg"></span>
-                        <div class="deploy-hint">
-                            <span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> to deploy
+                        <div class="deploy-actions">
+                            <span class="deploy-hint">
+                                <span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> to deploy
+                            </span>
                             <button class="btn-primary" id="deployBtn" onclick="deployScript()">Compile & Deploy</button>
                         </div>
                     </div>
@@ -1689,23 +2197,41 @@
                 </div>
             </div>
 
-            <div class="card">
-                <h2>
-                    <svg class="ui-icon" viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/><path d="M12 12v4M10 14h4"/></svg>
-                    SCRIPT VAULT <span class="card-index">02</span>
-                </h2>
-                <div class="vault-list" id="vaultList">
-                    <div class="empty-state">
-                        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        <span class="empty-title">Not signed in</span>
-                        <span class="empty-hint">Log in with Discord or an API key to inspect the scripts you have hosted.</span>
+            <div class="side-col">
+                <div class="card reveal">
+                    <h2>
+                        <svg class="ui-icon" viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/><path d="M12 12v4M10 14h4"/></svg>
+                        SCRIPT VAULT <span class="card-index">02</span>
+                    </h2>
+                    <div class="vault-list" id="vaultList">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            <span class="empty-title">Not signed in</span>
+                            <span class="empty-hint">Log in with Discord or an API key to inspect the scripts you have hosted.</span>
+                        </div>
                     </div>
+                </div>
+
+                <div class="card pipeline-card reveal">
+                    <h2>
+                        <svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 6h9M4 12h5M4 18h7"/><circle cx="18" cy="6" r="2"/><circle cx="14" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg>
+                        BUILD PIPELINE <span class="card-index">03</span>
+                    </h2>
+                    <ol class="pipeline">
+                        <li style="--i:0"><span>Tokenize Lua / Luau</span><span class="step-meta">lexer</span></li>
+                        <li style="--i:1"><span>Minify source</span><span class="step-meta">opt</span></li>
+                        <li style="--i:2"><span>Rename locals</span><span class="step-meta">opt</span></li>
+                        <li style="--i:3"><span>Encode number literals</span><span class="step-meta">opt</span></li>
+                        <li style="--i:4"><span>Encrypt strings</span><span class="step-meta">opt</span></li>
+                        <li style="--i:5"><span>Split &amp; XOR chunks</span><span class="step-meta">xor</span></li>
+                    </ol>
+                    <p class="pipeline-note">Each chunk carries its own key, so no single blob holds the whole program.</p>
                 </div>
             </div>
         </main>
 
         <footer>
-            <div class="footer-inner">
+            <div class="footer-inner reveal">
                 <div class="footer-group">
                     <span>NIX6 ENGINE v1.1.0</span>
                     <span class="footer-sep">/</span>
@@ -2208,7 +2734,11 @@
 
             statusMsg.className = 'is-pending';
             statusMsg.innerText = editId ? 'Updating script build...' : 'Compiling payload...';
-            document.getElementById('deployBtn').disabled = true;
+            const deployBtn = document.getElementById('deployBtn');
+            deployBtn.disabled = true;
+            /* drives the editor scan head and the button's running sheen */
+            deployBtn.classList.add('is-busy');
+            document.body.classList.add('is-compiling');
             const options = readObfuscationOptions();
             try {
                 const payload = safeBase64Encode(scriptInput);
@@ -2234,7 +2764,11 @@
                         + ' — ' + describeAppliedOptions(data.applied, data.stats)
                         + (unsaved ? ' — WARNING: vault storage is not configured, this script will be lost on the next deploy' : ' — saved to the vault');
                     showToast(unsaved ? 'Deployed, but nothing was saved to storage.' : (editId ? 'Script build updated.' : 'Script deployed to the vault.'), unsaved ? 'error' : 'success');
-                    document.getElementById('outputBox').style.display = 'block';
+                    const outputBox = document.getElementById('outputBox');
+                    outputBox.style.display = 'block';
+                    outputBox.classList.remove('is-fresh');
+                    void outputBox.offsetWidth;      /* restart the entrance */
+                    outputBox.classList.add('is-fresh');
                     document.getElementById('loaderOutput').innerText = data.loader;
                     cancelEditMode();
                     loadVault();
@@ -2248,7 +2782,9 @@
                 statusMsg.innerText = 'Network error during build';
                 showCustomAlert('Network error during script build.', 'CONNECTION ERROR');
             } finally {
-                document.getElementById('deployBtn').disabled = false;
+                deployBtn.disabled = false;
+                deployBtn.classList.remove('is-busy');
+                document.body.classList.remove('is-compiling');
             }
         }
 
@@ -2262,8 +2798,8 @@
                 const data = await res.json();
                 if (!data.success || !data.scripts || data.scripts.length === 0) {
                     cachedVaultScripts = [];
-                    document.getElementById('hudScriptCount').innerText = '0';
-                    document.getElementById('footerVaultCount').innerText = '0';
+                    animateCount(document.getElementById('hudScriptCount'), 0);
+                    animateCount(document.getElementById('footerVaultCount'), 0);
                     vaultList.innerHTML = `
                         <div class="empty-state">
                             <svg viewBox="0 0 24 24"><path d="M21 8H3v13h18V8zM3 8l9-6 9 6"/></svg>
@@ -2274,9 +2810,9 @@
                 }
 
                 cachedVaultScripts = data.scripts;
-                document.getElementById('hudScriptCount').innerText = data.scripts.length;
-                vaultList.innerHTML = data.scripts.map(s => `
-                    <div class="vault-item">
+                animateCount(document.getElementById('hudScriptCount'), data.scripts.length);
+                vaultList.innerHTML = data.scripts.map((s, index) => `
+                    <div class="vault-item" style="--i:${index}">
                         <div class="vault-head">
                             <div>
                                 <div class="vault-name">${s.name}</div>
@@ -2297,7 +2833,7 @@
                         <code class="loader-link" onclick="toggleReveal(this)">${s.loader}</code>
                     </div>
                 `).join('');
-                document.getElementById('footerVaultCount').innerText = data.scripts.length;
+                animateCount(document.getElementById('footerVaultCount'), data.scripts.length);
             } catch (e) {}
         }
 
@@ -2402,9 +2938,194 @@
             paint();
         }
 
+        /* ------------------------------------------------------------
+           Motion / interaction polish
+           Decorative only: each helper no-ops for reduced-motion users,
+           for touch pointers where it makes no sense, or when the DOM it
+           needs is missing.
+           ------------------------------------------------------------ */
+        const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+        function initReveal() {
+            const items = Array.from(document.querySelectorAll('.reveal'));
+            if (!items.length) return;
+            if (reduceMotionQuery.matches || !('IntersectionObserver' in window)) {
+                items.forEach((el) => el.classList.add('is-visible'));
+                return;
+            }
+            const observer = new IntersectionObserver((entries) => {
+                for (const entry of entries) {
+                    if (!entry.isIntersecting) continue;
+                    entry.target.classList.add('is-visible');
+                    observer.unobserve(entry.target);
+                }
+            }, { threshold: 0.12, rootMargin: '0px 0px -4% 0px' });
+            items.forEach((el) => observer.observe(el));
+
+            /* The last row can sit exactly at the bottom of a short page, where
+               the negative bottom margin means it never counts as intersecting.
+               Reaching the end of the document reveals whatever is left. */
+            const revealRest = () => {
+                let pending = false;
+                items.forEach((el) => {
+                    if (el.classList.contains('is-visible')) return;
+                    el.classList.add('is-visible');
+                    pending = true;
+                });
+                if (pending) observer.disconnect();
+            };
+            const atBottom = () =>
+                window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 8;
+
+            window.addEventListener('scroll', () => { if (atBottom()) revealRest(); }, { passive: true });
+            window.addEventListener('load', () => { if (atBottom()) revealRest(); });
+            if (atBottom()) revealRest();
+        }
+
+        /* A soft radial highlight that follows the pointer across a card. The
+           coordinates are written to CSS custom properties, so the gradient is
+           painted by the element's own background, under the content. */
+        function initCardSpotlight() {
+            if (reduceMotionQuery.matches) return;
+            if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+            document.querySelectorAll('.card, .hud-card').forEach((card) => {
+                let queued = false;
+                let inside = false;
+                let x = 0;
+                let y = 0;
+
+                const paint = () => {
+                    queued = false;
+                    if (!inside) return;
+                    card.style.setProperty('--mx', x + 'px');
+                    card.style.setProperty('--my', y + 'px');
+                };
+
+                card.addEventListener('pointermove', (event) => {
+                    const rect = card.getBoundingClientRect();
+                    x = event.clientX - rect.left;
+                    y = event.clientY - rect.top;
+                    inside = true;
+                    if (!queued) { queued = true; requestAnimationFrame(paint); }
+                }, { passive: true });
+
+                card.addEventListener('pointerleave', () => {
+                    inside = false;
+                    card.style.setProperty('--mx', '-260px');
+                    card.style.setProperty('--my', '-260px');
+                }, { passive: true });
+            });
+        }
+
+        /* A wide, soft light that lags behind the pointer. Its position is
+           eased toward the target once per frame, so it drifts instead of
+           snapping, and it stops requesting frames as soon as it settles. */
+        function initAmbientGlow() {
+            const glow = document.getElementById('ambientGlow');
+            if (!glow) return;
+            if (reduceMotionQuery.matches) return;
+            if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+            let targetX = window.innerWidth * 0.5;
+            let targetY = -240;
+            let x = targetX;
+            let y = targetY;
+            let frame = 0;
+
+            const tick = () => {
+                x += (targetX - x) * 0.075;
+                y += (targetY - y) * 0.075;
+                glow.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
+                const settled = Math.abs(targetX - x) < 0.5 && Math.abs(targetY - y) < 0.5;
+                frame = settled ? 0 : requestAnimationFrame(tick);
+            };
+
+            window.addEventListener('pointermove', (event) => {
+                targetX = event.clientX;
+                targetY = event.clientY;
+                if (!glow.classList.contains('is-live')) {
+                    x = targetX;
+                    y = targetY;
+                    glow.classList.add('is-live');
+                }
+                if (!frame) frame = requestAnimationFrame(tick);
+            }, { passive: true });
+
+            document.addEventListener('pointerleave', () => {
+                glow.classList.remove('is-live');
+            });
+        }
+
+        /* Reading-progress hairline plus the header's scrolled state. */
+        function initScrollChrome() {
+            const bar = document.getElementById('scrollProgress');
+            const header = document.querySelector('header');
+            let queued = false;
+
+            const paint = () => {
+                queued = false;
+                const max = document.documentElement.scrollHeight - window.innerHeight;
+                const progress = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+                if (bar) bar.style.transform = 'scaleX(' + progress + ')';
+                if (header) header.classList.toggle('is-scrolled', window.scrollY > 8);
+            };
+
+            const schedule = () => {
+                if (queued) return;
+                queued = true;
+                requestAnimationFrame(paint);
+            };
+
+            window.addEventListener('scroll', schedule, { passive: true });
+            window.addEventListener('resize', schedule, { passive: true });
+            paint();
+        }
+
+        /* Counts a HUD number up from its previous value. Numbers that are
+           already equal, or a reduced-motion user, are set directly. */
+        function animateCount(el, target) {
+            if (!el) return;
+            const to = Number(target);
+            if (!Number.isFinite(to)) { el.textContent = String(target); return; }
+
+            const from = Number(String(el.textContent).replace(/[^0-9.-]/g, '')) || 0;
+            if (reduceMotionQuery.matches || from === to) {
+                el.textContent = String(to);
+                return;
+            }
+
+            const started = performance.now();
+            const duration = 700;
+            const step = (now) => {
+                const t = Math.min(1, (now - started) / duration);
+                const eased = 1 - Math.pow(1 - t, 3);
+                el.textContent = String(Math.round(from + (to - from) * eased));
+                if (t < 1) requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+        }
+
+        function initMotion() {
+            try {
+                document.documentElement.setAttribute('data-motion', 'on');
+                initReveal();
+                initCardSpotlight();
+                initAmbientGlow();
+                initScrollChrome();
+                window.addEventListener('load', initScrollChrome);
+            } catch (err) {
+                /* Never let decoration keep the content hidden: dropping the
+                   class restores the flat, fully visible page. */
+                document.documentElement.classList.remove('js');
+                console.warn('Nix6 motion layer disabled:', err);
+            }
+        }
+
         handleRouting();
         initHalloween();
         initHalloweenLantern();
+        initMotion();
     </script>
 </body>
 </html>

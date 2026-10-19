@@ -19,3 +19,6 @@ Thumbs.db
 
 # local verification tooling (Luau binary + conformance suite)
 .tools/
+
+# design review screenshots produced by the cloud browser
+artifacts/
