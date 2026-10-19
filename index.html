@@ -2152,8 +2152,7 @@
                         <div class="input-group">
                             <label>ENVIRONMENT</label>
                             <select id="fileType" onchange="updateTargetHint()">
-                                <option value="auto">Universal (auto)</option>
-                                <option value="executor">Roblox executor</option>
+                                <option value="auto">Any executor</option>
                                 <option value="studio">Roblox Studio</option>
                                 <option value="lua51">Lua 5.1 / LuaJIT</option>
                                 <option value="lua54">Lua 5.2 - 5.5</option>
@@ -2728,17 +2727,16 @@
            the one line that tells the user what their runtime needs to fetch
            and compile the payload. */
         const TARGET_META = {
-            auto: { chip: 'UNIVERSAL', ext: 'luau', hint: 'Probes the runtime for an HTTP helper, then compiles with loadstring or load. Works in executors, Studio with loadstring enabled, and desktop Lua with luasocket/curl.' },
-            executor: { chip: 'EXECUTOR', ext: 'luau', hint: 'Fetches with game:HttpGet and compiles with the executor loadstring. This is the usual Roblox-injected path.' },
-            studio: { chip: 'STUDIO', ext: 'luau', hint: 'Fetches with HttpService:GetAsync. Roblox Studio must have LoadStringEnabled turned on or the chunk cannot compile.' },
-            lua51: { chip: 'LUA 5.1', ext: 'lua', hint: 'Desktop Lua 5.1 / LuaJIT: needs luasocket, curl or wget on PATH to fetch the payload.' },
-            lua54: { chip: 'LUA 5.4', ext: 'lua', hint: 'Desktop Lua 5.2-5.5: same fetch chain as 5.1, compiled with load instead of loadstring.' }
+            auto: { chip: 'EXECUTOR', ext: 'luau', hint: 'One line: (loadstring or load)(game:HttpGet(url))(). Works in any Roblox executor, including ones that renamed loadstring.' },
+            studio: { chip: 'STUDIO', ext: 'luau', hint: 'One line through HttpService:GetAsync. Studio must have LoadStringEnabled turned on or the chunk cannot compile.' },
+            lua51: { chip: 'LUA 5.1', ext: 'lua', hint: 'Desktop Lua: three lines. Needs luasocket or a curl binary, since plain Lua has no HTTP of its own.' },
+            lua54: { chip: 'LUA 5.4', ext: 'lua', hint: 'Desktop Lua 5.2-5.5: same three lines as 5.1, compiled with load instead of loadstring.' }
         };
 
         function normalizeTargetValue(value) {
             const key = String(value || '').toLowerCase();
             if (TARGET_META[key]) return key;
-            if (key === 'luau') return 'auto';
+            if (key === 'luau' || key === 'executor') return 'auto';
             if (key === 'lua') return 'lua54';
             return 'auto';
         }

@@ -238,51 +238,44 @@ function normalizeObfuscationOptions(raw) {
 }
 
 /* Runtime targets. The payload itself is plain Lua in every case; what changes
-   is how the vault hands it back. Executors fetch with game:HttpGet, Studio has
-   to go through HttpService, and a desktop Lua install only has whatever HTTP
-   library it shipped with -- so each target gets a loader that matches the
-   fetch and load functions actually present there. `auto` probes at runtime, so
-   one link works in an executor, a sandbox and a plain interpreter. */
+   is how the vault hands it back. The default is deliberately one line: every Roblox
+   executor exposes game:HttpGet and either loadstring or load, so the short
+   form is the most portable one there is. The longer variants exist only for
+   runtimes that genuinely need a different fetch path. */
 const RUN_TARGETS = {
     auto: {
         id: 'auto',
-        label: 'Universal (auto)',
+        label: 'Any executor',
         ext: 'luau',
         legacyFileType: 'luau',
-        note: 'Probes the runtime for an HTTP helper, then compiles with loadstring or load.'
-    },
-    executor: {
-        id: 'executor',
-        label: 'Roblox executor',
-        ext: 'luau',
-        legacyFileType: 'luau',
-        note: 'Fetches with game:HttpGet and compiles with the executor loadstring.'
+        note: 'One line: game:HttpGet fetches the payload, loadstring or load compiles it.'
     },
     studio: {
         id: 'studio',
         label: 'Roblox Studio',
         ext: 'luau',
         legacyFileType: 'luau',
-        note: 'Fetches with HttpService:GetAsync; Studio must allow loadstring.'
+        note: 'One line through HttpService; Studio must allow loadstring.'
     },
     lua51: {
         id: 'lua51',
         label: 'Lua 5.1 / LuaJIT',
         ext: 'lua',
         legacyFileType: 'lua',
-        note: 'Fetches with socket.http, curl or wget and compiles with loadstring.'
+        note: 'Desktop Lua: luasocket, with curl as the fallback.'
     },
     lua54: {
         id: 'lua54',
         label: 'Lua 5.2 - 5.5',
         ext: 'lua',
         legacyFileType: 'lua',
-        note: 'Same fetch chain as 5.1, compiled with load on 5.2 and newer.'
+        note: 'Same fetch as 5.1, compiled with load instead of loadstring.'
     }
 };
 
-/* Vault entries written before targets existed stored `luau` / `lua`. */
-const LEGACY_TARGETS = { luau: 'auto', lua: 'lua54' };
+/* Vault entries written before targets existed stored luau or lua, and
+   executor was a separate target before the one-liner became the default. */
+const LEGACY_TARGETS = { luau: 'auto', lua: 'lua54', executor: 'auto' };
 
 function normalizeTarget(raw) {
     const key = String(raw == null ? '' : raw).trim().toLowerCase();
@@ -301,147 +294,30 @@ function luaSafeUrl(url) {
     return String(url).replace(/[\r\n\t]/g, '').replace(/"/g, '%22').replace(/\\/g, '%5C');
 }
 
-/* Desktop Lua has no built-in HTTP. Rather than pretend otherwise, try the
-   three things a normal install can have: luasocket, a local curl, then wget. */
+/* Desktop Lua has no built-in HTTP, so this is the one target that cannot be a
+   single line. luasocket first, then the local curl binary. */
 function desktopFetchLua(url) {
     const u = luaSafeUrl(url);
-    return `local _url = "${u}"
-local _src = nil
-
-local _ok, _http = pcall(require, "socket.http")
-if _ok and type(_http) == "table" then
-    local _okReq, _body, _code = pcall(_http.request, _url)
-    if _okReq and type(_body) == "string" and (_code == nil or _code == 200) then
-        _src = _body
-    end
-end
-
-if not _src and io and io.popen then
-    local _okPipe, _p = pcall(io.popen, 'curl -fsSL "${u}"')
-    if _okPipe and _p then
-        _src = _p:read("*a")
-        _p:close()
-    end
-end
-
-if not _src or _src == "" then
-    if io and io.popen then
-        local _okPipe, _p = pcall(io.popen, 'wget -qO- "${u}"')
-        if _okPipe and _p then
-            _src = _p:read("*a")
-            _p:close()
-        end
-    end
-end
-
-if not _src or _src == "" then
-    error("Nix6: no HTTP client available - install luasocket or curl/wget") 
-end
+    return `local ok, src = pcall(function() return require("socket.http").request("${u}") end)
+if not ok or not src or src == "" then local p = io.popen('curl -fsSL "${u}"'); src = p:read("*a"); p:close() end
 `;
 }
 
-/* The snippet a user pastes into their runtime. Kept in one place so every
-   target is auditable next to the others. */
+/* The snippet a user pastes into their runtime. Nothing here is longer than it
+   has to be: the executor path is the one-line loadstring everyone expects. */
 function buildLoader(rawTarget, rawUrl) {
     const target = normalizeTarget(rawTarget);
     const url = luaSafeUrl(rawUrl);
 
-    if (target === 'executor') {
-        return `-- Nix6 loader (Roblox executor)\nlocal _src = game:HttpGet("${url}")\nlocal _load = loadstring or load\nassert(_load, "Nix6: this executor exposes no loadstring")\nreturn assert(_load(_src, "@nix6"))()`;
-    }
-
     if (target === 'studio') {
-        return `-- Nix6 loader (Roblox Studio - enable LoadStringEnabled first)\nlocal _src = game:GetService("HttpService"):GetAsync("${url}")\nlocal _load = loadstring or load\nassert(_load, "Nix6: Studio needs LoadStringEnabled to compile this")\nreturn assert(_load(_src, "@nix6"))()`;
+        return `(loadstring or load)(game:GetService("HttpService"):GetAsync("${url}"))()`;
     }
 
     if (target === 'lua51' || target === 'lua54') {
-        return `-- Nix6 loader (desktop ${target === 'lua51' ? 'Lua 5.1 / LuaJIT' : 'Lua 5.2 - 5.5'})\n` +
-            desktopFetchLua(rawUrl) +
-            `local _load = loadstring or load\nassert(_load, "Nix6: this interpreter exposes no load/loadstring")\nlocal _chunk, _err = _load(_src, "@nix6")\nif not _chunk then error("Nix6: " .. tostring(_err)) end\nreturn _chunk()`;
+        return desktopFetchLua(rawUrl) + '(loadstring or load)(src)()';
     }
 
-    /* auto: one link for every runtime. Each probe is pcall-guarded because a
-       missing global is an error in some sandboxes and nil in others. */
-    return `-- Nix6 universal loader: fetches with whatever this runtime exposes.
-local _url = "${url}"
-local _src = nil
-local _errors = {}
-
-local function _try(_fn)
-    local _ok, _body = pcall(_fn)
-    if _ok and type(_body) == "string" and #_body > 0 then return _body end
-    if not _ok then _errors[#_errors + 1] = tostring(_body) end
-    return nil
-end
-
-if type(game) ~= "nil" then
-    _src = _try(function() return game:HttpGet(_url) end)
-    if not _src then
-        _src = _try(function() return game:GetService("HttpService"):GetAsync(_url) end)
-    end
-end
-
-if not _src then
-    local _genv = (type(getgenv) == "function" and getgenv()) or _G
-    local _syn = type(_genv) == "table" and _genv.syn or nil
-    local _req = nil
-    if type(_genv) == "table" then
-        _req = _genv.request or _genv.http_request or _genv.http or (_syn and _syn.request)
-    end
-    if _req then
-        _src = _try(function()
-            local _r = _req({ Url = _url, Method = "GET" })
-            return _r and (_r.Body or _r.body or _r)
-        end)
-    end
-end
-
-if not _src then
-    local _okHttp, _http = pcall(require, "socket.http")
-    if _okHttp and type(_http) == "table" then
-        _src = _try(function() return (_http.request(_url)) end)
-    end
-end
-
-if not _src then
-    local _okNet, _net = pcall(require, "internet")
-    if _okNet and type(_net) == "table" then
-        _src = _try(function() return _net.request(_url) end)
-    end
-end
-
-if not _src and io and io.popen then
-    _src = _try(function()
-        local _p = io.popen('curl -fsSL "${url}"')
-        local _b = _p:read("*a")
-        _p:close()
-        return _b
-    end)
-end
-
-if not _src and io and io.popen then
-    _src = _try(function()
-        local _p = io.popen('wget -qO- "${url}"')
-        local _b = _p:read("*a")
-        _p:close()
-        return _b
-    end)
-end
-
-if not _src or _src == "" then
-    error("Nix6: no HTTP helper in this runtime (" .. table.concat(_errors, "; ") .. ")")
-end
-
-local _load = loadstring or load
-if not _load and type(getgenv) == "function" then
-    local _g = getgenv()
-    if type(_g) == "table" then _load = _g.loadstring or _g.load end
-end
-if not _load then error("Nix6: this runtime exposes no load/loadstring") end
-
-local _chunk, _err = _load(_src, "@nix6")
-if not _chunk then error("Nix6: " .. tostring(_err)) end
-return _chunk()`;
+    return `(loadstring or load)(game:HttpGet("${url}"))()`;
 }
 
 /* Constructs that exist in one dialect but not the other. A warning here is

@@ -431,27 +431,33 @@ const runtimeSamples = [
             /loadstring or load|_g\.loadstring/.test(loader));
     }
 
-    check('executor target fetches with game:HttpGet', loaders.executor.includes('game:HttpGet'));
+    /* The executor loader is the one users paste, so it has to stay a single
+       line that reads as a loadstring -- not a probe chain. */
+    check('executor loader is one line', loaders.auto.split('\n').length === 1, loaders.auto);
+    check('executor loader is a loadstring',
+        loaders.auto.startsWith('(loadstring or load)(game:HttpGet(') && loaders.auto.endsWith('))()'));
+    check('executor loader stays short (< 120 chars)', loaders.auto.length < 120, loaders.auto);
+    check('executor loader fetches with game:HttpGet', loaders.auto.includes('game:HttpGet'));
+
     check('studio target uses HttpService:GetAsync', loaders.studio.includes('HttpService'));
+    check('studio loader is one line', loaders.studio.split('\n').length === 1, loaders.studio);
     for (const target of ['lua51', 'lua54']) {
         check(target + ' target uses luasocket', loaders[target].includes('socket.http'));
-        check(target + ' target falls back to a CLI fetcher',
-            loaders[target].includes('curl') && loaders[target].includes('wget'));
+        check(target + ' target falls back to curl', loaders[target].includes('curl'));
+        check(target + ' target is at most three lines',
+            loaders[target].split('\n').length <= 3, loaders[target]);
     }
-    check('universal target probes executors', loaders.auto.includes('game:HttpGet'));
-    check('universal target probes request shims', loaders.auto.includes('http_request'));
-    check('universal target probes desktop HTTP', loaders.auto.includes('socket.http'));
-    check('universal target probes a CLI fetcher', loaders.auto.includes('io.popen'));
 
     /* A quote in the URL would end the Lua string and turn the loader into a
        syntax error; it must be escaped before it is embedded. */
-    const hostile = api.buildLoader('executor', 'https://nix6.example/raw/a"b\\c\nd');
+    const hostile = api.buildLoader('auto', 'https://nix6.example/raw/a"b\\c\nd');
     check('quotes in the URL are escaped', !hostile.includes('a"b') && hostile.includes('%22'));
     check('newlines in the URL are stripped', !hostile.includes('\nd'));
 
-    check('legacy luau maps to the universal target', api.normalizeTarget('luau') === 'auto');
+    check('legacy luau maps to the executor target', api.normalizeTarget('luau') === 'auto');
+    check('legacy executor maps to the executor target', api.normalizeTarget('executor') === 'auto');
     check('legacy lua maps to lua54', api.normalizeTarget('lua') === 'lua54');
-    check('unknown target falls back to universal', api.normalizeTarget('nonsense') === 'auto');
+    check('unknown target falls back to the executor target', api.normalizeTarget('nonsense') === 'auto');
 }
 
 /* 9. Dialect warnings: Luau-only syntax must be flagged for Lua targets, and
