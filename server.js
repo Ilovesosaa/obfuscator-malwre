@@ -199,10 +199,14 @@ async function saveVault(vault) {
    is XOR-wrapped:
 
      minify         drop comments and squeeze whitespace (never inside a
-                    string; `--!` directives are kept)
-     rename         rename top-level local identifiers, but only when the
-                    name can be proven unambiguous (see renameIdentifiers)
-     encryptStrings emit short string literals as byte sequences that are
+                    string; `--!` directives and a `#!` shebang are kept)
+     rename         rename local identifiers, function parameters and loop
+                    variables, but only when the name can be proven
+                    unambiguous (see renameIdentifiers)
+     encodeNumbers  rewrite integer literals as parenthesised arithmetic that
+                    evaluates to the same value, so offsets and constants are
+                    no longer readable in the payload
+     encryptStrings emit string literals as keyed byte sequences that are
                     rebuilt at runtime, so they are not readable in the payload
      antiTamper     verify a checksum of the payload before running it
 
@@ -210,8 +214,8 @@ async function saveVault(vault) {
    proven safe is skipped, and the counts are reported back to the UI.
    ============================================================ */
 
-/* The four switches arrive from the UI as booleans. Anything missing counts as
-   on, which matches the checked boxes the form ships with. */
+/* The switches arrive from the UI as booleans. Anything missing counts as on,
+   which matches the checked boxes the form ships with. */
 // Emoji character ranges for detection and preservation
 // Emoji are in these Unicode ranges (code points):
 // - 0x1F600-0x1F64F: Emoticons
@@ -227,6 +231,7 @@ function normalizeObfuscationOptions(raw) {
     return {
         minify: input.minify !== false,
         rename: input.rename !== false,
+        encodeNumbers: input.encodeNumbers !== false,
         encryptStrings: input.encryptStrings !== false,
         antiTamper: input.antiTamper !== false
     };
@@ -323,12 +328,21 @@ const RESERVED_NAMES = new Set([
     'ipairs', 'pairs', 'next', 'rawget', 'rawset', 'rawequal', 'setmetatable',
     'getmetatable', 'unpack', 'table', 'string', 'math', 'os', 'io',
     'coroutine', 'bit32', 'utf8', 'debug', 'require', 'loadstring', 'load',
-    'spawn', 'wait', 'delay', 'tick', 'self', '_G', '_ENV', 'NIX6_STR'
+    'spawn', 'wait', 'delay', 'tick', 'self', '_G', '_ENV', 'NIX6_STR',
+    // Luau type/builtin names: a rename must never reach inside a type
+    // annotation, where these are the whole vocabulary.
+    'number', 'string', 'boolean', 'any', 'unknown', 'never', 'nil', 'thread',
+    'userdata', 'buffer', 'vector', 'functions', 'typeof', 'export', 'type'
 ]);
 
 /* Reads a long bracket ([==[ ... ]==]) starting at `at`. Returns null when the
    bracket is not a long bracket, so the caller can treat it as plain code. */
 function readLongBracket(src, at) {
+    /* `at` must be the first `[`. Without this guard a plain `-- [note]`
+       comment would match: the scan starts at at + 1 and finds the `[` of the
+       note, then treats the rest of the file as a long comment up to the next
+       `]]`. */
+    if (src[at] !== '[') return null;
     let k = at + 1;
     let level = 0;
     while (src[k] === '=') { level++; k++; }
@@ -339,9 +353,108 @@ function readLongBracket(src, at) {
     return { end: close + closeMark.length };
 }
 
+/* True for a comment the payload must keep in place: `--!strict`/`--!native`
+   only work on the first line, and a `#!` shebang only works as byte zero. */
+function isDirectiveComment(seg) {
+    return seg.type === 'comment' && (seg.shebang === true || /^\s*--!/.test(seg.text));
+}
+
+/* End of a "..."/'...' literal opened at `at`.
+
+   \z swallows the whitespace after it, a backslash may continue the line even
+   when the file uses CRLF, and an unescaped newline closes an unterminated
+   literal at the end of its line (the parser will reject it either way; the
+   point is that the scanner must not swallow the rest of the file). */
+function scanQuotedString(src, at) {
+    const quote = src[at];
+    let j = at + 1;
+    const n = src.length;
+    while (j < n) {
+        const c = src[j];
+        if (c === '\\') {
+            if (src[j + 1] === 'z') {
+                j += 2;
+                while (j < n && /\s/.test(src[j])) j++;
+                continue;
+            }
+            if (src[j + 1] === '\r' && src[j + 2] === '\n') { j += 3; continue; }
+            j += 2;
+            continue;
+        }
+        if (c === quote) return { end: j + 1, interpolated: false };
+        if (c === '\n') return { end: j, interpolated: false, unterminated: true };
+        j++;
+    }
+    return { end: n, interpolated: false, unterminated: true };
+}
+
+/* Skips the expression inside `{ ... }` of a Luau interpolated string. It is
+   real code, so strings, comments, long brackets and nested tables inside it
+   are scanned properly: a `}` or a backtick in there cannot end the outer
+   literal early. Returns the index just past the closing brace. */
+function scanInterpolationExpression(src, at) {
+    const n = src.length;
+    let j = at;
+    let depth = 1;
+    while (j < n) {
+        const c = src[j];
+        if (c === '{') { depth++; j++; continue; }
+        if (c === '}') { depth--; j++; if (depth === 0) return j; continue; }
+        if (c === '"' || c === "'") { j = scanQuotedString(src, j).end; continue; }
+        if (c === '`') { j = scanInterpolatedString(src, j).end; continue; }
+        if (c === '-' && src[j + 1] === '-') {
+            const long = readLongBracket(src, j + 2);
+            if (long) { j = long.end; continue; }
+            while (j < n && src[j] !== '\n') j++;
+            continue;
+        }
+        if (c === '[') {
+            const long = readLongBracket(src, j);
+            if (long) { j = long.end; continue; }
+        }
+        j++;
+    }
+    return n;
+}
+
+/* End of a Luau `interpolated {string}` opened at `at`. Static backtick
+   literals (no `{` anywhere) behave exactly like "..." and can be encoded;
+   the flag tells the string pass which one it is looking at. */
+function scanInterpolatedString(src, at) {
+    const n = src.length;
+    let j = at + 1;
+    let interpolated = false;
+    while (j < n) {
+        const c = src[j];
+        if (c === '\\') {
+            if (src[j + 1] === 'z') {
+                j += 2;
+                while (j < n && /\s/.test(src[j])) j++;
+                continue;
+            }
+            if (src[j + 1] === '\r' && src[j + 2] === '\n') { j += 3; continue; }
+            j += 2;
+            continue;
+        }
+        if (c === '`') return { end: j + 1, interpolated };
+        if (c === '{') {
+            interpolated = true;
+            j = scanInterpolationExpression(src, j + 1);
+            continue;
+        }
+        j++;
+    }
+    return { end: n, interpolated, unterminated: true };
+}
+
 /* Splits source into code / string / comment runs. This is the only place that
    needs to understand Lua's lexical structure; every transform works on the
    runs, so nothing can ever be edited inside a string or comment by accident.
+
+   Every dialect form is covered: 5.1 through 5.4 quoted strings (with \z and
+   backslash-newline continuations), all long-bracket levels, long comments,
+   Luau backtick interpolation (including nested strings and braces inside the
+   interpolated expression), a `#!` shebang and a UTF-8 byte order mark.
 
    Everything is handled as UTF-16 sequences here: emoji, flags, ZWJ families,
    CJK and combining marks all survive because no pass ever splits a surrogate
@@ -354,6 +467,17 @@ function scanLua(src) {
     const pushCode = (end) => {
         if (end > codeStart) segs.push({ type: 'code', text: src.slice(codeStart, end) });
     };
+
+    /* The standalone interpreters skip a first line starting with `#`. Keeping
+       it as a directive comment is what stops minify from turning it into
+       tokens, and keeps it on line one where it has to be. */
+    if (src.startsWith('#!')) {
+        let j = 0;
+        while (j < n && src[j] !== '\n') j++;
+        segs.push({ type: 'comment', text: src.slice(0, j), shebang: true });
+        i = j;
+        codeStart = i;
+    }
 
     while (i < n) {
         const c = src[i];
@@ -376,25 +500,14 @@ function scanLua(src) {
 
         if (c === '"' || c === "'" || c === '`') {
             pushCode(i);
-            let j = i + 1;
-            while (j < n) {
-                if (src[j] === '\\') {
-                    /* \z swallows the following whitespace, newlines included,
-                       so a literal may legally continue on the next line. */
-                    if (src[j + 1] === 'z') {
-                        j += 2;
-                        while (j < n && /\s/.test(src[j])) j++;
-                        continue;
-                    }
-                    j += 2;
-                    continue;
-                }
-                if (src[j] === c) { j++; break; }
-                if (src[j] === '\n' && c !== '`') break;   // unterminated: stop at the line end
-                j++;
-            }
-            segs.push({ type: 'string', text: src.slice(i, j), quote: c });
-            i = j;
+            const scanned = c === '`' ? scanInterpolatedString(src, i) : scanQuotedString(src, i);
+            segs.push({
+                type: 'string',
+                text: src.slice(i, scanned.end),
+                quote: c,
+                interpolated: Boolean(scanned.interpolated)
+            });
+            i = scanned.end;
             codeStart = i;
             continue;
         }
@@ -403,7 +516,7 @@ function scanLua(src) {
             const long = readLongBracket(src, i);
             if (long) {
                 pushCode(i);
-                segs.push({ type: 'string', text: src.slice(i, long.end), quote: '[' });
+                segs.push({ type: 'string', text: src.slice(i, long.end), quote: '[', interpolated: false });
                 i = long.end;
                 codeStart = i;
                 continue;
@@ -434,7 +547,11 @@ function buildMask(segs) {
 
 /* --- minify ------------------------------------------------------------- */
 
-const CODE_TOKEN_RE = /\s+|0[xX][0-9a-fA-F]+|0[bB][01]+|[0-9]+\.?[0-9]*(?:[eE][+-]?[0-9]+)?|\.[0-9]+(?:[eE][+-]?[0-9]+)?|[A-Za-z_][A-Za-z0-9_]*|\.\.\.|\.\.|==|~=|<=|>=|::|\+=|-=|\*=|\/=|%=|\^=|\.\.=|\/\/=|\/\/|<<|>>|[\s\S]/g;
+/* Every literal Lua 5.1-5.4 and Luau can lex has to come out as one token, or
+   minify would insert a space in the middle of it: hex floats (`0x1p4`,
+   `0xA.8p-2`), binary integers (`0b1010`), Luau digit separators (`1_000`,
+   `0xf_f`) and the Luau integer suffix (`123i`, `0xABABi`). */
+const CODE_TOKEN_RE = /\s+|0[xX][0-9a-fA-F_]+(?:\.[0-9a-fA-F_]*)?(?:[pP][+-]?[0-9]+)?i?|0[bB][01_]+i?|[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][+-]?[0-9]+)?i?|\.[0-9][0-9_]*(?:[eE][+-]?[0-9]+)?|[A-Za-z_][A-Za-z0-9_]*|\.\.\.|\.\.|==|~=|<=|>=|::|\+=|-=|\*=|\/=|%=|\^=|\.\.=|\/\/=|\/\/|<<|>>|[\s\S]/g;
 
 const isWordChar = (ch) => ch !== undefined && /[A-Za-z0-9_]/.test(ch);
 
@@ -449,7 +566,10 @@ function tokensNeedSpace(prev, next) {
     if (a === '-' && b === '-') return true;
     if (a === '[' && (b === '[' || b === '=')) return true;
     if (a === '.' && b === '.') return true;
-    if (/[0-9.]/.test(a) && b === '.') return true;
+    /* Only a numeral can fuse with a following `.`: `1 .. 2` is `1.` + `.2`.
+       Testing the last character instead would put a space into `utf8.lower`
+       whenever the preceding identifier ends in a digit. */
+    if (b === '.' && /^[0-9][0-9a-fA-FxX._]*$/.test(prev)) return true;
     if (a === '/' && b === '/') return true;
     if (a === ':' && b === ':') return true;
     if (a === '<' && b === '<') return true;
@@ -497,8 +617,9 @@ function minifySource(src) {
     for (const seg of segs) {
         if (seg.type === 'comment') {
             /* --!strict and --!nocheck are compiler directives, not prose, and
-               they only work on the first line, so they survive. */
-            if (/^--!/.test(seg.text)) { out.push(seg); continue; }
+               they only work on the first line, so they survive; so does a
+               `#!` shebang, which has to stay on line one as well. */
+            if (isDirectiveComment(seg)) { out.push(seg); continue; }
             commentsRemoved++;
             continue;
         }
@@ -516,6 +637,53 @@ function minifySource(src) {
         commentsRemoved,
         tokensSqueezed
     };
+}
+
+/* --- numbers ------------------------------------------------------------ */
+
+/* One pass over complete numeric literals, so the exponent of `1e-2` is never
+   mistaken for a standalone `2` (which would emit the malformed `1e-(0x2-0x1)`).
+   Every form the lexer knows is matched as a whole and then classified: only
+   plain decimal and hex integers are rewritten, while floats, exponents and
+   hex floats are left byte for byte. The lead character is captured so `t[3]`,
+   `-7` and `a + 12` keep their surrounding bytes exactly. */
+const INTEGER_LITERAL_RE = /(^|[^\w.$])(0[xX][0-9a-fA-F]+(?:\.[0-9a-fA-F]*)?(?:[pP][+-]?[0-9]+)?|[0-9]+(?:\.[0-9]*)?(?:[eE][+-]?[0-9]+)?|\.[0-9]+(?:[eE][+-]?[0-9]+)?)(?![\w.])/g;
+
+/* An arithmetic form of an integer, or null when the literal must stay put.
+   Only values a double holds exactly are touched, so the rebuilt constant can
+   never drift from the original. */
+function integerReplacement(value) {
+    if (!Number.isSafeInteger(value) || value < 1) return null;
+    const hex = (n) => '0x' + n.toString(16);
+    if (value === 1) return '(' + hex(2) + '-' + hex(1) + ')';
+    if (value < 4) return '(' + hex(value + 1) + '-' + hex(1) + ')';
+    const left = 1 + Math.floor(Math.random() * (value - 1));
+    return '(' + hex(left) + '+' + hex(value - left) + ')';
+}
+
+/* Rewrites integer literals in code runs. Strings, comments and every other
+   byte of the source stay exactly as they were. */
+function encodeNumbers(src) {
+    const segs = scanLua(src);
+    let encoded = 0;
+    let skipped = 0;
+
+    const out = segs.map((seg) => {
+        if (seg.type !== 'code') return seg;
+        const text = seg.text.replace(INTEGER_LITERAL_RE, (match, lead, digits) => {
+            const isHex = /^0[xX][0-9a-fA-F]+$/.test(digits);
+            if (!isHex && !/^[0-9]+$/.test(digits)) { skipped++; return match; }   // float / exponent
+            if (digits.length > 15) { skipped++; return match; }                    // may exceed 2^53
+            const value = isHex ? Number.parseInt(digits.slice(2), 16) : Number(digits);
+            const replacement = integerReplacement(value);
+            if (!replacement) { skipped++; return match; }
+            encoded++;
+            return lead + replacement;
+        });
+        return { type: 'code', text };
+    });
+
+    return { text: segmentsToText(out), encoded, skipped };
 }
 
 /* --- rename ------------------------------------------------------------- */
@@ -562,9 +730,36 @@ function computeBlockBounds(src, mask) {
     return { depthAt, closers };
 }
 
+/* Closers grouped by the depth they close, in ascending position order. Asking
+   "which `end` closes this depth?" is then a binary search instead of a scan
+   over every closer in the file, which matters once a script has thousands of
+   blocks (that scan used to make the rename pass quadratic). */
+function buildCloserIndex(closers) {
+    const byDepth = new Map();
+    for (const closer of closers) {
+        if (!byDepth.has(closer.depthBefore)) byDepth.set(closer.depthBefore, []);
+        byDepth.get(closer.depthBefore).push(closer.index);
+    }
+    return byDepth;
+}
+
+function firstCloserAfter(closerIndex, position, depth) {
+    const list = closerIndex.get(depth);
+    if (!list) return -1;
+    let lo = 0;
+    let hi = list.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (list[mid] > position) hi = mid;
+        else lo = mid + 1;
+    }
+    return lo < list.length ? list[lo] : -1;
+}
+
 /* Every `local` declaration, with the range in which the name is in scope. */
-function localDeclarations(src, mask) {
-    const { depthAt, closers } = computeBlockBounds(src, mask);
+function localDeclarations(src, mask, bounds) {
+    const { depthAt, closers } = bounds || computeBlockBounds(src, mask);
+    const closerIndex = buildCloserIndex(closers);
     const declarations = new Map();      // name -> [{ index, depth, blockEnd, initializer }]
     const localRe = /\blocal\b/g;
     let m;
@@ -625,13 +820,8 @@ function localDeclarations(src, mask) {
         /* The enclosing block ends at the first closer that closes the level
            this declaration sits at. If the file has unbalanced blocks we bail
            out and treat the block as running to the end of the file. */
-        let blockEnd = src.length;
-        for (const closer of closers) {
-            if (closer.index > m.index && closer.depthBefore === depth) {
-                blockEnd = closer.index;
-                break;
-            }
-        }
+        const closerAt = firstCloserAfter(closerIndex, m.index, depth);
+        const blockEnd = closerAt === -1 ? src.length : closerAt;
 
         for (const decl of here) {
             if (!declarations.has(decl.name)) declarations.set(decl.name, []);
@@ -647,6 +837,177 @@ function localDeclarations(src, mask) {
     return declarations;
 }
 
+/* A copy of the source with every string and comment blanked out, keeping the
+   original offsets. One pass over this is enough to answer the three
+   "is this name also used as something else?" questions, instead of running a
+   fresh regex over the whole file for every declared name (which made large
+   scripts quadratic). */
+function buildCodeView(segs) {
+    let out = '';
+    for (const seg of segs) {
+        out += seg.type === 'code' ? seg.text : ' '.repeat(seg.text.length);
+    }
+    return out;
+}
+
+function identifierConstraints(codeView) {
+    const fields = new Set();      // t.name / t:name — a member, not the local
+    const tableKeys = new Set();   // { name = ... } — a key, not the local
+    const labels = new Set();      // goto name / ::name::
+
+    for (const m of codeView.matchAll(/[.:]\s*([A-Za-z_][A-Za-z0-9_]*)/g)) fields.add(m[1]);
+    for (const m of codeView.matchAll(/[{,]\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/g)) tableKeys.add(m[1]);
+    for (const m of codeView.matchAll(/\bgoto\s+([A-Za-z_][A-Za-z0-9_]*)/g)) labels.add(m[1]);
+    for (const m of codeView.matchAll(/::\s*([A-Za-z_][A-Za-z0-9_]*)\s*::/g)) labels.add(m[1]);
+
+    return { fields, tableKeys, labels };
+}
+
+/* Index of the `)` that closes the `(` at `open`, counted over code only
+   (strings and comments are already masked out). */
+function matchParen(src, mask, open) {
+    let depth = 0;
+    for (let i = open; i < src.length; i++) {
+        if (mask[i] !== 1) continue;
+        if (src[i] === '(') depth++;
+        else if (src[i] === ')') { depth--; if (depth === 0) return i; }
+    }
+    return -1;
+}
+
+/* Splits one function's parameter list and records each name with the range it
+   is visible in: from the closing `)` to the `end` that closes the body.
+
+   Handles named, dotted, method and anonymous functions, Luau generics
+   (`function f<T>(x: T)`), Luau type annotations (including parenthesised
+   function types, which is why the list is split at top-level commas) and
+   `...`, which is not a name. */
+function functionParameterDeclarations(src, mask, depthAt, closerIndex) {
+    const found = [];
+    const re = /\bfunction\b/g;
+    let m;
+
+    while ((m = re.exec(src)) !== null) {
+        if (mask[m.index] !== 1) continue;
+        let i = m.index + 'function'.length;
+        const skipWs = () => { while (i < src.length && /\s/.test(src[i])) i++; };
+
+        skipWs();
+        while (i < src.length && /[A-Za-z0-9_.:]/.test(src[i])) i++;   // f, t.a, t:m
+        skipWs();
+
+        if (src[i] === '<') {                                          // generics
+            let d = 0;
+            while (i < src.length) {
+                if (src[i] === '<') d++;
+                else if (src[i] === '>') { d--; if (d === 0) { i++; break; } }
+                i++;
+            }
+            skipWs();
+        }
+
+        if (src[i] !== '(') continue;                                  // not a definition
+        const close = matchParen(src, mask, i);
+        if (close === -1) continue;
+
+        /* depthAt at `function` is already the body depth: computeBlockBounds
+           counts the keyword as an opener and stores the incremented value. */
+        const bodyDepth = depthAt[m.index];
+        const closerAt = firstCloserAfter(closerIndex, close, bodyDepth);
+        const blockEnd = closerAt === -1 ? src.length : closerAt;
+
+        const add = (from, to) => {
+            const part = src.slice(from, to);
+            const nm = /^[A-Za-z_][A-Za-z0-9_]*/.exec(part.trim());
+            if (!nm) return;                                           // `...` or empty
+            /* The scope starts at the opening `(` rather than after it: the
+               parameter's own name and its type annotation sit inside the
+               parens, and leaving them outside would make `times: number`
+               look like a use-before-declaration and skip the rename. */
+            found.push({
+                name: nm[0],
+                index: from + part.indexOf(nm[0]),
+                scopeStart: i,
+                blockEnd
+            });
+        };
+
+        let start = i + 1;
+        let depth = 0;
+        for (let p = i + 1; p <= close; p++) {
+            const c = src[p];
+            const isCode = mask[p] === 1;
+            if (isCode && (c === '(' || c === '{' || c === '[')) depth++;
+            else if (isCode && (c === ')' || c === '}' || c === ']')) {
+                if (p === close) { add(start, p); break; }
+                depth--;
+            } else if (isCode && c === ',' && depth === 0) {
+                add(start, p);
+                start = p + 1;
+            }
+        }
+    }
+
+    return found;
+}
+
+/* Loop variables: `for i = 1, 10 do` and `for k, v in pairs(t) do`. Their
+   scope is the body after the header's `do`. */
+function forLoopDeclarations(src, mask, depthAt, closerIndex) {
+    const found = [];
+    const re = /\bfor\b/g;
+    let m;
+
+    while ((m = re.exec(src)) !== null) {
+        if (mask[m.index] !== 1) continue;
+
+        let i = m.index + 'for'.length;
+        let bracketDepth = 0;
+        let doIndex = -1;
+        while (i < src.length) {
+            const c = src[i];
+            if (c === '(' || c === '{' || c === '[') bracketDepth++;
+            else if (c === ')' || c === '}' || c === ']') bracketDepth--;
+            else if (bracketDepth === 0 && /[A-Za-z_]/.test(c)) {
+                const word = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i, i + 40))[0];
+                if (word === 'do') { doIndex = i; break; }
+                if (word === 'function' || word === 'end') break;       // malformed header
+                i += word.length;
+                continue;
+            }
+            i++;
+        }
+        if (doIndex === -1) continue;
+
+        const header = src.slice(m.index + 'for'.length, doIndex);
+        const eq = header.indexOf('=');
+        const inMatch = /\bin\b/.exec(header);
+        let namesEnd = header.length;
+        if (eq !== -1) namesEnd = eq;
+        if (inMatch && inMatch.index < namesEnd) namesEnd = inMatch.index;
+
+        const bodyDepth = depthAt[doIndex];
+        const closerAt = firstCloserAfter(closerIndex, doIndex, bodyDepth);
+        const blockEnd = closerAt === -1 ? src.length : closerAt;
+
+        let consumed = 0;
+        for (const part of header.slice(0, namesEnd).split(',')) {
+            const nm = /^[A-Za-z_][A-Za-z0-9_]*/.exec(part.trim());
+            if (nm) {
+                found.push({
+                    name: nm[0],
+                    index: m.index + 'for'.length + consumed + part.indexOf(nm[0]),
+                    scopeStart: doIndex,
+                    blockEnd
+                });
+            }
+            consumed += part.length + 1;
+        }
+    }
+
+    return found;
+}
+
 function renameIdentifiers(src) {
     const segs = scanLua(src);
     const mask = buildMask(segs);
@@ -660,7 +1021,29 @@ function renameIdentifiers(src) {
         occurrences.get(m[0]).push(m.index);
     }
 
-    const declarations = localDeclarations(src, mask);
+    const { depthAt, closers } = computeBlockBounds(src, mask);
+    const closerIndex = buildCloserIndex(closers);
+    const constraints = identifierConstraints(buildCodeView(segs));
+    const declarations = localDeclarations(src, mask, { depthAt, closers });
+    /* Parameters and loop variables are locals too. Merging them into the same
+       map is what keeps the shadowing rule honest: a name that is both a
+       parameter somewhere and a `local` somewhere else is declared twice and
+       is therefore never touched. */
+    const scoped = [
+        ...functionParameterDeclarations(src, mask, depthAt, closerIndex),
+        ...forLoopDeclarations(src, mask, depthAt, closerIndex)
+    ];
+    for (const decl of scoped) {
+        if (!declarations.has(decl.name)) declarations.set(decl.name, []);
+        declarations.get(decl.name).push({
+            index: decl.index,
+            scopeStart: decl.scopeStart,
+            depth: 0,
+            blockEnd: decl.blockEnd,
+            initializer: ''
+        });
+    }
+
     const newNames = new Map();
     const skipped = [];
 
@@ -674,13 +1057,15 @@ function renameIdentifiers(src) {
 
         const occ = occurrences.get(name) || [];
         if (occ.length < 2) continue;                                          // nothing to gain
-        if (occ[0] < decl.index) { skipped.push(name); continue; }              // used before declaration
+        const scopeStart = decl.scopeStart === undefined ? decl.index : decl.scopeStart;
+        if (occ[0] < scopeStart) { skipped.push(name); continue; }              // used before declaration
         if (occ[occ.length - 1] >= decl.blockEnd) { skipped.push(name); continue; }  // used past the block
 
-        if (new RegExp(`[.:]\\s*${name}\\b`).test(src)) { skipped.push(name); continue; }        // t.name / t:name
-        if (new RegExp(`[{,]\\s*${name}\\s*=`).test(src)) { skipped.push(name); continue; }       // { name = ... }
-        if (new RegExp(`\\bgoto\\s+${name}\\b|::\\s*${name}\\s*::`).test(src)) { skipped.push(name); continue; }
-        if (new RegExp(`\\b${name}\\b`).test(decl.initializer)) { skipped.push(name); continue; } // `local x = x or {}`
+        if (constraints.fields.has(name) || constraints.tableKeys.has(name) || constraints.labels.has(name)) {
+            skipped.push(name);
+            continue;
+        }
+        if (decl.initializer && new RegExp(`\\b${name}\\b`).test(decl.initializer)) { skipped.push(name); continue; } // `local x = x or {}`
 
         let fresh = '_' + Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 5);
         while (occurrences.has(fresh) || /^\d/.test(fresh)) {
@@ -712,12 +1097,16 @@ function renameIdentifiers(src) {
 
 /* Decodes a quoted Lua string literal into its runtime bytes.
 
+   `backtick` enables the Luau interpolation escapes (`\``, `\{`, `\}`) that
+   only exist inside a backtick literal; it is only ever set for a backtick
+   string that the lexer proved has no interpolation.
+
    The body is walked by code point (`Array.from`), never by UTF-16 unit, so an
    emoji becomes its real UTF-8 bytes instead of two lone surrogates. That is
    what lets emoji strings be encoded instead of skipped. */
-function decodeQuotedLiteral(literal) {
+function decodeQuotedLiteral(literal, backtick = false) {
     const quote = literal[0];
-    if (quote !== '"' && quote !== "'") return null;
+    if (quote !== '"' && quote !== "'" && quote !== '`') return null;
     const closed = literal[literal.length - 1] === quote;
     const body = literal.slice(1, closed ? literal.length - 1 : literal.length);
     const chars = Array.from(body);
@@ -726,6 +1115,11 @@ function decodeQuotedLiteral(literal) {
         a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11,
         '\\': 92, '"': 34, "'": 39, '\n': 10
     };
+    if (backtick) {
+        simple['`'] = 96;
+        simple['{'] = 123;
+        simple['}'] = 125;
+    }
 
     for (let i = 0; i < chars.length; i++) {
         const ch = chars[i];
@@ -756,7 +1150,11 @@ function decodeQuotedLiteral(literal) {
             if (!u) return null;
             const codePoint = parseInt(u[1], 16);
             if (codePoint > 0x10FFFF) return null;
-            for (const b of Buffer.from(String.fromCodePoint(codePoint), 'utf8')) bytes.push(b);
+            /* Encoded by hand: Lua and Luau emit the raw UTF-8 form even for a
+               lone surrogate (`\u{D800}` is ED A0 80, three bytes of invalid
+               UTF-8). Buffer.from would replace it with U+FFFD, silently
+               turning an error case into a valid string. */
+            bytes.push(...utf8Bytes(codePoint));
             i += u[0].length;
             continue;
         }
@@ -772,6 +1170,22 @@ function decodeQuotedLiteral(literal) {
     }
 
     return bytes;
+}
+
+/* UTF-8 encoding of one code point, surrogates included, matching what the
+   Lua and Luau lexers do for `\u{...}`. */
+function utf8Bytes(codePoint) {
+    if (codePoint < 0x80) return [codePoint];
+    if (codePoint < 0x800) return [0xC0 | (codePoint >> 6), 0x80 | (codePoint & 0x3F)];
+    if (codePoint < 0x10000) {
+        return [0xE0 | (codePoint >> 12), 0x80 | ((codePoint >> 6) & 0x3F), 0x80 | (codePoint & 0x3F)];
+    }
+    return [
+        0xF0 | (codePoint >> 18),
+        0x80 | ((codePoint >> 12) & 0x3F),
+        0x80 | ((codePoint >> 6) & 0x3F),
+        0x80 | (codePoint & 0x3F)
+    ];
 }
 
 /* A [[...]] long string. Lua drops a newline immediately after the opening
@@ -819,12 +1233,23 @@ function base64EncodeBytes(bytes, alphabet) {
 /* The runtime half of the string encoder. Every literal becomes
    NIX6_D("<base64>", key), decoded in groups of four by gsub, so the cost is a
    quarter of the old one-char-at-a-time loop and the emitted text is ~1.37x the
-   original bytes instead of the ~3.5x a decimal byte table cost. */
+   original bytes instead of the ~3.5x a decimal byte table cost.
+
+   The key is a keystream, not a constant: byte i is XORed with
+   (key + i * 31) % 256. Two identical literals therefore produce different
+   ciphertext, and a guessed single-byte key stops being useful after one byte.
+   The byte offset comes from a counter the callback advances itself: Luau's
+   gsub does not pass the match position to the replacement function, so
+   relying on it would break on every Roblox executor. */
 function buildStringHelper(alphabet) {
     return [
         'local NIX6_AL = "' + alphabet + '"',
+        /* Captured once, before any user code can run. A script that sandboxes
+           itself with setfenv drops `string` and `math` from its environment;
+           the helper has to keep working after that. */
+        'local NIX6_SB, NIX6_SC, NIX6_SF, NIX6_GSUB = string.byte, string.char, math.floor, string.gsub',
         'local NIX6_M = {}',
-        'for NIX6_I = 1, #NIX6_AL do NIX6_M[string.byte(NIX6_AL, NIX6_I)] = NIX6_I - 1 end',
+        'for NIX6_I = 1, #NIX6_AL do NIX6_M[NIX6_SB(NIX6_AL, NIX6_I)] = NIX6_I - 1 end',
         'local function NIX6_BX(_a, _b)',
         ' local _r, _p = 0, 1',
         ' while _a > 0 or _b > 0 do',
@@ -834,17 +1259,22 @@ function buildStringHelper(alphabet) {
         ' end',
         ' return _r',
         'end',
-        'local NIX6_XOR = bit32 and bit32.bxor or NIX6_BX',
+        'local NIX6_XOR = (bit32 and bit32.bxor) or NIX6_BX',
+        'local function NIX6_K(_k, _i)',
+        ' return (_k + _i * 31) % 256',
+        'end',
         'local function NIX6_D(_s, _k)',
-        ' return (_s:gsub("(....)", function(_q)',
-        '  local _a, _b = NIX6_M[string.byte(_q, 1)], NIX6_M[string.byte(_q, 2)]',
-        '  local _c, _d = NIX6_M[string.byte(_q, 3)], NIX6_M[string.byte(_q, 4)]',
-        '  local _1 = _a * 4 + math.floor(_b / 16)',
-        '  local _o = string.char(NIX6_XOR(_1, _k))',
+        ' local _n = 0',
+        ' return (NIX6_GSUB(_s, "(....)", function(_q)',
+        '  local _i = _n',
+        '  _n = _i + 3',
+        '  local _a, _b = NIX6_M[NIX6_SB(_q, 1)], NIX6_M[NIX6_SB(_q, 2)]',
+        '  local _c, _d = NIX6_M[NIX6_SB(_q, 3)], NIX6_M[NIX6_SB(_q, 4)]',
+        '  local _o = NIX6_SC(NIX6_XOR(_a * 4 + NIX6_SF(_b / 16), NIX6_K(_k, _i)))',
         '  if _c then',
-        '   _o = _o .. string.char(NIX6_XOR((_b % 16) * 16 + math.floor(_c / 4), _k))',
+        '   _o = _o .. NIX6_SC(NIX6_XOR((_b % 16) * 16 + NIX6_SF(_c / 4), NIX6_K(_k, _i + 1)))',
         '   if _d then',
-        '    _o = _o .. string.char(NIX6_XOR((_c % 4) * 64 + _d, _k))',
+        '    _o = _o .. NIX6_SC(NIX6_XOR((_c % 4) * 64 + _d, NIX6_K(_k, _i + 2)))',
         '   end',
         '  end',
         '  return _o',
@@ -869,13 +1299,18 @@ function encodeStrings(src) {
     for (const seg of segs) {
         if (seg.type !== 'string') { out.push(seg); continue; }
 
+        /* A backtick literal with `{ ... }` holds live expressions, so it is
+           never rewritten; a static one is decoded like a quoted literal. */
+        if (seg.interpolated) { skipped++; out.push(seg); continue; }
+
         let bytes = null;
         if (seg.quote === '"' || seg.quote === "'") {
             bytes = decodeQuotedLiteral(seg.text);
+        } else if (seg.quote === '`') {
+            bytes = decodeQuotedLiteral(seg.text, true);
         } else if (seg.quote === '[') {
             bytes = decodeLongStringLiteral(seg.text);
         }
-        // `quote === '`'` means a Luau interpolated string: expressions inside.
         if (!bytes || bytes.length === 0) { skipped++; out.push(seg); continue; }
 
         if (bytes.length !== Buffer.byteLength(seg.text, 'utf8') || stringContainsEmoji(seg.text)) {
@@ -883,16 +1318,18 @@ function encodeStrings(src) {
         }
 
         const key = 1 + Math.floor(Math.random() * 255);
-        const xored = Uint8Array.from(bytes, (b) => b ^ key);
-        const literal = 'NIX6_D("' + base64EncodeBytes(xored, alphabet) + '",' + key + ')';
+        /* Same keystream the runtime rebuilds: byte i uses (key + i * 31) % 256. */
+        const xored = Uint8Array.from(bytes, (b, i) => b ^ ((key + i * 31) & 0xFF));
+
+        /* Always parenthesised. A bare `NIX6_D(...)` would be a syntax error
+           in call position, because Lua's string-call sugar (`print"hi"`)
+           only accepts a literal: the rebuilt call has to become
+           `print(NIX6_D(...))`. The parens are harmless everywhere else and
+           also stop the call fusing with the token before it. */
+        const literal = '(NIX6_D("' + base64EncodeBytes(xored, alphabet) + '",' + key + '))';
 
         encoded++;
-        /* Keep a space between the rebuilt call and what came before it: after
-           minify trimmed a trailing space, `x = 1 or "none"` would otherwise
-           come out as `x = 1 orNIX6_D(...)`, which is one long identifier. */
-        const previous = out.length ? out[out.length - 1].text : '';
-        const separator = previous !== '' && !/[\s([{,;]$/.test(previous) ? ' ' : '';
-        out.push({ type: 'code', text: separator + literal });
+        out.push({ type: 'code', text: literal });
     }
 
     if (encoded === 0) return { text: src, encoded, skipped, unicodeStrings };
@@ -904,7 +1341,7 @@ function encodeStrings(src) {
     let insertAt = 0;
     while (insertAt < out.length) {
         const seg = out[insertAt];
-        if (seg.type === 'comment' && /^\s*--!/.test(seg.text)) { insertAt++; continue; }
+        if (isDirectiveComment(seg)) { insertAt++; continue; }
         if (seg.type === 'code' && seg.text.trim() === '') { insertAt++; continue; }
         break;
     }
@@ -927,6 +1364,8 @@ class ObfuscatorEngine {
         this.stats = {
             commentsRemoved: 0,
             identifiersRenamed: 0,
+            numbersEncoded: 0,
+            numbersSkipped: 0,
             stringsEncoded: 0,
             stringsSkipped: 0,
             unicodeStrings: 0,
@@ -953,6 +1392,14 @@ class ObfuscatorEngine {
             text = result.text;
             this.stats.identifiersRenamed = result.renamed.length;
         }
+        /* Numbers run before the string pass so the string helper itself keeps
+           its readable constants; the original source no longer has any. */
+        if (this.options.encodeNumbers) {
+            const result = encodeNumbers(text);
+            text = result.text;
+            this.stats.numbersEncoded = result.encoded;
+            this.stats.numbersSkipped = result.skipped;
+        }
         if (this.options.encryptStrings) {
             const result = encodeStrings(text);
             text = result.text;
@@ -968,6 +1415,7 @@ class ObfuscatorEngine {
         const applied = [];
         if (this.options.minify) applied.push('minify');
         if (this.options.rename) applied.push('rename');
+        if (this.options.encodeNumbers) applied.push('encodeNumbers');
         if (this.options.encryptStrings) applied.push('encryptStrings');
         if (this.options.antiTamper) applied.push('antiTamper');
         return applied;
@@ -999,14 +1447,14 @@ class ObfuscatorEngine {
     }
 
     /* Builds the delivered artifact: source is minified/renamed/encoded, then
-       serialised as XORed bytes inside a base64 string with a per-build
-       shuffled alphabet. The wrapper decodes it at runtime and runs it, so the
-       payload on disk is neither readable Lua nor decodable with a stock tool. */
-    /* Builds the delivered artifact: source is minified/renamed/encoded, then
-       serialised as XORed bytes inside a base64 string with a per-build
+       serialised as XORed bytes inside base64 strings with a per-build
        shuffled alphabet. The wrapper decodes it with gsub in groups of four,
        so the payload on disk is neither readable Lua nor decodable with a
-       stock tool, and decoding stays linear in the payload size. */
+       stock tool, and decoding stays linear in the payload size.
+
+       The bytes are split into independently keyed slices: no single string in
+       the artifact holds the whole program, so lifting one blob and decoding
+       it no longer yields a runnable script. */
     buildProtectedVM() {
         const prepared = this.prepareSource();
         /* Kept for the offline verifier: it is exactly what the wrapper must
@@ -1014,12 +1462,11 @@ class ObfuscatorEngine {
         this.lastPrepared = prepared;
         const srcBytes = Buffer.from(prepared, 'utf8');
 
-        const xorKey = 1 + Math.floor(Math.random() * 255);
-        const xored = Uint8Array.from(srcBytes, (b) => b ^ xorKey);
-
         /* Anti-tamper: position-weighted sum of the plain source bytes, so the
            check reads the same string the loader is about to compile. Both
-           sides stay in integers well under 2^53. */
+           sides stay in integers well under 2^53, which matters because a
+           runtime that does integer maths in 32 bits has to reach the same
+           number as this one. */
         let integrity = 0;
         for (let i = 0; i < srcBytes.length; i++) {
             integrity = (integrity + srcBytes[i] * (i + 1)) % INTEGRITY_MODULUS;
@@ -1028,27 +1475,33 @@ class ObfuscatorEngine {
         this.stats.sourceBytes = srcBytes.length;
 
         const alphabet = shuffleAlphabet();
-        const payload = base64EncodeBytes(xored, alphabet);
-        this.stats.payloadBytes = payload.length;
+        const chunkCount = srcBytes.length > 192 ? 3 : 1;
+        const chunkSize = Math.ceil(srcBytes.length / chunkCount);
+        const chunks = [];
+        for (let i = 0; i < chunkCount; i++) {
+            const slice = srcBytes.subarray(i * chunkSize, Math.min(srcBytes.length, (i + 1) * chunkSize));
+            const key = 1 + Math.floor(Math.random() * 255);
+            /* Same keystream as the decoder: byte i is XORed with
+               (key + i * 31) % 256, where i restarts at every chunk. */
+            const xored = Uint8Array.from(slice, (b, index) => b ^ ((key + index * 31) & 0xFF));
+            chunks.push({ key, data: base64EncodeBytes(xored, alphabet) });
+        }
+        this.stats.payloadBytes = chunks.reduce((sum, chunk) => sum + chunk.data.length, 0);
+        this.stats.payloadChunks = chunks.length;
 
         const op = this._generateOpCodes();
         const v_vm = this._randomId();
         const v_map = this._randomId();
         const v_alpha = this._randomId();
-        const v_payload = this._randomId();
-        const v_key = this._randomId();
+        const v_dec = this._randomId();
         const v_bxor = this._randomId();
         const v_text = this._randomId();
         const v_instr = this._randomId();
         const v_pc = this._randomId();
-        const v_env = this._randomId();
 
-        const tamperGuard = this.options.antiTamper ? `    if debug and debug.getmetatable then
-        local _meta = debug.getmetatable(${v_env})
-        if _meta then while true do end end
-    end
-
-` : '';
+        const decodeCalls = chunks
+            .map((chunk) => `${v_dec}([==[${chunk.data}]==], ${chunk.key})`)
+            .join(' ..\n        ');
 
         const integrityCheck = this.options.antiTamper ? `    local _int = 0
     for _m = 1, #${v_text} do
@@ -1059,10 +1512,14 @@ class ObfuscatorEngine {
     end
 ` : '';
 
+        /* No getfenv/debug metatable check here on purpose. The old guard hung
+           the script (while true do end) whenever the environment table had a
+           metatable, which is exactly what a legitimate sandbox looks like;
+           it was trivially bypassable and only ever hurt honest scripts. The
+           length and integrity checks below are the real anti-tamper. */
         return `-- [[ Nix6 protected payload: base64 over XORed source bytes. Not encryption, not a security boundary. ]]
 local function ${v_vm}(...)
-    local ${v_env} = getfenv and getfenv() or _ENV
-${tamperGuard}    local ${v_bxor} = bit32 and bit32.bxor or function(_a, _b)
+    local ${v_bxor} = bit32 and bit32.bxor or function(_a, _b)
         local _r, _p = 0, 1
         while _a > 0 or _b > 0 do
             local _x, _y = _a % 2, _b % 2
@@ -1078,21 +1535,27 @@ ${tamperGuard}    local ${v_bxor} = bit32 and bit32.bxor or function(_a, _b)
         ${v_map}[string.byte(${v_alpha}, _i)] = _i - 1
     end
 
-    local ${v_key} = ${xorKey}
-    local ${v_text} = ([==[${payload}]==]):gsub("(....)", function(_q)
-        local _a = ${v_map}[string.byte(_q, 1)]
-        local _b = ${v_map}[string.byte(_q, 2)]
-        local _c = ${v_map}[string.byte(_q, 3)]
-        local _d = ${v_map}[string.byte(_q, 4)]
-        local _o = string.char(${v_bxor}(_a * 4 + math.floor(_b / 16), ${v_key}))
-        if _c then
-            _o = _o .. string.char(${v_bxor}((_b % 16) * 16 + math.floor(_c / 4), ${v_key}))
-            if _d then
-                _o = _o .. string.char(${v_bxor}((_c % 4) * 64 + _d, ${v_key}))
+    local function ${v_dec}(_s, _k)
+        local _n = 0
+        return (_s:gsub("(....)", function(_q)
+            local _i = _n
+            _n = _i + 3
+            local _a = ${v_map}[string.byte(_q, 1)]
+            local _b = ${v_map}[string.byte(_q, 2)]
+            local _c = ${v_map}[string.byte(_q, 3)]
+            local _d = ${v_map}[string.byte(_q, 4)]
+            local _o = string.char(${v_bxor}(_a * 4 + math.floor(_b / 16), (_k + _i * 31) % 256))
+            if _c then
+                _o = _o .. string.char(${v_bxor}((_b % 16) * 16 + math.floor(_c / 4), (_k + (_i + 1) * 31) % 256))
+                if _d then
+                    _o = _o .. string.char(${v_bxor}((_c % 4) * 64 + _d, (_k + (_i + 2) * 31) % 256))
+                end
             end
-        end
-        return _o
-    end)
+            return _o
+        end))
+    end
+
+    local ${v_text} = ${decodeCalls}
 
     if #${v_text} ~= ${srcBytes.length} then
         error("Nix6: payload length mismatch")
@@ -1721,3 +2184,13 @@ if (process.env.NODE_ENV !== 'production') {
         console.log(`Server running on http://localhost:${PORT}`);
     });
 }
+
+/* Exposed for targeted engine tests (scanner and pass level). */
+module.exports.__engine = {
+    scanLua,
+    minifySource,
+    encodeNumbers,
+    encodeStrings,
+    renameIdentifiers,
+    computeBlockBounds
+};

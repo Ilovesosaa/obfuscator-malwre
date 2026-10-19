@@ -16,3 +16,6 @@ npm-debug.log*
 Thumbs.db
 .vercel
 .env*
+
+# local verification tooling (Luau binary + conformance suite)
+.tools/

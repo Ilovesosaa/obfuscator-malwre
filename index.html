@@ -1656,10 +1656,11 @@
                     <div class="options-grid">
                         <label class="option-toggle"><input type="checkbox" checked id="optMinify"> Minify Code</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optRename"> Variable Renaming</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optNumbers"> Encode Numbers</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optAntiTamper"> Anti-Tamper Shield</label>
                     </div>
-                    <p class="options-note">Applied on the server while compiling. Minify and Variable Renaming rewrite the emitted source, so the payload is no longer a byte-for-byte copy of your script &mdash; the vault keeps your untouched copy for editing.</p>
+                    <p class="options-note">Applied on the server while compiling. Minify, Variable Renaming and Number Encoding rewrite the emitted source, so the payload is no longer a byte-for-byte copy of your script &mdash; the vault keeps your untouched copy for editing.</p>
 
                     <div class="input-group">
                         <label>LUAU / LUA SOURCE CODE</label>
@@ -2154,6 +2155,7 @@
             return {
                 minify: checked('optMinify'),
                 rename: checked('optRename'),
+                encodeNumbers: checked('optNumbers'),
                 encryptStrings: checked('optEncrypt'),
                 antiTamper: checked('optAntiTamper')
             };
@@ -2168,6 +2170,7 @@
             const parts = [];
             if (on.includes('minify')) parts.push(count('commentsRemoved') + ' comments stripped');
             if (on.includes('rename')) parts.push(count('identifiersRenamed') + ' identifiers renamed');
+            if (on.includes('encodeNumbers')) parts.push(count('numbersEncoded') + ' numbers encoded');
             if (on.includes('encryptStrings')) {
                 const encoded = count('stringsEncoded');
                 const unicode = count('unicodeStrings');
