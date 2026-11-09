@@ -209,6 +209,12 @@ async function saveVault(vault) {
      encryptStrings emit string literals as keyed byte sequences that are
                     rebuilt at runtime, so they are not readable in the payload
      antiTamper     verify a checksum of the payload before running it
+     networkGuard   inspect the runtime's HTTP stack for proxied or replaced
+                    entry points before the payload runs
+     poisonLoadstring  seal load()/loadstring() so a dumped artifact cannot be
+                    compiled a second time
+     twoFaces       run a harmless decoy chunk instead of the real payload
+                    whenever a guard trips
 
    Everything here is deliberately conservative: a construct that cannot be
    proven safe is skipped, and the counts are reported back to the UI.
@@ -233,7 +239,10 @@ function normalizeObfuscationOptions(raw) {
         rename: input.rename !== false,
         encodeNumbers: input.encodeNumbers !== false,
         encryptStrings: input.encryptStrings !== false,
-        antiTamper: input.antiTamper !== false
+        antiTamper: input.antiTamper !== false,
+        networkGuard: input.networkGuard !== false,
+        poisonLoadstring: input.poisonLoadstring !== false,
+        twoFaces: input.twoFaces !== false
     };
 }
 
@@ -1537,6 +1546,9 @@ class ObfuscatorEngine {
         if (this.options.encodeNumbers) applied.push('encodeNumbers');
         if (this.options.encryptStrings) applied.push('encryptStrings');
         if (this.options.antiTamper) applied.push('antiTamper');
+        if (this.options.networkGuard) applied.push('networkGuard');
+        if (this.options.poisonLoadstring) applied.push('poisonLoadstring');
+        if (this.options.twoFaces) applied.push('twoFaces');
         return applied;
     }
 
@@ -1631,13 +1643,152 @@ class ObfuscatorEngine {
     end
 ` : '';
 
+        /* A per-build signature lets the sealed loader recognise a dumped copy
+           of this artifact without carrying any readable payload in it. */
+        const signature = crypto.randomBytes(8).toString('hex');
+
+        /* The second face: a complete, valid chunk that returns a harmless
+           table. It is encoded with the same keyed alphabet as the payload so
+           the artifact never advertises that a decoy exists. */
+        const faceKey = 1 + Math.floor(Math.random() * 255);
+        const faceSource = 'local _face = { version = "1.0.0", loaded = true, start = function() end }\nreturn _face\n';
+        const faceData = base64EncodeBytes(
+            Uint8Array.from(Buffer.from(faceSource, 'utf8'), (b, index) => b ^ ((faceKey + index * 31) & 0xFF)),
+            alphabet
+        );
+
+        const faceSetup = this.options.twoFaces ? `    local _face = ${v_dec}("${faceData}", ${faceKey})
+    local _faceChunk
+    local function _faceRun(...)
+        if not _faceChunk then
+            local _fok, _fc = pcall(_loader, _face)
+            if _fok and type(_fc) == "function" then _faceChunk = _fc end
+        end
+        if _faceChunk then return _faceChunk(...) end
+        return nil
+    end
+` : '';
+
+        /* Preflight: look for the two shapes a hooked network stack takes in a
+           Roblox runtime. A proxy metatable on `game` and a non-native (or
+           non-callable) HttpClient entry point are both replacements, not
+           normal Roblox objects; ordinary desktop Lua exposes none of these
+           and passes untouched. */
+        const networkGuardBlock = this.options.networkGuard ? `    local function _isNative(_fn)
+        if type(_fn) ~= "function" then return nil end
+        if type(debug) == "table" then
+            if type(debug.info) == "function" then
+                local _ok, _src = pcall(debug.info, _fn, "s")
+                if _ok and type(_src) == "string" then return _src == "[C]" end
+            elseif type(debug.getinfo) == "function" then
+                local _ok, _info = pcall(debug.getinfo, _fn, "S")
+                if _ok and type(_info) == "table" then return _info.what == "C" end
+            end
+        end
+        return nil
+    end
+
+    local function _networkClean()
+        local _clean = true
+        local _g = game
+        if _g ~= nil and type(getmetatable) == "function" then
+            local _ok, _mt = pcall(getmetatable, _g)
+            if _ok and type(_mt) == "table" then
+                local _hooks = { "__index", "__namecall" }
+                for _i = 1, #_hooks do
+                    if type(rawget(_mt, _hooks[_i])) == "table" then _clean = false end
+                end
+            end
+        end
+        if _g ~= nil then
+            local _sok, _svc = pcall(function() return _g:GetService("HttpService") end)
+            if _sok and _svc ~= nil then
+                local _methods = { "GetAsync", "RequestAsync", "HttpGetAsync" }
+                for _i = 1, #_methods do
+                    local _mok, _m = pcall(function() return _svc[_methods[_i]] end)
+                    if _mok and _m ~= nil then
+                        if type(_m) ~= "function" or _isNative(_m) == false then _clean = false end
+                    end
+                end
+            end
+        end
+        local function _aliasOk(_fn)
+            if _fn == nil or type(_fn) == "function" then return true end
+            if type(getmetatable) == "function" then
+                local _ok, _mt = pcall(getmetatable, _fn)
+                if _ok and type(_mt) == "table" and _mt.__call ~= nil then return true end
+            end
+            return false
+        end
+
+        -- Direct globals first: Luau does not expose a usable _G table, so a
+        -- rawget-only check would see nothing in a real Roblox environment.
+        if not _aliasOk(request) then _clean = false end
+        if not _aliasOk(http_request) then _clean = false end
+        if type(syn) == "table" and not _aliasOk(syn.request) then _clean = false end
+        if type(http) == "table" and not _aliasOk(http.request) then _clean = false end
+
+        local _envs = {}
+        if type(_G) == "table" then _envs[#_envs + 1] = _G end
+        if type(getgenv) == "function" then
+            local _ok, _ge = pcall(getgenv)
+            if _ok and type(_ge) == "table" and _ge ~= _G then _envs[#_envs + 1] = _ge end
+        end
+        for _e = 1, #_envs do
+            local _env = _envs[_e]
+            local _names = { "request", "http_request" }
+            for _n = 1, #_names do
+                if not _aliasOk(rawget(_env, _names[_n])) then _clean = false end
+            end
+        end
+        return _clean
+    end
+
+    if not _networkClean() then
+        ${this.options.twoFaces ? 'return _faceRun()' : 'error("Nix6: network tampering detected")'}
+    end
+` : '';
+
+        /* Seal every load()/loadstring() the runtime exposes. Strings that do
+           not carry this build's signature are delegated to the original
+           loader unchanged, so ordinary dynamic code keeps working; a dumped
+           artifact is handed the second face instead of being recompiled. */
+        const poisonBlock = this.options.poisonLoadstring ? `    local _sig = "NIX6-SIG:${signature}"
+    local function _sealed(_source, _chunkname, ...)
+        if type(_source) == "string" and string.find(_source, _sig, 1, true) then
+            ${this.options.twoFaces
+                ? 'return _faceRun'
+                : 'return function() error("Nix6: poisoned chunk rejected") end'}
+        end
+        return _loader(_source, _chunkname, ...)
+    end
+    local function _sealEnv(_env)
+        if type(_env) ~= "table" then return end
+        pcall(function()
+            if type(rawget(_env, "loadstring")) == "function" then _env.loadstring = _sealed end
+            if type(rawget(_env, "load")) == "function" then _env.load = _sealed end
+        end)
+    end
+    if type(_G) == "table" then _sealEnv(_G) end
+    if type(getgenv) == "function" then
+        local _ok, _ge = pcall(getgenv)
+        if _ok then _sealEnv(_ge) end
+    end
+    -- Direct assignment reaches the chunk's own global environment, which is
+    -- the only one Luau gives a script.
+    pcall(function()
+        if type(loadstring) == "function" then loadstring = _sealed end
+        if type(load) == "function" then load = _sealed end
+    end)
+` : '';
+
         /* No getfenv/debug metatable check here on purpose. The old guard hung
            the script (while true do end) whenever the environment table had a
            metatable, which is exactly what a legitimate sandbox looks like;
            it was trivially bypassable and only ever hurt honest scripts. The
            length and integrity checks below are the real anti-tamper. */
         return `-- [[ Nix6 protected payload: base64 over XORed source bytes. Not encryption, not a security boundary. ]]
-local function ${v_vm}(...)
+${this.options.poisonLoadstring ? `-- NIX6-SIG:${signature}\n` : ''}local function ${v_vm}(...)
     -- Three bit backends, in speed order: Luau/Roblox (bit32), LuaJIT/Lua 5.1
     -- with the bit library, then a pure-Lua fallback that only needs integer
     -- arithmetic. Every operand here is a byte, so the slow path stays cheap.
@@ -1693,6 +1844,19 @@ ${integrityCheck}    -- A shebang is only understood by the file loader, not by 
         ${v_text} = _nl and string.sub(${v_text}, _nl + 1) or ""
     end
 
+    local _loader = loadstring or load
+    if not _loader and type(getgenv) == "function" then
+        local _g = getgenv()
+        if type(_g) == "table" then _loader = _g.loadstring or _g.load end
+    end
+    if not _loader and type(debug) == "table" then
+        _loader = debug.loadstring
+    end
+    if not _loader then
+        error("Nix6: this runtime exposes no load() or loadstring()")
+    end
+
+${faceSetup}${networkGuardBlock}${poisonBlock}
     local ${v_instr} = {
         {${op.OP_EXEC_CHUNK}, 1}
     }
@@ -1700,17 +1864,6 @@ ${integrityCheck}    -- A shebang is only understood by the file loader, not by 
 
     while ${v_pc} <= #${v_instr} do
         if ${v_instr}[${v_pc}][1] == ${op.OP_EXEC_CHUNK} then
-            local _loader = loadstring or load
-            if not _loader and type(getgenv) == "function" then
-                local _g = getgenv()
-                if type(_g) == "table" then _loader = _g.loadstring or _g.load end
-            end
-            if not _loader and type(debug) == "table" then
-                _loader = debug.loadstring
-            end
-            if not _loader then
-                error("Nix6: this runtime exposes no load() or loadstring()")
-            end
             local _ok, _chunk, _err = pcall(_loader, ${v_text})
             if not _ok then error(tostring(_chunk)) end
             if type(_chunk) ~= "function" then

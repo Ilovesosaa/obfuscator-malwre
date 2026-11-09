@@ -3050,8 +3050,11 @@
                         <label class="option-toggle"><input type="checkbox" checked id="optNumbers"> Encode Numbers</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optAntiTamper"> Anti-Tamper Shield</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optNetworkGuard"> Network Tamper Detection</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optPoisonLoad"> Poisoned Loadstring</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optTwoFaces"> Two Faces</label>
                     </div>
-                    <p class="options-note">Applied on the server while compiling. Minify, Variable Renaming and Number Encoding rewrite the emitted source, so the payload is no longer a byte-for-byte copy of your script &mdash; the vault keeps your untouched copy for editing.</p>
+                    <p class="options-note">Applied on the server while compiling. Minify, Variable Renaming and Number Encoding rewrite the emitted source, so the payload is no longer a byte-for-byte copy of your script &mdash; the vault keeps your untouched copy for editing. Network Tamper Detection checks the runtime's HTTP entry points for proxies before the payload runs; Poisoned Loadstring refuses to recompile a dumped build; Two Faces runs a harmless decoy instead when either guard trips.</p>
 
                     <div class="input-group">
                         <label>LUAU / LUA SOURCE CODE</label>
@@ -3567,8 +3570,8 @@
             window.location.href = '/auth/logout';
         }
 
-        /* The four obfuscation toggles are read straight off the form and sent
-           to the server, which is the side that can actually transform code. */
+        /* The obfuscation toggles are read straight off the form and sent to
+           the server, which is the side that can actually transform code. */
         function readObfuscationOptions() {
             const checked = (id) => {
                 const el = document.getElementById(id);
@@ -3579,7 +3582,10 @@
                 rename: checked('optRename'),
                 encodeNumbers: checked('optNumbers'),
                 encryptStrings: checked('optEncrypt'),
-                antiTamper: checked('optAntiTamper')
+                antiTamper: checked('optAntiTamper'),
+                networkGuard: checked('optNetworkGuard'),
+                poisonLoadstring: checked('optPoisonLoad'),
+                twoFaces: checked('optTwoFaces')
             };
         }
 
@@ -3599,6 +3605,9 @@
                 parts.push(encoded + ' strings encoded' + (unicode ? ' (' + unicode + ' unicode-safe)' : ''));
             }
             if (on.includes('antiTamper')) parts.push('integrity check armed');
+            if (on.includes('networkGuard')) parts.push('network tamper guard armed');
+            if (on.includes('poisonLoadstring')) parts.push('loadstring poisoned');
+            if (on.includes('twoFaces')) parts.push('decoy face armed');
             if (count('payloadBytes')) parts.push((count('payloadBytes') / 1024).toFixed(1) + ' KB payload');
             return parts.join(' / ');
         }
