@@ -23,14 +23,8 @@ const { execFileSync } = require('child_process');
 
 const { ObfuscatorEngine } = require('../server.js');
 
-const ALL = {
-    minify: true, rename: true, encodeNumbers: true, encryptStrings: true, antiTamper: true,
-    networkGuard: true, poisonLoadstring: true, twoFaces: true
-};
-const PLAIN = {
-    minify: true, rename: true, encodeNumbers: false, encryptStrings: false, antiTamper: true,
-    networkGuard: true, poisonLoadstring: true, twoFaces: true
-};
+const ALL = { minify: true, rename: true, encodeNumbers: true, encryptStrings: true, antiTamper: true };
+const PLAIN = { minify: true, rename: true, encodeNumbers: false, encryptStrings: false, antiTamper: true };
 
 /* Mirrors the emitted wrapper: rebuild the byte -> value map from the shuffled
    alphabet, collect every independently keyed payload chunk, and decode four
@@ -265,15 +259,9 @@ for (const size of [0, 1, 2, 3, 191, 192, 193, 5000]) {
 
 /* 4. Each option must work on its own. */
 const toggleSource = 'local function demo(a)\n    for i = 1, 2 do\n        a = a .. "x 🎃"\n    end\n    return a\nend\nreturn demo("y")';
-const OPTION_NAMES = [
-    'minify', 'rename', 'encodeNumbers', 'encryptStrings', 'antiTamper',
-    'networkGuard', 'poisonLoadstring', 'twoFaces'
-];
+const OPTION_NAMES = ['minify', 'rename', 'encodeNumbers', 'encryptStrings', 'antiTamper'];
 for (const option of OPTION_NAMES) {
-    const options = {
-        minify: false, rename: false, encodeNumbers: false, encryptStrings: false, antiTamper: false,
-        networkGuard: false, poisonLoadstring: false, twoFaces: false
-    };
+    const options = { minify: false, rename: false, encodeNumbers: false, encryptStrings: false, antiTamper: false };
     options[option] = true;
     const { engine, decoded } = build(toggleSource, options);
     check(option + ' alone yields a decodable artifact',
@@ -511,44 +499,6 @@ const runtimeSamples = [
     check('missing loader reports a clear error', artifact.includes('exposes no load() or loadstring()'));
     check('shebang is stripped before compiling', artifact.includes('string.char(10)'));
     check('compile failures are pcall-guarded', artifact.includes('pcall(_loader'));
-}
-
-/* 11. Network guard, sealed loader and the two-faced decoy. */
-{
-    const bare = {
-        minify: false, rename: false, encodeNumbers: false,
-        encryptStrings: false, antiTamper: false,
-        networkGuard: false, poisonLoadstring: false, twoFaces: false
-    };
-
-    const off = build('print("plain")', bare);
-    check('network guard is omitted when disabled', !off.artifact.includes('_networkClean'));
-    check('signature is omitted when poisoning is disabled', !off.artifact.includes('NIX6-SIG:'));
-    check('decoy is omitted when two faces is disabled', !off.artifact.includes('_faceRun'));
-
-    const guarded = build('print("guarded")', { ...bare, networkGuard: true });
-    check('network guard inspects game metatable hooks', guarded.artifact.includes('__namecall'));
-    check('network guard inspects HttpService', guarded.artifact.includes('HttpGetAsync'));
-    check('network guard fails closed', guarded.artifact.includes('network tampering detected'));
-    check('network guard checks native functions', guarded.artifact.includes('debug.getinfo'));
-
-    const sealed = build('print("sealed")', { ...bare, poisonLoadstring: true });
-    check('poisoned loader carries a build signature', sealed.artifact.includes('NIX6-SIG:'));
-    check('poisoned loader matches the signature plainly',
-        sealed.artifact.includes('string.find(_source, _sig, 1, true)'));
-    check('poisoned chunks are rejected without a decoy',
-        sealed.artifact.includes('poisoned chunk rejected'));
-
-    const faced = build('print("faced")', { ...bare, twoFaces: true, poisonLoadstring: true });
-    check('decoy source is embedded', faced.artifact.includes('_faceRun'));
-    check('sealed loader returns the decoy face', faced.artifact.includes('return _faceRun'));
-    check('two faces still decode',
-        Buffer.compare(faced.decoded, Buffer.from(faced.engine.lastPrepared, 'utf8')) === 0);
-
-    const both = build('print("both")', { ...bare, networkGuard: true, poisonLoadstring: true, twoFaces: true });
-    check('two faces hides the guard error', !both.artifact.includes('network tampering detected'));
-    check('all protections still decode',
-        Buffer.compare(both.decoded, Buffer.from(both.engine.lastPrepared, 'utf8')) === 0);
 }
 
 function findLuau() {
