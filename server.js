@@ -1,5 +1,5 @@
 const express = require('express');
-const session = require('express-session');
+const session = require('cookie-session');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
@@ -1857,53 +1857,106 @@ function discordConfigHints() {
     return hints;
 }
 
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+
+/* cookie-session keeps the signed session in the cookie, so a serverless
+   deployment does not lose logins when a request lands on another instance.
+   SESSION_SECRET is preferred; the Discord client secret is a stable fallback
+   so existing deployments do not silently log everyone out on every cold start. */
+function sessionKeys() {
+    const configured = envValue('SESSION_SECRET');
+    if (configured) {
+        if (configured.length < 32) {
+            console.warn('[security] SESSION_SECRET is shorter than 32 characters.');
+        }
+        return [configured];
+    }
+    if (CLIENT_SECRET) {
+        return [crypto.createHash('sha256')
+            .update(`nix6-session:${CLIENT_SECRET}`)
+            .digest('hex')];
+    }
+    console.error('[security] SESSION_SECRET is not set; using an ephemeral key. Logins will not survive a restart.');
+    return [crypto.randomBytes(32).toString('hex')];
+}
+
+/* Baseline browser hardening. The site has inline scripts and styles, so the
+   policy allows inline code but still blocks external scripts, framing,
+   plugins, base-tag hijacking and cross-origin form posts. */
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    res.setHeader('Content-Security-Policy', [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        "img-src 'self' data: https://cdn.discordapp.com",
+        "connect-src 'self'",
+        "frame-src 'none'",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'"
+    ].join('; '));
+    if (IS_PRODUCTION) {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+});
+
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(session({
-    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false }
+    name: 'nix6_session',
+    keys: sessionKeys(),
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    secure: IS_PRODUCTION,
+    sameSite: 'lax',
+    signed: true,
+    overwrite: true
 }));
+
+app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+});
 
 // --- MIDDLEWARE ---
 
+function apiKeyMatches(candidate, stored) {
+    const supplied = Buffer.from(String(candidate || ''));
+    const expected = Buffer.from(String(stored || ''));
+    return supplied.length > 0
+        && supplied.length === expected.length
+        && crypto.timingSafeEqual(supplied, expected);
+}
+
 function requireOwner(req, res, next) {
-    // 1. Session check
+    /* Only a verified Discord session may administer keys. Header identity and
+       API keys are deliberately not accepted here: both are client-controlled
+       and previously let any caller reach the owner endpoints. */
     if (req.session && req.session.user && req.session.user.id === OWNER_DISCORD_ID) {
         return next();
     }
-    
-    // 2. Client header check (Serverless Vercel)
-    const clientDiscordId = req.headers['x-discord-id'];
-    if (clientDiscordId === OWNER_DISCORD_ID) {
-        return next();
-    }
-
-    // 3. API Key check
-    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
-    if (apiKey) {
-        return next();
-    }
-
     return res.status(403).json({ success: false, error: 'Forbidden: Owner access required.' });
 }
 
 async function getAuthUser(req) {
-    if (req.session && req.session.user) {
+    if (req.session && req.session.user && req.session.user.id) {
         return req.session.user;
     }
 
-    const clientDiscordId = req.headers['x-discord-id'];
-    if (clientDiscordId) {
-        return { id: clientDiscordId, username: 'Discord Owner' };
-    }
-    
-    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
+    const apiKey = req.get('x-api-key');
     if (apiKey) {
         const keys = await loadKeys();
-        const foundKey = keys.find(k => k.key === apiKey);
+        const foundKey = keys.find(k => apiKeyMatches(apiKey, k.key));
         if (foundKey) {
             return {
                 id: 'key_' + foundKey.username,
@@ -1983,7 +2036,9 @@ app.get('/auth/discord', (req, res) => {
     }
 
     const redirectUri = buildRedirectUri(req);
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify`;
+    const state = crypto.randomBytes(24).toString('hex');
+    req.session.oauthState = state;
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${state}`;
     res.redirect(discordAuthUrl);
 });
 
@@ -1992,6 +2047,9 @@ app.get('/auth/discord/callback', async (req, res) => {
     const oauthError = typeof req.query.error === 'string' ? req.query.error : '';
     const oauthErrorDescription =
         typeof req.query.error_description === 'string' ? req.query.error_description : '';
+    const state = typeof req.query.state === 'string' ? req.query.state : '';
+    const expectedState = req.session && req.session.oauthState;
+    if (req.session) delete req.session.oauthState;
 
     if (oauthError) {
         return sendAuthErrorPage(
@@ -2020,6 +2078,17 @@ app.get('/auth/discord/callback', async (req, res) => {
             'No code provided from Discord',
             'Discord did not return an authorization code.',
             ['Start the login again from the Nix6 homepage.']
+        );
+    }
+
+    if (!expectedState || state.length !== expectedState.length ||
+        !crypto.timingSafeEqual(Buffer.from(state), Buffer.from(expectedState))) {
+        return sendAuthErrorPage(
+            res,
+            400,
+            'Discord login could not be verified',
+            'The login response did not match the browser session that started it.',
+            ['Start the login again from the Nix6 homepage.', 'Make sure cookies are allowed for this site.']
         );
     }
 
@@ -2107,11 +2176,7 @@ app.get('/auth/discord/callback', async (req, res) => {
                 : 'https://cdn.discordapp.com/embed/avatars/0.png'
         };
 
-        const avatarUrl = userData.avatar 
-            ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
-            : 'https://cdn.discordapp.com/embed/avatars/0.png';
-
-        res.redirect(`/?discord_id=${userData.id}&discord_user=${encodeURIComponent(userData.username)}&discord_avatar=${encodeURIComponent(avatarUrl)}`);
+        res.redirect('/');
     } catch (error) {
         console.error('Auth Error:', error);
         return sendAuthErrorPage(
@@ -2125,23 +2190,26 @@ app.get('/auth/discord/callback', async (req, res) => {
 });
 
 app.get('/auth/logout', (req, res) => {
-    req.session.destroy(() => {
-        res.redirect('/');
-    });
+    req.session = null;
+    res.redirect('/');
 });
 
 app.get('/api/me', (req, res) => {
-    if (req.session.user) {
-        res.json({ authenticated: true, user: req.session.user });
-    } else {
-        res.json({ authenticated: false });
+    if (req.session && req.session.user) {
+        return res.json({
+            authenticated: true,
+            user: req.session.user,
+            isOwner: req.session.user.id === OWNER_DISCORD_ID
+        });
     }
+    return res.json({ authenticated: false, isOwner: false });
 });
 
 // --- OWNER ADMIN & API KEY MANAGEMENT ENDPOINTS ---
 
 app.post('/api/admin/generate-key', requireOwner, async (req, res) => {
-    const username = req.body.username || "Client_User";
+    const rawUsername = req.body && typeof req.body.username === 'string' ? req.body.username : '';
+    const username = rawUsername.trim().slice(0, 40) || 'Client_User';
     const keys = await loadKeys();
     
     const newApiKey = "nix6_key_" + crypto.randomBytes(16).toString('hex');
@@ -2163,7 +2231,7 @@ app.get('/api/admin/keys', requireOwner, async (req, res) => {
 });
 
 app.post('/api/admin/revoke-key', requireOwner, async (req, res) => {
-    const { key } = req.body;
+    const key = req.body && typeof req.body.key === 'string' ? req.body.key : '';
     let keys = await loadKeys();
     
     keys = keys.filter(k => k.key !== key);
@@ -2177,11 +2245,11 @@ app.post('/api/admin/revoke-key', requireOwner, async (req, res) => {
 });
 
 app.get('/api/verify-key', async (req, res) => {
-    const apiKey = req.headers['x-api-key'] || req.headers['x-api-key'];
+    const apiKey = req.get('x-api-key');
     if (!apiKey) return res.json({ authenticated: false });
 
     const keys = await loadKeys();
-    const foundKey = keys.find(k => k.key === apiKey);
+    const foundKey = keys.find(k => apiKeyMatches(apiKey, k.key));
 
     if (foundKey) {
         res.json({ authenticated: true, username: foundKey.username });
@@ -2198,11 +2266,12 @@ app.post('/api/obfuscate', async (req, res) => {
         return res.status(401).json({ success: false, error: 'Unauthorized. Please login with Discord or API Key.' });
     }
 
-    const { scriptPayload, scriptName, fileType, editId } = req.body;
-    const options = normalizeObfuscationOptions(req.body.options);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const { scriptPayload, scriptName, fileType, editId } = body;
+    const options = normalizeObfuscationOptions(body.options);
     /* `fileType` is the pre-targets field. New builds send `target`; old vault
        entries and old clients keep working through normalizeTarget(). */
-    const target = normalizeTarget(req.body.target || fileType);
+    const target = normalizeTarget(body.target || fileType);
     const info = targetInfo(target);
     if (!scriptPayload) {
         return res.status(400).json({ success: false, error: 'Script payload is missing.' });
@@ -2305,7 +2374,7 @@ app.post('/api/delete', async (req, res) => {
         return res.status(401).json({ success: false, error: 'Unauthorized' });
     }
 
-    const { id } = req.body;
+    const id = req.body && typeof req.body.id === 'string' ? req.body.id : '';
     let currentVault = await loadVault();
     const index = currentVault.findIndex(s => s.id === id && s.ownerId === user.id);
     

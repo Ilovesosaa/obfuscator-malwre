@@ -21,8 +21,8 @@
   "license": "ISC",
   "dependencies": {
     "@vercel/blob": "^2.8.2",
+    "cookie-session": "^2.1.0",
     "express": "^4.19.2",
-    "express-session": "^1.18.0",
     "node-fetch": "^2.7.0"
   },
   "engines": {

@@ -3356,6 +3356,15 @@
             }, duration);
         }
 
+        function escapeHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function showCustomConfirm(msg, title = "CONFIRM ACTION") {
             return new Promise((resolve) => {
                 const modal = document.getElementById('customConfirmModal');
@@ -3378,19 +3387,6 @@
             });
         }
 
-        function generateSecurityToken(path) {
-            const timestamp = Math.floor(Date.now() / 1000);
-            const secret = "NIX6_SECURE_TOKEN_SALT";
-            let hash = 0;
-            const payload = `${path}:${timestamp}:${secret}`;
-            for (let i = 0; i < payload.length; i++) {
-                hash = ((hash << 5) - hash) + payload.charCodeAt(i);
-                hash |= 0;
-            }
-            return { token: Math.abs(hash).toString(16), t: timestamp };
-        }
-
-        const OWNER_DISCORD_ID = "1257596807857569793";
         let currentApiKey = localStorage.getItem('nix6_api_key') || null;
         let cachedVaultScripts = [];
 
@@ -3404,16 +3400,12 @@
             const urlParams = new URLSearchParams(window.location.search);
             const path = window.location.pathname;
 
-            const dId = urlParams.get('discord_id');
-            const dUser = urlParams.get('discord_user');
-            const dAvatar = urlParams.get('discord_avatar');
-
-            if (dId && dUser) {
-                localStorage.setItem('nix6_discord_id', dId);
-                localStorage.setItem('nix6_discord_user', dUser);
-                localStorage.setItem('nix6_discord_avatar', dAvatar || '');
-                window.history.replaceState({}, document.title, "/");
-            }
+            /* Legacy builds stored Discord identity in localStorage and sent it
+               as an auth header. Remove those values; identity now comes only
+               from the signed server session. */
+            localStorage.removeItem('nix6_discord_id');
+            localStorage.removeItem('nix6_discord_user');
+            localStorage.removeItem('nix6_discord_avatar');
 
             const isRestricted = path.startsWith('/raw') || urlParams.get('restricted') === 'true';
             if (isRestricted) {
@@ -3437,19 +3429,21 @@
         }
 
         async function checkUser() {
-            const savedDiscordId = localStorage.getItem('nix6_discord_id');
-            const savedDiscordUser = localStorage.getItem('nix6_discord_user');
-            const savedDiscordAvatar = localStorage.getItem('nix6_discord_avatar');
-
-            if (savedDiscordId && savedDiscordUser) {
-                renderUserWidget({ username: savedDiscordUser, avatar: savedDiscordAvatar, type: 'discord' });
-                if (savedDiscordId === OWNER_DISCORD_ID) {
-                    document.getElementById('ownerPanel').classList.add('active');
-                    loadAdminKeys();
+            try {
+                const res = await fetch('/api/me');
+                const data = await res.json();
+                if (data.authenticated && data.user) {
+                    renderUserWidget({ ...data.user, type: 'discord' });
+                    if (data.isOwner) {
+                        document.getElementById('ownerPanel').classList.add('active');
+                        loadAdminKeys();
+                    } else {
+                        document.getElementById('ownerPanel').classList.remove('active');
+                    }
+                    loadVault();
+                    return;
                 }
-                loadVault();
-                return;
-            }
+            } catch (e) {}
 
             if (currentApiKey) {
                 try {
@@ -3457,43 +3451,32 @@
                     const data = await res.json();
                     if (data.authenticated) {
                         renderUserWidget({ username: data.username || 'API User', type: 'key' });
+                        document.getElementById('ownerPanel').classList.remove('active');
                         loadVault();
                         return;
-                    } else {
-                        localStorage.removeItem('nix6_api_key');
-                        currentApiKey = null;
                     }
                 } catch (e) {}
+                localStorage.removeItem('nix6_api_key');
+                currentApiKey = null;
             }
 
-            try {
-                const res = await fetch('/api/me');
-                const data = await res.json();
-                if (data.authenticated) {
-                    renderUserWidget({ ...data.user, type: 'discord' });
-                    if (data.user.id === OWNER_DISCORD_ID) {
-                        document.getElementById('ownerPanel').classList.add('active');
-                        loadAdminKeys();
-                    }
-                    loadVault();
-                } else {
-                    renderLoggedOutWidget();
-                }
-            } catch (e) {
-                renderLoggedOutWidget();
-            }
+            renderLoggedOutWidget();
         }
 
         function renderUserWidget(user) {
             const widget = document.getElementById('userWidget');
-            const avatarHtml = user.type === 'discord' 
-                ? `<img src="${user.avatar}" alt="Avatar">`
+            const safeName = escapeHtml(user.username || 'User');
+            const avatarUrl = /^https:\/\/cdn\.discordapp\.com\//.test(String(user.avatar || ''))
+                ? user.avatar
+                : 'https://cdn.discordapp.com/embed/avatars/0.png';
+            const avatarHtml = user.type === 'discord'
+                ? `<img src="${escapeHtml(avatarUrl)}" alt="Avatar">`
                 : `<div class="user-avatar-key"><svg class="ui-icon" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M21 2l-2 2m-2 2l-2 2m2-2l2 2m-7 1a5 5 0 1 1-7 7 5 5 0 0 1 7-7z"/></svg></div>`;
 
             widget.innerHTML = `
                 <div class="user-profile">
                     ${avatarHtml}
-                    <span style="font-size: 0.85rem; font-weight: 700;">${user.username}</span>
+                    <span style="font-size: 0.85rem; font-weight: 700;">${safeName}</span>
                     <a onclick="logout()" class="logout-btn">[LOGOUT]</a>
                 </div>
             `;
@@ -3512,20 +3495,10 @@
         }
 
         function getAuthHeaders() {
-            const headers = { 
-                'Content-Type': 'application/json',
-                'X-Nix6-Signature': generateSecurityToken('/api').token
-            };
-
-            const discordId = localStorage.getItem('nix6_discord_id');
-            if (discordId) {
-                headers['X-Discord-ID'] = discordId;
-            }
-
+            const headers = { 'Content-Type': 'application/json' };
             if (currentApiKey) {
                 headers['X-API-Key'] = currentApiKey;
             }
-
             return headers;
         }
 
@@ -3564,12 +3537,16 @@
                         </div>`;
                     return;
                 }
-                list.innerHTML = data.keys.map(k => `
+                list.innerHTML = data.keys.map(k => {
+                    const name = escapeHtml(k.username || 'Client_User');
+                    const key = escapeHtml(k.key || '');
+                    return `
                     <div class="key-row">
-                        <span class="key-secret"><span class="key-name">${k.username}</span> &middot; ${k.key}</span>
-                        <button class="icon-btn delete" onclick="revokeKey('${k.key}')">Revoke</button>
+                        <span class="key-secret"><span class="key-name">${name}</span> &middot; ${key}</span>
+                        <button class="icon-btn delete" onclick="revokeKey('${key}')">Revoke</button>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             }
         }
 
@@ -3811,28 +3788,39 @@
 
                 cachedVaultScripts = data.scripts;
                 animateCount(document.getElementById('hudScriptCount'), data.scripts.length);
-                vaultList.innerHTML = data.scripts.map((s, index) => `
+                vaultList.innerHTML = data.scripts.map((s, index) => {
+                    const name = escapeHtml(s.name || 'Untitled Script');
+                    const id = escapeHtml(s.id || '');
+                    const loader = escapeHtml(s.loader || '');
+                    const target = s.target || s.fileType;
+                    const targetName = escapeHtml(targetLabel(target));
+                    const targetChipName = escapeHtml(targetChip(target));
+                    const created = s.createdAt
+                        ? `<span class="chip">${escapeHtml(s.createdAt)}</span>`
+                        : '';
+                    return `
                     <div class="vault-item" style="--i:${index}">
                         <div class="vault-head">
                             <div>
-                                <div class="vault-name">${s.name}</div>
+                                <div class="vault-name">${name}</div>
                                 <div class="vault-meta">
-                                    <span class="chip" title="${targetLabel(s.target || s.fileType)}">${targetChip(s.target || s.fileType)}</span>
-                                    <span class="chip chip-id">${s.id}</span>
-                                    ${s.createdAt ? `<span class="chip">${s.createdAt}</span>` : ''}
+                                    <span class="chip" title="${targetName}">${targetChipName}</span>
+                                    <span class="chip chip-id">${id}</span>
+                                    ${created}
                                 </div>
                             </div>
                             <div class="vault-actions">
-                                <button class="icon-btn" onclick="editVaultScript('${s.id}')">
+                                <button class="icon-btn" onclick="editVaultScript('${id}')">
                                     <svg class="ui-icon" style="width:12px;height:12px;" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                                     Edit
                                 </button>
-                                <button class="icon-btn delete" onclick="deleteScript('${s.id}')">Delete</button>
+                                <button class="icon-btn delete" onclick="deleteScript('${id}')">Delete</button>
                             </div>
                         </div>
-                        <code class="loader-link" onclick="toggleReveal(this)">${s.loader}</code>
+                        <code class="loader-link" onclick="toggleReveal(this)">${loader}</code>
                     </div>
-                `).join('');
+                `;
+                }).join('');
                 animateCount(document.getElementById('footerVaultCount'), data.scripts.length);
             } catch (e) {}
         }
