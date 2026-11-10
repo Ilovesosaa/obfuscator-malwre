@@ -2323,6 +2323,164 @@ app.post('/api/delete', async (req, res) => {
     }
 });
 
+// --- SUPPORT REPORTS ---
+
+/* The Discord webhook is a deployment secret, not a client value. It lives in
+   SUPPORT_WEBHOOK_URL so the repository never carries a postable URL. */
+const SUPPORT_WEBHOOK_URL = envValue('SUPPORT_WEBHOOK_URL');
+const SUPPORT_CATEGORIES = Object.freeze({
+    bug: { label: 'Bug report', emoji: '🐛', color: 0xf87171 },
+    feature: { label: 'Feature request', emoji: '✨', color: 0x7dd3fc },
+    other: { label: 'Something else', emoji: '💬', color: 0xa1a1aa }
+});
+const SUPPORT_RATE_WINDOW_MS = 10 * 60 * 1000;
+const SUPPORT_RATE_MAX = 5;
+const supportRate = new Map();
+
+function isValidSupportWebhook(value) {
+    try {
+        const url = new URL(value);
+        if (url.protocol !== 'https:') return false;
+        if (url.hostname !== 'discord.com' && url.hostname !== 'discordapp.com') return false;
+        return /^\/api\/webhooks\/\d{17,20}\/[\w.-]{20,}$/.test(url.pathname);
+    } catch (err) {
+        return false;
+    }
+}
+
+function normalizeSupportCategory(value) {
+    const key = String(value || '').toLowerCase();
+    return Object.prototype.hasOwnProperty.call(SUPPORT_CATEGORIES, key) ? key : 'other';
+}
+
+/* Built server-side so the timestamp is trustworthy and the client cannot
+   inject fields, mentions or a different channel. */
+function buildSupportPayload(report) {
+    const source = report && typeof report === 'object' ? report : {};
+    const category = normalizeSupportCategory(source.category);
+    const meta = SUPPORT_CATEGORIES[category];
+    const now = new Date();
+    const message = String(source.message || '').trim().slice(0, 1800);
+    const user = source.user && source.user.username ? source.user : null;
+    const submittedBy = (user
+        ? `${user.username}${user.id ? ` (${user.id})` : ''}`
+        : 'Anonymous').slice(0, 1000);
+    const page = String(source.page || '/').slice(0, 300) || '/';
+
+    return {
+        username: 'Nix6 Support',
+        allowed_mentions: { parse: [] },
+        embeds: [{
+            title: `${meta.emoji} ${meta.label}`,
+            description: message,
+            color: meta.color,
+            timestamp: now.toISOString(),
+            fields: [
+                { name: 'Submitted by', value: submittedBy, inline: true },
+                { name: 'Page', value: page, inline: true },
+                { name: 'Sent', value: `<t:${Math.floor(now.getTime() / 1000)}:F>`, inline: false }
+            ],
+            footer: { text: 'Nix6 Support' }
+        }]
+    };
+}
+
+function allowSupportReport(ip) {
+    const key = String(ip || 'unknown');
+    const now = Date.now();
+    const current = supportRate.get(key);
+
+    if (!current || now - current.startedAt >= SUPPORT_RATE_WINDOW_MS) {
+        supportRate.set(key, { startedAt: now, count: 1 });
+        return { allowed: true };
+    }
+
+    if (current.count >= SUPPORT_RATE_MAX) {
+        return {
+            allowed: false,
+            retryAfter: Math.max(1, Math.ceil((SUPPORT_RATE_WINDOW_MS - (now - current.startedAt)) / 1000))
+        };
+    }
+
+    current.count += 1;
+    return { allowed: true };
+}
+
+async function postSupportReport(payload, options) {
+    const config = options || {};
+    const webhookUrl = config.webhookUrl || SUPPORT_WEBHOOK_URL;
+    if (!isValidSupportWebhook(webhookUrl)) {
+        return { delivered: false, configured: false };
+    }
+
+    const fetchImpl = config.fetchImpl || fetch;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    try {
+        const response = await fetchImpl(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+
+        if (!response.ok) {
+            console.error('[support] Discord webhook returned HTTP', response.status);
+            return { delivered: false, configured: true };
+        }
+        return { delivered: true, configured: true };
+    } catch (err) {
+        /* Never log err.message here: node-fetch can include the webhook URL,
+           including its token, in a network error. */
+        console.error('[support] Discord webhook request failed:',
+            err.name === 'AbortError' ? 'timed out' : (err.code || err.name || 'network error'));
+        return { delivered: false, configured: true };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+app.post('/api/support', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const rate = allowSupportReport(forwarded || req.ip || req.socket.remoteAddress);
+    if (!rate.allowed) {
+        res.setHeader('Retry-After', String(rate.retryAfter));
+        return res.status(429).json({ success: false, error: 'Too many reports from this address. Try again in a few minutes.' });
+    }
+
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const category = String(body.category || 'bug').toLowerCase();
+    const message = typeof body.message === 'string' ? body.message.trim() : '';
+
+    if (!Object.prototype.hasOwnProperty.call(SUPPORT_CATEGORIES, category)) {
+        return res.status(400).json({ success: false, error: 'Choose a valid report type.' });
+    }
+    if (message.length < 5) {
+        return res.status(400).json({ success: false, error: 'Please write at least 5 characters.' });
+    }
+    if (message.length > 1800) {
+        return res.status(400).json({ success: false, error: 'Please keep the report under 1800 characters.' });
+    }
+    if (!isValidSupportWebhook(SUPPORT_WEBHOOK_URL)) {
+        console.error('[support] SUPPORT_WEBHOOK_URL is missing or is not a Discord webhook URL.');
+        return res.status(503).json({
+            success: false,
+            error: 'Support is not configured yet. The site owner needs to set SUPPORT_WEBHOOK_URL.'
+        });
+    }
+
+    const user = await getAuthUser(req);
+    const payload = buildSupportPayload({ category, message, user, page: body.page });
+    const result = await postSupportReport(payload);
+
+    if (!result.delivered) {
+        return res.status(502).json({ success: false, error: 'Discord did not accept the report. Please try again.' });
+    }
+    return res.json({ success: true, message: 'Report sent.' });
+});
+
 // --- RAW HOSTING ENDPOINT ---
 
 app.get('/raw/:id', async (req, res) => {
@@ -2398,6 +2556,10 @@ module.exports.__engine = {
     buildLoader,
     classifyRawClient,
     RAW_DECOY,
+    isValidSupportWebhook,
+    buildSupportPayload,
+    postSupportReport,
+    SUPPORT_CATEGORIES,
     normalizeTarget,
     compatibilityWarnings,
     RUN_TARGETS

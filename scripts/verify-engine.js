@@ -522,6 +522,41 @@ const runtimeSamples = [
         api.RAW_DECOY.includes('return _app') && !api.RAW_DECOY.includes('script.code'));
 }
 
+/* 12. Support reports: Discord URLs are validated, the embed contains the
+       server timestamp and message, and the payload cannot ping a channel. */
+{
+    const api = require('../server.js').__engine;
+    const webhook = 'https://discord.com/api/webhooks/123456789012345678/' + 'a'.repeat(68);
+
+    check('support accepts a Discord webhook', api.isValidSupportWebhook(webhook));
+    check('support rejects non-Discord hosts',
+        !api.isValidSupportWebhook('https://example.com/api/webhooks/123456789012345678/' + 'a'.repeat(68)));
+    check('support rejects insecure webhooks',
+        !api.isValidSupportWebhook(webhook.replace('https://', 'http://')));
+
+    const payload = api.buildSupportPayload({
+        category: 'bug',
+        message: 'The compiler broke on line 2',
+        user: { id: '42', username: 'tester' },
+        page: '/vault'
+    });
+    const embed = payload.embeds[0];
+    check('support embed labels the report type', embed.title.includes('Bug report'));
+    check('support embed carries the message', embed.description === 'The compiler broke on line 2');
+    check('support embed includes the submitter',
+        embed.fields.some((field) => field.value.includes('tester') && field.value.includes('42')));
+    check('support embed includes a Discord timestamp',
+        embed.fields.some((field) => field.name === 'Sent' && field.value.includes('<t:')));
+    check('support embed includes an ISO timestamp', /^\d{4}-\d{2}-\d{2}T/.test(embed.timestamp));
+    check('support disables mentions', payload.allowed_mentions.parse.length === 0);
+
+    const anonymous = api.buildSupportPayload({ category: 'feature', message: 'Add dark mode' });
+    check('support accepts anonymous reports',
+        anonymous.embeds[0].fields.some((field) => field.value === 'Anonymous'));
+    check('support maps unknown types to something else',
+        api.buildSupportPayload({ category: 'nonsense', message: 'x' }).embeds[0].title.includes('Something else'));
+}
+
 function findLuau() {
     const local = path.join(__dirname, '..', '.tools', 'luau');
     if (fs.existsSync(local)) return local;

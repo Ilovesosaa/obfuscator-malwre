@@ -2074,7 +2074,7 @@
             z-index: 1;
         }
 
-        #top, #features, #results, #app, #vault {
+        #top, #features, #results, #app, #vault, #support {
             scroll-margin-top: calc(var(--header-h) + 26px);
         }
 
@@ -2631,6 +2631,30 @@
             gap: 20px;
         }
 
+        /* ---------- support ---------- */
+        .support-block {
+            margin-top: 56px;
+            padding-top: 48px;
+            border-top: 1px solid var(--border-subtle);
+        }
+        .support-head { margin-bottom: 26px; }
+        .support-card { max-width: 900px; }
+        .support-card textarea { min-height: 150px; resize: vertical; }
+        .support-type { max-width: 320px; }
+        .support-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 0.66rem;
+            color: var(--text-dim);
+        }
+        .support-status { font-size: 0.72rem; color: var(--text-secondary); }
+        .support-status.is-pending { color: var(--text-secondary); }
+        .support-status.is-success { color: var(--success); }
+        .support-status.is-error { color: var(--danger); }
+
         .hud-card {
             border-radius: 16px;
             padding: 16px 18px;
@@ -2810,6 +2834,7 @@
                 <a href="#results">Engine</a>
                 <a href="#app">Compiler</a>
                 <a href="#vault">Vault</a>
+                <a href="#support">Support</a>
             </nav>
             <div class="user-widget" id="userWidget"></div>
         </header>
@@ -3114,6 +3139,40 @@
                 </div>
             </div>
         </main>
+
+        <div class="support-block" id="support">
+            <div class="app-head support-head">
+                <div>
+                    <span class="eyebrow"><span class="eyebrow-dot"></span> Support</span>
+                    <h2 class="section-title">Something broken?<br><span class="muted">Tell us what to fix.</span></h2>
+                </div>
+                <p class="section-lead">Send a bug report or a change request straight to the team. The page and send time are attached automatically.</p>
+            </div>
+            <div class="card support-card reveal">
+                <form id="supportForm" onsubmit="submitSupport(event)">
+                    <div class="input-group support-type">
+                        <label for="supportCategory">REPORT TYPE</label>
+                        <select id="supportCategory">
+                            <option value="bug">Bug report</option>
+                            <option value="feature">Feature request</option>
+                            <option value="other">Something else</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="supportMessage">WHAT SHOULD WE FIX?</label>
+                        <textarea id="supportMessage" maxlength="1800" rows="7" required oninput="updateSupportCount()" placeholder="What happened, what you expected, and how to reproduce it..."></textarea>
+                        <div class="support-meta">
+                            <span id="supportCount">0 / 1800</span>
+                            <span>Sent with the current page and time.</span>
+                        </div>
+                    </div>
+                    <div class="deploy-row">
+                        <span id="supportStatus" class="support-status" role="status" aria-live="polite"></span>
+                        <button class="btn-primary" id="supportSubmit" type="submit">Send report</button>
+                    </div>
+                </form>
+            </div>
+        </div>
         </section>
 
         <footer>
@@ -3834,6 +3893,63 @@
             }
         });
 
+        function updateSupportCount() {
+            const input = document.getElementById('supportMessage');
+            const count = document.getElementById('supportCount');
+            if (input && count) count.textContent = input.value.length + ' / 1800';
+        }
+
+        async function submitSupport(event) {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const messageInput = document.getElementById('supportMessage');
+            const category = document.getElementById('supportCategory').value;
+            const status = document.getElementById('supportStatus');
+            const button = document.getElementById('supportSubmit');
+            const message = messageInput.value.trim();
+
+            if (message.length < 5) {
+                status.className = 'support-status is-error';
+                status.textContent = 'Please write at least 5 characters.';
+                messageInput.focus();
+                return;
+            }
+
+            button.disabled = true;
+            status.className = 'support-status is-pending';
+            status.textContent = 'Sending...';
+
+            try {
+                const res = await fetch('/api/support', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        category,
+                        message,
+                        page: window.location.pathname
+                    })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    status.className = 'support-status is-success';
+                    status.textContent = 'Sent. Thank you — the team has your report.';
+                    form.reset();
+                    updateSupportCount();
+                    showToast('Support report sent.', 'success');
+                } else {
+                    status.className = 'support-status is-error';
+                    status.textContent = data.error || 'Could not send the report.';
+                    showToast(data.error || 'Could not send the report.', 'error');
+                }
+            } catch (err) {
+                status.className = 'support-status is-error';
+                status.textContent = 'Network error. Please try again.';
+                showToast('Network error while sending the report.', 'error');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
         function toggleReveal(el) { el.classList.toggle('revealed'); }
         
         function copyLoader() { 
@@ -4070,6 +4186,7 @@
         initHalloween();
         initHalloweenLantern();
         updateTargetHint();
+        updateSupportCount();
         initMotion();
     </script>
 </body>
