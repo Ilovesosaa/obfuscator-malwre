@@ -320,6 +320,38 @@ function buildLoader(rawTarget, rawUrl) {
     return `(loadstring or load)(game:HttpGet("${url}"))()`;
 }
 
+/* Link-level gate. A loader link is fetched by `game:HttpGet`/HttpService in a
+   Roblox runtime, by luasocket/curl for desktop Lua, or by whoever has the URL.
+   Browsers get the block page; known HTTP tooling gets a harmless decoy instead
+   of the artifact, so a deobfuscator that fetches the link server-side has
+   nothing real to work with. Unknown executor agents are allowed through so a
+   renamed client never breaks a working script. */
+const RAW_DECOY = 'local _app = { version = "1.0.0", loaded = true, start = function() end }\nreturn _app\n';
+
+function classifyRawClient(userAgent, headers, rawTarget) {
+    const ua = String(userAgent || '');
+    const h = headers || {};
+    const accept = String(h.accept || '');
+    const target = normalizeTarget(rawTarget);
+    const desktop = target === 'lua51' || target === 'lua54';
+
+    /* Roblox first: HttpService sends Roblox/WinInet, Studio sends
+       RobloxStudio/WinInet. Never gate those even if a header looks browserish. */
+    if (/Roblox(?:Studio)?\//i.test(ua)) return 'runtime';
+
+    const isBrowser = /Mozilla|Chrome|Chromium|Safari|Firefox|\bEdg\b|\bOPR\b/i.test(ua)
+        || /text\/html/i.test(accept)
+        || Boolean(h['sec-fetch-mode'] || h['sec-fetch-site']);
+    if (isBrowser) return 'browser';
+
+    const isTool = /curl\/|wget\/|python-requests|python-urllib|aiohttp|httpx|go-http-client|okhttp|node-fetch|axios|undici|postmanruntime|insomnia|httpie|libwww-perl|scrapy|mechanize|powershell|winhttp|restsharp|faraday|reqwest|guzzle|\bjava\/|luasocket/i.test(ua);
+
+    /* curl and luasocket are the desktop fetch paths, so they must reach the
+       real artifact there. For executor/Studio links they are downloaders. */
+    if (isTool) return desktop ? 'runtime' : 'tool';
+    return 'runtime';
+}
+
 /* Constructs that exist in one dialect but not the other. A warning here is
    cheap; the alternative is a script that only fails once it reaches a user's
    executor, after the vault has already stored it. */
@@ -2298,10 +2330,22 @@ app.get('/raw/:id', async (req, res) => {
     const script = currentVault.find(s => s.id === req.params.id);
     if (!script) return res.status(404).send('Script not found.');
 
-    const userAgent = req.headers['user-agent'] || '';
-    const isBrowser = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari') || userAgent.includes('Edge');
+    const client = classifyRawClient(
+        req.headers['user-agent'],
+        req.headers,
+        script.target || script.fileType
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Robots-Tag', 'noindex');
 
-    if (isBrowser) {
+    /* Known downloaders receive valid but harmless Lua. A deobfuscator that
+       fetched the link gets a script that does nothing instead of the payload. */
+    if (client === 'tool') {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        return res.send(RAW_DECOY);
+    }
+
+    if (client === 'browser') {
         res.setHeader('Content-Type', 'text/html');
         return res.status(403).send(`
             <!DOCTYPE html>
@@ -2352,6 +2396,8 @@ module.exports.__engine = {
     renameIdentifiers,
     computeBlockBounds,
     buildLoader,
+    classifyRawClient,
+    RAW_DECOY,
     normalizeTarget,
     compatibilityWarnings,
     RUN_TARGETS

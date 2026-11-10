@@ -501,6 +501,27 @@ const runtimeSamples = [
     check('compile failures are pcall-guarded', artifact.includes('pcall(_loader'));
 }
 
+/* 11. Loader-link gate: game clients get the artifact, browsers get the block
+      page, and known HTTP downloaders get a harmless decoy. */
+{
+    const api = require('../server.js').__engine;
+    const classify = api.classifyRawClient;
+
+    check('link allows executor Roblox clients', classify('Roblox/WinInet', {}, 'auto') === 'runtime');
+    check('link allows Studio clients', classify('RobloxStudio/WinInet', {}, 'studio') === 'runtime');
+    check('link blocks browsers',
+        classify('Mozilla/5.0 (Windows NT 10.0) Chrome/120.0', { accept: 'text/html' }, 'auto') === 'browser');
+    check('link blocks browser-only fetch headers',
+        classify('', { 'sec-fetch-mode': 'navigate' }, 'auto') === 'browser');
+    check('link decoys Python downloaders',
+        classify('python-requests/2.31.0', { accept: '*/*' }, 'auto') === 'tool');
+    check('link decoys curl for executor links', classify('curl/8.4.0', {}, 'auto') === 'tool');
+    check('link allows desktop curl', classify('curl/8.4.0', {}, 'lua51') === 'runtime');
+    check('link allows renamed executor agents', classify('SomeExecutor/1.0', {}, 'auto') === 'runtime');
+    check('link decoy is harmless Lua',
+        api.RAW_DECOY.includes('return _app') && !api.RAW_DECOY.includes('script.code'));
+}
+
 function findLuau() {
     const local = path.join(__dirname, '..', '.tools', 'luau');
     if (fs.existsSync(local)) return local;
