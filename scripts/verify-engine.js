@@ -528,6 +528,7 @@ const runtimeSamples = [
     const api = require('../server.js').__engine;
     const webhook = 'https://discord.com/api/webhooks/123456789012345678/' + 'a'.repeat(68);
 
+    check('support cooldown is one day', api.SUPPORT_REPORT_COOLDOWN_MS === 24 * 60 * 60 * 1000);
     check('support accepts a Discord webhook', api.isValidSupportWebhook(webhook));
     check('support rejects non-Discord hosts',
         !api.isValidSupportWebhook('https://example.com/api/webhooks/123456789012345678/' + 'a'.repeat(68)));

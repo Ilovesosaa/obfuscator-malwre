@@ -2333,9 +2333,8 @@ const SUPPORT_CATEGORIES = Object.freeze({
     feature: { label: 'Feature request', emoji: '✨', color: 0x7dd3fc },
     other: { label: 'Something else', emoji: '💬', color: 0xa1a1aa }
 });
-const SUPPORT_RATE_WINDOW_MS = 10 * 60 * 1000;
-const SUPPORT_RATE_MAX = 5;
-const supportRate = new Map();
+const SUPPORT_REPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const supportCooldowns = new Map();
 
 function isValidSupportWebhook(value) {
     try {
@@ -2385,25 +2384,24 @@ function buildSupportPayload(report) {
     };
 }
 
-function allowSupportReport(ip) {
-    const key = String(ip || 'unknown');
-    const now = Date.now();
-    const current = supportRate.get(key);
-
-    if (!current || now - current.startedAt >= SUPPORT_RATE_WINDOW_MS) {
-        supportRate.set(key, { startedAt: now, count: 1 });
-        return { allowed: true };
+function supportCooldownRemaining(key) {
+    const expiresAt = supportCooldowns.get(key);
+    if (!expiresAt) return 0;
+    if (expiresAt <= Date.now()) {
+        supportCooldowns.delete(key);
+        return 0;
     }
+    return expiresAt - Date.now();
+}
 
-    if (current.count >= SUPPORT_RATE_MAX) {
-        return {
-            allowed: false,
-            retryAfter: Math.max(1, Math.ceil((SUPPORT_RATE_WINDOW_MS - (now - current.startedAt)) / 1000))
-        };
-    }
+/* Reserve before the request goes out so two reports submitted together
+   cannot both pass the check. A failed delivery releases the slot. */
+function reserveSupportCooldown(key) {
+    supportCooldowns.set(key, Date.now() + SUPPORT_REPORT_COOLDOWN_MS);
+}
 
-    current.count += 1;
-    return { allowed: true };
+function releaseSupportCooldown(key) {
+    supportCooldowns.delete(key);
 }
 
 async function postSupportReport(payload, options) {
@@ -2444,12 +2442,6 @@ async function postSupportReport(payload, options) {
 app.post('/api/support', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-    const rate = allowSupportReport(forwarded || req.ip || req.socket.remoteAddress);
-    if (!rate.allowed) {
-        res.setHeader('Retry-After', String(rate.retryAfter));
-        return res.status(429).json({ success: false, error: 'Too many reports from this address. Try again in a few minutes.' });
-    }
-
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const category = String(body.category || 'bug').toLowerCase();
     const message = typeof body.message === 'string' ? body.message.trim() : '';
@@ -2472,10 +2464,23 @@ app.post('/api/support', async (req, res) => {
     }
 
     const user = await getAuthUser(req);
+    const cooldownKey = forwarded || req.ip || req.socket.remoteAddress || 'unknown';
+    const remaining = supportCooldownRemaining(cooldownKey);
+    if (remaining > 0) {
+        const hours = Math.max(1, Math.ceil(remaining / (60 * 60 * 1000)));
+        res.setHeader('Retry-After', String(Math.ceil(remaining / 1000)));
+        return res.status(429).json({
+            success: false,
+            error: `You can send another report in about ${hours} hour${hours === 1 ? '' : 's'}.`
+        });
+    }
+
+    reserveSupportCooldown(cooldownKey);
     const payload = buildSupportPayload({ category, message, user, page: body.page });
     const result = await postSupportReport(payload);
 
     if (!result.delivered) {
+        releaseSupportCooldown(cooldownKey);
         return res.status(502).json({ success: false, error: 'Discord did not accept the report. Please try again.' });
     }
     return res.json({ success: true, message: 'Report sent.' });
@@ -2560,6 +2565,7 @@ module.exports.__engine = {
     buildSupportPayload,
     postSupportReport,
     SUPPORT_CATEGORIES,
+    SUPPORT_REPORT_COOLDOWN_MS,
     normalizeTarget,
     compatibilityWarnings,
     RUN_TARGETS
