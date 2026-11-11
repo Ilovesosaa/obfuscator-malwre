@@ -2859,7 +2859,7 @@
                     <div class="hero-meta">
                         <span>Luau &amp; Lua 5.1&ndash;5.5</span>
                         <span class="hero-meta-sep"></span>
-                        <span>Reversible XOR</span>
+                        <span>Base85 + RC4</span>
                         <span class="hero-meta-sep"></span>
                         <span>Vault for every build</span>
                     </div>
@@ -2920,7 +2920,7 @@
                             <div class="mock-row"><span class="mock-dot"></span><span>Rename locals</span><span class="on">on</span></div>
                             <div class="mock-row"><span class="mock-dot"></span><span>Encode number literals</span><span class="on">on</span></div>
                             <div class="mock-row"><span class="mock-dot"></span><span>Encrypt strings</span><span class="on">on</span></div>
-                            <div class="mock-row"><span class="mock-dot"></span><span>Split &amp; XOR chunks</span><span class="on">on</span></div>
+                            <div class="mock-row"><span class="mock-dot"></span><span>Split &amp; RC4 chunks</span><span class="on">on</span></div>
                         </div>
                     </article>
 
@@ -3002,7 +3002,7 @@
             </div>
             <div class="hud-card reveal">
                 <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M8 21H3v-5M3 21l7-7M16 3h5v5M21 3l-7 7"/></svg><span class="hud-label">TRANSFORM</span></div>
-                <span class="hud-value">REVERSIBLE XOR</span>
+                <span class="hud-value">BASE85 + RC4</span>
             </div>
             <div class="hud-card reveal">
                 <div class="hud-top"><svg class="hud-icon" viewBox="0 0 24 24"><path d="M7 11V7a5 5 0 0 1 9.9-1"/><rect x="3" y="11" width="18" height="11" rx="2"/></svg><span class="hud-label">SOURCE RECOVERABLE</span></div>
@@ -3133,7 +3133,7 @@
                         <li style="--i:2"><span>Rename locals</span><span class="step-meta">opt</span></li>
                         <li style="--i:3"><span>Encode number literals</span><span class="step-meta">opt</span></li>
                         <li style="--i:4"><span>Encrypt strings</span><span class="step-meta">opt</span></li>
-                        <li style="--i:5"><span>Split &amp; XOR chunks</span><span class="step-meta">xor</span></li>
+                        <li style="--i:5"><span>Split &amp; RC4 chunks</span><span class="step-meta">rc4</span></li>
                     </ol>
                     <p class="pipeline-note">Each chunk carries its own key, so no single blob holds the whole program.</p>
                 </div>
@@ -3190,7 +3190,7 @@
                 <div class="footer-group">
                     <span>NIX6 ENGINE v1.1.0</span>
                     <span class="footer-sep">/</span>
-                    <span>Transform: reversible XOR byte substitution</span>
+                    <span>Transform: per-chunk RC4 + Base85</span>
                 </div>
                 <div class="footer-group">
                     <span><span id="footerVaultCount">0</span> scripts hosted</span>

@@ -26,50 +26,80 @@ const { ObfuscatorEngine } = require('../server.js');
 const ALL = { minify: true, rename: true, encodeNumbers: true, encryptStrings: true, antiTamper: true };
 const PLAIN = { minify: true, rename: true, encodeNumbers: false, encryptStrings: false, antiTamper: true };
 
-/* Mirrors the emitted wrapper: rebuild the byte -> value map from the shuffled
-   alphabet, collect every independently keyed payload chunk, and decode four
-   characters into three bytes with the (key + i * 31) % 256 keystream. */
+/* Mirrors the emitted wrapper: recover the per-build Base85 alphabet, collect
+   the independently keyed payload chunks, decode five characters into four
+   bytes, then decrypt the chunk with its RC4 stream. */
+function seedKey(seed) {
+    const key = Buffer.alloc(8);
+    let state = Number(seed) & 0xFFFF;
+    for (let i = 0; i < key.length; i++) {
+        state = (state * 25173 + 13849) % 65536;
+        key[i] = Math.floor(state / 256) % 256;
+    }
+    return key;
+}
+
+function rc4(bytes, key) {
+    const s = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) s[i] = i;
+    let j = 0;
+    for (let i = 0; i < 256; i++) {
+        j = (j + s[i] + key[i % key.length]) & 0xFF;
+        const t = s[i];
+        s[i] = s[j];
+        s[j] = t;
+    }
+    const out = Buffer.alloc(bytes.length);
+    let i = 0;
+    j = 0;
+    for (let n = 0; n < bytes.length; n++) {
+        i = (i + 1) & 0xFF;
+        j = (j + s[i]) & 0xFF;
+        const t = s[i];
+        s[i] = s[j];
+        s[j] = t;
+        out[n] = bytes[n] ^ s[(s[i] + s[j]) & 0xFF];
+    }
+    return out;
+}
+
 function decodeArtifact(artifact) {
-    const alphaMatch = /local [A-Za-z_0-9]+ = "([A-Za-z0-9+/]{64})"/.exec(artifact);
+    const alphaMatch = /local\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*"([^"]{85})"/.exec(artifact);
     if (!alphaMatch) throw new Error('alphabet not found in artifact');
     const alphabet = alphaMatch[1];
-
     const map = new Map();
     for (let i = 0; i < alphabet.length; i++) map.set(alphabet[i], i);
 
-    const chunkRe = /\[==\[([A-Za-z0-9+/=]*)\]==\],\s*(\d+)\)/g;
-    const bytes = [];
-    let chunks = 0;
+    const chunkRe = /\{(\d+),(\d+),(\d+),"([^"]*)"\}/g;
+    const chunks = [];
     let m;
-
     while ((m = chunkRe.exec(artifact)) !== null) {
-        chunks++;
-        const payload = m[1];
-        const key = Number(m[2]);
-        let offset = 0;
-
-        for (let i = 0; i < payload.length; i += 4) {
-            const v1 = map.get(payload[i]);
-            const v2 = map.get(payload[i + 1]);
-            const v3 = payload[i + 2] === '=' ? undefined : map.get(payload[i + 2]);
-            const v4 = payload[i + 3] === '=' ? undefined : map.get(payload[i + 3]);
-            if (v1 === undefined || v2 === undefined) throw new Error('bad base64 group at ' + i);
-
-            bytes.push((v1 * 4 + Math.floor(v2 / 16)) ^ ((key + offset * 31) & 0xFF));
-            offset++;
-            if (v3 !== undefined) {
-                bytes.push(((v2 % 16) * 16 + Math.floor(v3 / 4)) ^ ((key + offset * 31) & 0xFF));
-                offset++;
-                if (v4 !== undefined) {
-                    bytes.push(((v3 % 4) * 64 + v4) ^ ((key + offset * 31) & 0xFF));
-                    offset++;
-                }
-            }
-        }
+        chunks.push({ index: Number(m[1]), length: Number(m[2]), seed: Number(m[3]), data: m[4] });
     }
+    if (chunks.length === 0) throw new Error('payload not found in artifact');
+    chunks.sort((a, b) => a.index - b.index);
 
-    if (chunks === 0) throw new Error('payload not found in artifact');
-    return Buffer.from(bytes);
+    const output = [];
+    for (const chunk of chunks) {
+        const decoded = [];
+        for (let i = 0; i < chunk.data.length; i += 5) {
+            let value = 0;
+            for (let j = 0; j < 5; j++) {
+                const digit = map.get(chunk.data[i + j]);
+                if (digit === undefined) throw new Error('bad Base85 digit at ' + i);
+                value = value * 85 + digit;
+            }
+            decoded.push(
+                Math.floor(value / 16777216) % 256,
+                Math.floor(value / 65536) % 256,
+                Math.floor(value / 256) % 256,
+                value % 256
+            );
+        }
+        const encrypted = Buffer.from(decoded).subarray(0, chunk.length);
+        output.push(rc4(encrypted, seedKey(chunk.seed)));
+    }
+    return Buffer.concat(output);
 }
 
 function build(code, options) {
@@ -233,10 +263,12 @@ for (const sample of samples) {
             !encoded.artifact.includes(literal));
     }
 
-    check('integrity guard emitted',
-        encoded.artifact.includes('payload integrity check failed'));
-    check('length guard emitted',
-        encoded.artifact.includes('payload length mismatch'));
+    check('dual integrity guard emitted',
+        encoded.engine.stats.integrityChecks === 2
+        && encoded.artifact.includes('% 1000000007')
+        && encoded.artifact.includes('% 1000000009'));
+    check('length guard emitted', encoded.artifact.includes('~=') && encoded.artifact.includes('string.sub'));
+    check('legacy NIX6 marker removed', !encoded.artifact.includes('NIX6_'));
 
     if (sample.name === 'shebang first line') {
         check('shebang stays on line one of the payload',
@@ -290,6 +322,10 @@ for (let mask = 0; mask < (1 << OPTION_NAMES.length); mask++) {
 
 /* 7. End-to-end: the artifact must behave exactly like the original script. */
 const runtimeSamples = [
+    {
+        name: 'empty chunk',
+        code: ''
+    },
     {
         name: 'functions, params, loops, interpolation, emoji',
         code: [
@@ -492,13 +528,20 @@ const runtimeSamples = [
        on a string rejects a chunk that starts with '#'). */
 {
     const { artifact } = build('print("portable")', ALL);
+    const secondArtifact = build('print("portable")', ALL).artifact;
+    check('artifact is randomized per build', secondArtifact !== artifact);
     check('bit32 is optional', artifact.includes('type(bit32) == "table"'));
     check('LuaJIT bit library is used when present', artifact.includes('type(bit) == "table"'));
     check('pure-Lua xor fallback remains', artifact.includes('math.floor((_a - _x) / 2)'));
     check('loader falls back to getgenv', artifact.includes('_g.loadstring or _g.load'));
-    check('missing loader reports a clear error', artifact.includes('exposes no load() or loadstring()'));
+    check('missing loader reports a clear error', artifact.includes('debug.loadstring') && artifact.includes('error('));
     check('shebang is stripped before compiling', artifact.includes('string.char(10)'));
-    check('compile failures are pcall-guarded', artifact.includes('pcall(_loader'));
+    check('compile failures are pcall-guarded', artifact.includes('pcall('));
+    const alphaMatch = /local\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*"([^"]{85})"/.exec(artifact);
+    check('Base85 alphabet is unique', Boolean(alphaMatch) && new Set(alphaMatch[1]).size === 85);
+    check('old Base64 alphabet removed',
+        !artifact.includes('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'));
+    check('payload uses per-chunk RC4 metadata', /\{\d+,\d+,\d+,"[^"]*"\}/.test(artifact));
 }
 
 /* 11. Loader-link gate: game clients get the artifact, browsers get the block
@@ -604,6 +647,14 @@ if (!luau) {
         check('output identical: ' + sample.name,
             original.stdout === obfuscated.stdout,
             'original=' + JSON.stringify(original.stdout) + ' obfuscated=' + JSON.stringify(obfuscated.stdout));
+    }
+
+    {
+        const { artifact } = build('print("tamper-check")', ALL);
+        const tampered = artifact.replace(/(\{\d+,\d+,\d+,")([^"])/, (_, head, ch) =>
+            head + (ch === 'A' ? 'B' : 'A'));
+        check('tampered payload is rejected',
+            tampered !== artifact && !runLuau(luau, tampered).ok);
     }
 }
 

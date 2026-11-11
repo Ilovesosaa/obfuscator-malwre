@@ -196,7 +196,7 @@ async function saveVault(vault) {
 
    The four toggles in the UI used to be decorative and the server
    ignored them. They now drive a real pass over the source before it
-   is XOR-wrapped:
+   is encrypted and wrapped:
 
      minify         drop comments and squeeze whitespace (never inside a
                     string; `--!` directives and a `#!` shebang are kept)
@@ -462,6 +462,7 @@ function stringContainsEmoji(str) {
    implementation that does integer maths in 32 bits must reach the same
    number as this one, or a legitimate script would refuse to run. */
 const INTEGRITY_MODULUS = 1000000007;
+const INTEGRITY_MODULUS2 = 1000000009;
 
 const LUA_KEYWORDS = new Set([
     'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function',
@@ -1353,13 +1354,15 @@ function decodeLongStringLiteral(literal) {
     return Array.from(Buffer.from(body, 'utf8'));
 }
 
-const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+/* Z85 is used for every byte string in the artifact. The alphabet contains no
+   quote or backslash, so it can be embedded in a normal Lua string literal.
+   A fresh shuffle is generated per build. */
+const Z85_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#';
 
-/* A different alphabet per build, so a stock base64 decoder finds noise. */
 function shuffleAlphabet() {
-    const chars = B64_ALPHABET.split('');
+    const chars = Z85_ALPHABET.split('');
     for (let i = chars.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = crypto.randomInt(0, i + 1);
         const tmp = chars[i];
         chars[i] = chars[j];
         chars[j] = tmp;
@@ -1367,41 +1370,109 @@ function shuffleAlphabet() {
     return chars.join('');
 }
 
-function base64EncodeBytes(bytes, alphabet) {
+/* Four bytes -> five printable characters. An incomplete final group is
+   padded with zero bytes; the caller stores the real length and trims it. */
+function base85EncodeBytes(bytes, alphabet) {
     let out = '';
-    for (let i = 0; i < bytes.length; i += 3) {
+    for (let i = 0; i < bytes.length; i += 4) {
         const b1 = bytes[i];
-        const b2 = i + 1 < bytes.length ? bytes[i + 1] : null;
-        const b3 = i + 2 < bytes.length ? bytes[i + 2] : null;
-        out += alphabet[b1 >> 2];
-        out += alphabet[((b1 & 3) << 4) | ((b2 === null ? 0 : b2) >> 4)];
-        out += b2 === null ? '=' : alphabet[((b2 & 15) << 2) | ((b3 === null ? 0 : b3) >> 6)];
-        out += b3 === null ? '=' : alphabet[b3 & 63];
+        const b2 = i + 1 < bytes.length ? bytes[i + 1] : 0;
+        const b3 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+        const b4 = i + 3 < bytes.length ? bytes[i + 3] : 0;
+        let value = b1 * 16777216 + b2 * 65536 + b3 * 256 + b4;
+        const group = new Array(5);
+        for (let j = 4; j >= 0; j--) {
+            group[j] = alphabet[value % 85];
+            value = Math.floor(value / 85);
+        }
+        out += group.join('');
     }
     return out;
 }
 
-/* The runtime half of the string encoder. Every literal becomes
-   NIX6_D("<base64>", key), decoded in groups of four by gsub, so the cost is a
-   quarter of the old one-char-at-a-time loop and the emitted text is ~1.37x the
-   original bytes instead of the ~3.5x a decimal byte table cost.
+function base85DecodeBytes(encoded, alphabet, length) {
+    if (encoded.length % 5 !== 0) throw new Error('invalid Base85 group');
+    const map = new Map();
+    for (let i = 0; i < alphabet.length; i++) map.set(alphabet[i], i);
+    const out = new Uint8Array(Math.floor(encoded.length / 5) * 4);
+    let at = 0;
+    for (let i = 0; i < encoded.length; i += 5) {
+        let value = 0;
+        for (let j = 0; j < 5; j++) {
+            const digit = map.get(encoded[i + j]);
+            if (digit === undefined) throw new Error('invalid Base85 digit');
+            value = value * 85 + digit;
+        }
+        out[at++] = Math.floor(value / 16777216) % 256;
+        out[at++] = Math.floor(value / 65536) % 256;
+        out[at++] = Math.floor(value / 256) % 256;
+        out[at++] = value % 256;
+    }
+    const end = length === undefined ? out.length : Math.min(length, out.length);
+    return Buffer.from(out.subarray(0, end));
+}
 
-   The key is a keystream, not a constant: byte i is XORed with
-   (key + i * 31) % 256. Two identical literals therefore produce different
-   ciphertext, and a guessed single-byte key stops being useful after one byte.
-   The byte offset comes from a counter the callback advances itself: Luau's
-   gsub does not pass the match position to the replacement function, so
-   relying on it would break on every Roblox executor. */
-function buildStringHelper(alphabet) {
+/* RC4 is deliberately implemented with only integer arithmetic and a
+   byte-indexed table. That keeps it portable to every Luau executor and to
+   plain Lua 5.1, while replacing the old "key + index * 31" XOR stream that
+   any deobfuscator can reproduce in a few lines. */
+function seedKeyBytes(seed) {
+    const key = Buffer.alloc(8);
+    let state = Number(seed) & 0xFFFF;
+    for (let i = 0; i < key.length; i++) {
+        state = (state * 25173 + 13849) % 65536;
+        key[i] = Math.floor(state / 256) % 256;
+    }
+    return key;
+}
+
+function rc4Crypt(bytes, key) {
+    const s = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) s[i] = i;
+    let j = 0;
+    for (let i = 0; i < 256; i++) {
+        j = (j + s[i] + key[i % key.length]) & 0xFF;
+        const tmp = s[i];
+        s[i] = s[j];
+        s[j] = tmp;
+    }
+    const out = Buffer.alloc(bytes.length);
+    let i = 0;
+    j = 0;
+    for (let n = 0; n < bytes.length; n++) {
+        i = (i + 1) & 0xFF;
+        j = (j + s[i]) & 0xFF;
+        const tmp = s[i];
+        s[i] = s[j];
+        s[j] = tmp;
+        out[n] = bytes[n] ^ s[(s[i] + s[j]) & 0xFF];
+    }
+    return out;
+}
+
+/* A helper name must not collide with anything in the script and must not be
+   a reserved word. Lua identifiers beginning with `_` cannot be type names. */
+function randomLuaName(existing, used) {
+    for (;;) {
+        const name = '_' + crypto.randomBytes(6).toString('hex');
+        if (LUA_KEYWORDS.has(name)) continue;
+        if (existing && existing.includes(name)) continue;
+        if (used && used.has(name)) continue;
+        if (used) used.add(name);
+        return name;
+    }
+}
+
+/* The runtime half of the string encoder. Each literal is a Base85 string,
+   encrypted with its own 16-bit key and a small LCG stream. The key changes
+   on every byte, so identical literals never share a ciphertext and there is
+   no single-byte key to guess. */
+function buildStringHelper(alphabet, names) {
     return [
-        'local NIX6_AL = "' + alphabet + '"',
-        /* Captured once, before any user code can run. A script that sandboxes
-           itself with setfenv drops `string` and `math` from its environment;
-           the helper has to keep working after that. */
-        'local NIX6_SB, NIX6_SC, NIX6_SF, NIX6_GSUB = string.byte, string.char, math.floor, string.gsub',
-        'local NIX6_M = {}',
-        'for NIX6_I = 1, #NIX6_AL do NIX6_M[NIX6_SB(NIX6_AL, NIX6_I)] = NIX6_I - 1 end',
-        'local function NIX6_BX(_a, _b)',
+        'local ' + names.alpha + ' = "' + alphabet + '"',
+        'local ' + names.map + ' = {}',
+        'for _i = 1, #' + names.alpha + ' do ' + names.map + '[string.byte(' + names.alpha + ', _i)] = _i - 1 end',
+        'local ' + names.bxor + ' = (type(bit32) == "table" and bit32.bxor) or (type(bit) == "table" and bit.bxor) or function(_a, _b)',
         ' local _r, _p = 0, 1',
         ' while _a > 0 or _b > 0 do',
         '  local _x, _y = _a % 2, _b % 2',
@@ -1410,35 +1481,34 @@ function buildStringHelper(alphabet) {
         ' end',
         ' return _r',
         'end',
-        'local NIX6_XOR = (bit32 and bit32.bxor) or NIX6_BX',
-        'local function NIX6_K(_k, _i)',
-        ' return (_k + _i * 31) % 256',
-        'end',
-        'local function NIX6_D(_s, _k)',
+        'local _sb, _sc, _sf, _gm, _cat = string.byte, string.char, math.floor, string.gmatch, table.concat',
+        'local function ' + names.dec + '(_s, _k, _l)',
+        ' local _o = {}',
         ' local _n = 0',
-        ' return (NIX6_GSUB(_s, "(....)", function(_q)',
-        '  local _i = _n',
-        '  _n = _i + 3',
-        '  local _a, _b = NIX6_M[NIX6_SB(_q, 1)], NIX6_M[NIX6_SB(_q, 2)]',
-        '  local _c, _d = NIX6_M[NIX6_SB(_q, 3)], NIX6_M[NIX6_SB(_q, 4)]',
-        '  local _o = NIX6_SC(NIX6_XOR(_a * 4 + NIX6_SF(_b / 16), NIX6_K(_k, _i)))',
-        '  if _c then',
-        '   _o = _o .. NIX6_SC(NIX6_XOR((_b % 16) * 16 + NIX6_SF(_c / 4), NIX6_K(_k, _i + 1)))',
-        '   if _d then',
-        '    _o = _o .. NIX6_SC(NIX6_XOR((_c % 4) * 64 + _d, NIX6_K(_k, _i + 2)))',
+        ' for _q in _gm(_s, ".....") do',
+        '  local _v = 0',
+        '  for _r = 1, 5 do _v = _v * 85 + ' + names.map + '[_sb(_q, _r)] end',
+        '  for _r = 1, 4 do',
+        '   if _n < _l then',
+        '    _k = (_k * 25173 + 13849) % 65536',
+        '    local _b = _sf(_v / 16777216) % 256',
+        '    if _r == 2 then _b = _sf(_v / 65536) % 256',
+        '    elseif _r == 3 then _b = _sf(_v / 256) % 256',
+        '    elseif _r == 4 then _b = _v % 256 end',
+        '    _o[#_o + 1] = _sc(' + names.bxor + '(_b, _k % 256))',
+        '    _n = _n + 1',
         '   end',
         '  end',
-        '  return _o',
-        ' end))',
+        ' end',
+        ' return _cat(_o)',
         'end',
         ''
     ].join('\n');
 }
 
-/* Replaces every literal the runtime can rebuild exactly with
-   NIX6_D("<base64>", key). Byte-exact for UTF-8, so emoji, CJK, combining
-   marks and embedded NULs all come back identical. Interpolated strings are
-   left alone: they contain live expressions, not just bytes. */
+/* Replaces every literal the runtime can rebuild exactly with a keyed Base85
+   call. Interpolated strings are left alone: they contain live expressions,
+   not just bytes. */
 function encodeStrings(src) {
     const segs = scanLua(src);
     const out = [];
@@ -1446,6 +1516,13 @@ function encodeStrings(src) {
     let skipped = 0;
     let unicodeStrings = 0;
     const alphabet = shuffleAlphabet();
+    const used = new Set();
+    const names = {
+        alpha: randomLuaName(src, used),
+        map: randomLuaName(src, used),
+        bxor: randomLuaName(src, used),
+        dec: randomLuaName(src, used)
+    };
 
     for (const seg of segs) {
         if (seg.type !== 'string') { out.push(seg); continue; }
@@ -1468,16 +1545,14 @@ function encodeStrings(src) {
             unicodeStrings++;
         }
 
-        const key = 1 + Math.floor(Math.random() * 255);
-        /* Same keystream the runtime rebuilds: byte i uses (key + i * 31) % 256. */
-        const xored = Uint8Array.from(bytes, (b, i) => b ^ ((key + i * 31) & 0xFF));
-
-        /* Always parenthesised. A bare `NIX6_D(...)` would be a syntax error
-           in call position, because Lua's string-call sugar (`print"hi"`)
-           only accepts a literal: the rebuilt call has to become
-           `print(NIX6_D(...))`. The parens are harmless everywhere else and
-           also stop the call fusing with the token before it. */
-        const literal = '(NIX6_D("' + base64EncodeBytes(xored, alphabet) + '",' + key + '))';
+        const key = crypto.randomInt(1, 65536);
+        let state = key;
+        const encrypted = Uint8Array.from(bytes, (b) => {
+            state = (state * 25173 + 13849) % 65536;
+            return b ^ (state % 256);
+        });
+        const literal = '(' + names.dec + '("' + base85EncodeBytes(encrypted, alphabet) +
+            '",' + key + ',' + bytes.length + '))';
 
         encoded++;
         out.push({ type: 'code', text: literal });
@@ -1497,14 +1572,14 @@ function encodeStrings(src) {
         break;
     }
     const previousSeg = insertAt > 0 ? out[insertAt - 1] : null;
-    const helper = buildStringHelper(alphabet);
+    const helper = buildStringHelper(alphabet, names);
     const helperText = previousSeg && previousSeg.type === 'comment' ? '\n' + helper : helper;
     out.splice(insertAt, 0, { type: 'code', text: helperText });
 
     return { text: segmentsToText(out), encoded, skipped, unicodeStrings };
 }
 
-// --- OBFUSCATION ENGINE (reversible XOR wrapper; not a VM, not encryption) ---
+// --- OBFUSCATION ENGINE (layered Base85/RC4 wrapper; source-level, not a bytecode VM) ---
 class ObfuscatorEngine {
     constructor(sourceCode, options) {
         /* A byte-order mark is not part of the program: if it reaches the
@@ -1586,6 +1661,18 @@ class ObfuscatorEngine {
         return /^\d/.test(res) ? "_" + res : res;
     }
 
+    _freshNames(count) {
+        const used = new Set();
+        const names = [];
+        while (names.length < count) {
+            const name = this._randomId(10);
+            if (LUA_KEYWORDS.has(name) || used.has(name)) continue;
+            used.add(name);
+            names.push(name);
+        }
+        return names;
+    }
+
     _generateOpCodes() {
         const pool = Array.from({ length: 50 }, (_, i) => (i + 1) * 17 + Math.floor(Math.random() * 9)).sort(() => Math.random() - 0.5);
         return {
@@ -1597,15 +1684,11 @@ class ObfuscatorEngine {
         };
     }
 
-    /* Builds the delivered artifact: source is minified/renamed/encoded, then
-       serialised as XORed bytes inside base64 strings with a per-build
-       shuffled alphabet. The wrapper decodes it with gsub in groups of four,
-       so the payload on disk is neither readable Lua nor decodable with a
-       stock tool, and decoding stays linear in the payload size.
-
-       The bytes are split into independently keyed slices: no single string in
-       the artifact holds the whole program, so lifting one blob and decoding
-       it no longer yields a runnable script. */
+    /* Builds the delivered artifact. The payload is split into randomly sized
+       chunks, each encrypted with its own RC4 stream and encoded with a
+       per-build Base85 alphabet. The wrapper is rebuilt with fresh names and
+       no stable comments or error markers, so a deobfuscator cannot key off
+       the old NIX6/base64/xor signatures. */
     buildProtectedVM() {
         const prepared = this.prepareSource();
         /* Kept for the offline verifier: it is exactly what the wrapper must
@@ -1613,150 +1696,177 @@ class ObfuscatorEngine {
         this.lastPrepared = prepared;
         const srcBytes = Buffer.from(prepared, 'utf8');
 
-        /* Anti-tamper: position-weighted sum of the plain source bytes, so the
-           check reads the same string the loader is about to compile. Both
-           sides stay in integers well under 2^53, which matters because a
-           runtime that does integer maths in 32 bits has to reach the same
-           number as this one. */
+        /* Two independent checks: a forward weighted sum and a reverse
+           weighted sum. Both stay in integer range on a 32-bit runtime. */
         let integrity = 0;
+        let reverseIntegrity = 0;
         for (let i = 0; i < srcBytes.length; i++) {
             integrity = (integrity + srcBytes[i] * (i + 1)) % INTEGRITY_MODULUS;
+            reverseIntegrity = (reverseIntegrity + srcBytes[i] * (srcBytes.length - i)) % INTEGRITY_MODULUS2;
         }
         this.stats.integrity = integrity;
+        this.stats.reverseIntegrity = reverseIntegrity;
         this.stats.sourceBytes = srcBytes.length;
+        this.stats.integrityChecks = this.options.antiTamper ? 2 : 0;
 
         const alphabet = shuffleAlphabet();
-        const chunkCount = srcBytes.length > 192 ? 3 : 1;
-        const chunkSize = Math.ceil(srcBytes.length / chunkCount);
+        const chunkCount = srcBytes.length === 0
+            ? 1
+            : Math.max(2, Math.min(6, Math.ceil(srcBytes.length / 4096)));
+        const cuts = [0];
+        for (let i = 1; i < chunkCount; i++) {
+            const min = cuts[i - 1] + 1;
+            const max = srcBytes.length - (chunkCount - i);
+            cuts.push(min > max ? cuts[i - 1] : crypto.randomInt(min, max + 1));
+        }
+        cuts.push(srcBytes.length);
+
         const chunks = [];
         for (let i = 0; i < chunkCount; i++) {
-            const slice = srcBytes.subarray(i * chunkSize, Math.min(srcBytes.length, (i + 1) * chunkSize));
-            const key = 1 + Math.floor(Math.random() * 255);
-            /* Same keystream as the decoder: byte i is XORed with
-               (key + i * 31) % 256, where i restarts at every chunk. */
-            const xored = Uint8Array.from(slice, (b, index) => b ^ ((key + index * 31) & 0xFF));
-            chunks.push({ key, data: base64EncodeBytes(xored, alphabet) });
+            const slice = srcBytes.subarray(cuts[i], cuts[i + 1]);
+            const seed = crypto.randomInt(1, 65536);
+            const encrypted = rc4Crypt(slice, seedKeyBytes(seed));
+            chunks.push({
+                index: i + 1,
+                length: slice.length,
+                seed,
+                data: base85EncodeBytes(encrypted, alphabet)
+            });
         }
         this.stats.payloadBytes = chunks.reduce((sum, chunk) => sum + chunk.data.length, 0);
         this.stats.payloadChunks = chunks.length;
 
+        /* Store the chunks out of order; the runtime restores them by index. */
+        const stored = chunks.slice();
+        for (let i = stored.length - 1; i > 0; i--) {
+            const j = crypto.randomInt(0, i + 1);
+            [stored[i], stored[j]] = [stored[j], stored[i]];
+        }
+        const chunkLines = stored.map((chunk) =>
+            `        {${chunk.index},${chunk.length},${chunk.seed},"${chunk.data}"}`
+        ).join(',\n');
+
         const op = this._generateOpCodes();
-        const v_vm = this._randomId();
-        const v_map = this._randomId();
-        const v_alpha = this._randomId();
-        const v_dec = this._randomId();
-        const v_bxor = this._randomId();
-        const v_text = this._randomId();
-        const v_instr = this._randomId();
-        const v_pc = this._randomId();
+        const names = this._freshNames(14);
+        const [vVm, vAlpha, vMap, vBxor, vDec, vText, vChunks, vParts, vInstr, vPc, vLoader, vOk, vChunk, vErr] = names;
 
-        const decodeCalls = chunks
-            .map((chunk) => `${v_dec}([==[${chunk.data}]==], ${chunk.key})`)
-            .join(' ..\n        ');
+        /* Splitting a plain constant into two random addends costs a
+           deobfuscator a little work and costs the runtime one addition. */
+        const luaNumber = (value) => {
+            const left = crypto.randomInt(0, value + 1);
+            return '(' + left + '+' + (value - left) + ')';
+        };
+        const errLength = 'E' + this._randomId(10);
+        const errIntegrity = 'E' + this._randomId(10);
+        const errLoader = 'E' + this._randomId(10);
+        const errFault = 'E' + this._randomId(10);
 
-        const integrityCheck = this.options.antiTamper ? `    local _int = 0
-    for _m = 1, #${v_text} do
-        _int = (_int + string.byte(${v_text}, _m) * _m) % ${INTEGRITY_MODULUS}
+        const integrityCheck = this.options.antiTamper ? `    local _a, _b = 0, 0
+    for _m = 1, #${vText} do
+        local _c = string.byte(${vText}, _m)
+        _a = (_a + _c * _m) % ${INTEGRITY_MODULUS}
+        _b = (_b + _c * (#${vText} - _m + 1)) % ${INTEGRITY_MODULUS2}
     end
-    if _int ~= ${integrity} then
-        error("Nix6: payload integrity check failed")
+    if _a ~= ${luaNumber(integrity)} or _b ~= ${luaNumber(reverseIntegrity)} then
+        error("${errIntegrity}")
     end
 ` : '';
 
-        /* No getfenv/debug metatable check here on purpose. The old guard hung
-           the script (while true do end) whenever the environment table had a
-           metatable, which is exactly what a legitimate sandbox looks like;
-           it was trivially bypassable and only ever hurt honest scripts. The
-           length and integrity checks below are the real anti-tamper. */
-        return `-- [[ Nix6 protected payload: base64 over XORed source bytes. Not encryption, not a security boundary. ]]
-local function ${v_vm}(...)
-    -- Three bit backends, in speed order: Luau/Roblox (bit32), LuaJIT/Lua 5.1
-    -- with the bit library, then a pure-Lua fallback that only needs integer
-    -- arithmetic. Every operand here is a byte, so the slow path stays cheap.
-    local ${v_bxor} = (type(bit32) == "table" and bit32.bxor)
-        or (type(bit) == "table" and bit.bxor)
-        or function(_a, _b)
-            local _r, _p = 0, 1
-            while _a > 0 or _b > 0 do
-                local _x, _y = _a % 2, _b % 2
-                if _x ~= _y then _r = _r + _p end
-                _a, _b, _p = math.floor((_a - _x) / 2), math.floor((_b - _y) / 2), _p * 2
-            end
-            return _r
+        return `local function ${vVm}(...)
+    local ${vBxor} = (type(bit32) == "table" and bit32.bxor) or (type(bit) == "table" and bit.bxor) or function(_a, _b)
+        local _r, _p = 0, 1
+        while _a > 0 or _b > 0 do
+            local _x, _y = _a % 2, _b % 2
+            if _x ~= _y then _r = _r + _p end
+            _a, _b, _p = math.floor((_a - _x) / 2), math.floor((_b - _y) / 2), _p * 2
         end
-
-    local ${v_alpha} = "${alphabet}"
-    local ${v_map} = {}
-    for _i = 1, #${v_alpha} do
-        ${v_map}[string.byte(${v_alpha}, _i)] = _i - 1
+        return _r
     end
-
-    local function ${v_dec}(_s, _k)
+    local ${vAlpha} = "${alphabet}"
+    local ${vMap} = {}
+    for _i = 1, #${vAlpha} do ${vMap}[string.byte(${vAlpha}, _i)] = _i - 1 end
+    local function ${vDec}(_p, _l, _s)
+        local _seed = _s
+        local _kb = {}
+        for _i = 1, 8 do
+            _seed = (_seed * 25173 + 13849) % 65536
+            _kb[_i] = string.char(math.floor(_seed / 256) % 256)
+        end
+        local _key = table.concat(_kb)
+        local _st = {}
+        for _i = 0, 255 do _st[_i] = _i end
+        local _j = 0
+        for _i = 0, 255 do
+            _j = (_j + _st[_i] + string.byte(_key, _i % #_key + 1)) % 256
+            _st[_i], _st[_j] = _st[_j], _st[_i]
+        end
+        local _x, _y = 0, 0
         local _n = 0
-        return (_s:gsub("(....)", function(_q)
-            local _i = _n
-            _n = _i + 3
-            local _a = ${v_map}[string.byte(_q, 1)]
-            local _b = ${v_map}[string.byte(_q, 2)]
-            local _c = ${v_map}[string.byte(_q, 3)]
-            local _d = ${v_map}[string.byte(_q, 4)]
-            local _o = string.char(${v_bxor}(_a * 4 + math.floor(_b / 16), (_k + _i * 31) % 256))
-            if _c then
-                _o = _o .. string.char(${v_bxor}((_b % 16) * 16 + math.floor(_c / 4), (_k + (_i + 1) * 31) % 256))
-                if _d then
-                    _o = _o .. string.char(${v_bxor}((_c % 4) * 64 + _d, (_k + (_i + 2) * 31) % 256))
+        local _out = {}
+        for _q in string.gmatch(_p, ".....") do
+            local _v = 0
+            for _r = 1, 5 do _v = _v * 85 + ${vMap}[string.byte(_q, _r)] end
+            for _r = 1, 4 do
+                if _n < _l then
+                    local _z = math.floor(_v / 16777216) % 256
+                    if _r == 2 then _z = math.floor(_v / 65536) % 256
+                    elseif _r == 3 then _z = math.floor(_v / 256) % 256
+                    elseif _r == 4 then _z = _v % 256 end
+                    _x = (_x + 1) % 256
+                    _y = (_y + _st[_x]) % 256
+                    _st[_x], _st[_y] = _st[_y], _st[_x]
+                    _out[#_out + 1] = string.char(${vBxor}(_z, _st[(_st[_x] + _st[_y]) % 256]))
+                    _n = _n + 1
                 end
             end
-            return _o
-        end))
+        end
+        return table.concat(_out)
     end
-
-    local ${v_text} = ${decodeCalls}
-
-    if #${v_text} ~= ${srcBytes.length} then
-        error("Nix6: payload length mismatch")
+    local ${vChunks} = {
+${chunkLines}
+    }
+    local ${vParts} = {}
+    for _i = 1, #${vChunks} do
+        local _c = ${vChunks}[_i]
+        ${vParts}[_c[1]] = ${vDec}(_c[4], _c[2], _c[3])
     end
-${integrityCheck}    -- A shebang is only understood by the file loader, not by load()/loadstring()
-    -- on a string, so a chunk that starts with one would fail to compile in
-    -- every environment. Drop that single line here; the payload keeps the
-    -- original bytes for the vault.
-    if string.sub(${v_text}, 1, 1) == "#" then
-        local _nl = string.find(${v_text}, string.char(10), 1, true)
-        ${v_text} = _nl and string.sub(${v_text}, _nl + 1) or ""
+    local ${vText} = table.concat(${vParts})
+    if #${vText} ~= ${luaNumber(srcBytes.length)} then
+        error("${errLength}")
     end
-
-    local ${v_instr} = {
+${integrityCheck}    if string.sub(${vText}, 1, 1) == "#" then
+        local _nl = string.find(${vText}, string.char(10), 1, true)
+        ${vText} = _nl and string.sub(${vText}, _nl + 1) or ""
+    end
+    local ${vInstr} = {
         {${op.OP_EXEC_CHUNK}, 1}
     }
-    local ${v_pc} = 1
-
-    while ${v_pc} <= #${v_instr} do
-        if ${v_instr}[${v_pc}][1] == ${op.OP_EXEC_CHUNK} then
-            local _loader = loadstring or load
-            if not _loader and type(getgenv) == "function" then
+    local ${vPc} = 1
+    while ${vPc} <= #${vInstr} do
+        if ${vInstr}[${vPc}][1] == ${op.OP_EXEC_CHUNK} then
+            local ${vLoader} = loadstring or load
+            if not ${vLoader} and type(getgenv) == "function" then
                 local _g = getgenv()
-                if type(_g) == "table" then _loader = _g.loadstring or _g.load end
+                if type(_g) == "table" then ${vLoader} = _g.loadstring or _g.load end
             end
-            if not _loader and type(debug) == "table" then
-                _loader = debug.loadstring
+            if not ${vLoader} and type(debug) == "table" then
+                ${vLoader} = debug.loadstring
             end
-            if not _loader then
-                error("Nix6: this runtime exposes no load() or loadstring()")
+            if not ${vLoader} then error("${errLoader}") end
+            local ${vOk}, ${vChunk}, ${vErr} = pcall(${vLoader}, ${vText})
+            if not ${vOk} then error(tostring(${vChunk})) end
+            if type(${vChunk}) ~= "function" then
+                error(tostring(${vErr} or "${errFault}"))
             end
-            local _ok, _chunk, _err = pcall(_loader, ${v_text})
-            if not _ok then error(tostring(_chunk)) end
-            if type(_chunk) ~= "function" then
-                error(tostring(_err or "VM Instruction Fault"))
-            end
-            return _chunk(...)
+            return ${vChunk}(...)
         end
-        ${v_pc} = ${v_pc} + 1
+        ${vPc} = ${vPc} + 1
     end
 end
-return ${v_vm}(...)
-`;
+return ${vVm}(...)        `;
     }
 }
+
 
 // --- Discord OAuth2 Configuration ---
 // Values are read once per cold start. Dashboard env vars are routinely pasted
