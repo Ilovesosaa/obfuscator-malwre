@@ -1683,6 +1683,7 @@ class ObfuscatorEngine {
             bytecodeBytes: 0,
             payloadChunks: 0,
             integrityChecks: 0,
+            environmentGuard: false,
             layers: 0
         };
     }
@@ -1770,6 +1771,39 @@ class ObfuscatorEngine {
         };
     }
 
+    /* Env loggers win by replacing getfenv/loadstring/debug with Lua closures
+       and then recording what the artifact does. Native runtime functions are
+       C closures, so their source is [C]. Refuse to run when those primitives
+       have been replaced; this gates both the source wrapper and the VM before
+       any payload is decrypted or passed to a loader. */
+    _environmentGuard() {
+        if (!this.options.antiTamper) return '';
+        const [vNative, vDebug, vGetfenv, vLoadstring, vLoad, vInfo, vSource, vOk] =
+            this._freshNames(8);
+        const err = 'E' + this._randomId(10);
+        return `local ${vGetfenv} = getfenv
+local ${vLoadstring} = loadstring
+local ${vLoad} = load
+local ${vDebug} = (type(debug) == "table" and (debug.info or debug.getinfo)) or nil
+local function ${vNative}(_f)
+    if type(_f) ~= "function" or type(${vDebug}) ~= "function" then return true end
+    local ${vOk}, ${vInfo} = pcall(${vDebug}, _f, "s")
+    if ${vOk} and type(${vInfo}) == "table" then ${vInfo} = ${vInfo}.source end
+    if not ${vOk} or type(${vInfo}) ~= "string" then
+        ${vOk}, ${vInfo} = pcall(${vDebug}, _f, "S")
+        if ${vOk} and type(${vInfo}) == "table" then ${vInfo} = ${vInfo}.source end
+    end
+    if type(${vInfo}) ~= "string" then return true end
+    local ${vSource} = string.gsub(${vInfo}, "^=", "")
+    return ${vSource} == "[C]"
+end
+if type(${vGetfenv}) == "function" and not ${vNative}(${vGetfenv}) then error("${err}") end
+if type(${vLoadstring}) == "function" and not ${vNative}(${vLoadstring}) then error("${err}") end
+if type(${vLoad}) == "function" and not ${vNative}(${vLoad}) then error("${err}") end
+if type(${vDebug}) == "function" and not ${vNative}(${vDebug}) then error("${err}") end
+`;
+    }
+
     /* Builds the delivered artifact. The payload is split into randomly sized
        chunks, each encrypted with its own RC4 stream and encoded with a
        per-build Base85 alphabet. The wrapper is rebuilt with fresh names and
@@ -1826,6 +1860,7 @@ if _a ~= ${luaNumber(integrity)} or _b ~= ${luaNumber(reverseIntegrity)} then er
         const seed = crypto.randomInt(1, 65536);
         const encoded = base85EncodeBytes(rc4Crypt(bytecode, seedKeyBytes(seed)), alphabet);
         const [vAlpha, vMap, vBxor, vDec] = this._freshNames(4);
+        const [vRawEnv, vVmEnv, vCopyOk, vKey, vValue] = this._freshNames(5);
         const licenseComment = String(FIU_LICENSE || '')
             .replace(/\r\n?/g, '\n')
             .split('\n')
@@ -1833,7 +1868,7 @@ if _a ~= ${luaNumber(integrity)} or _b ~= ${luaNumber(reverseIntegrity)} then er
             .join('\n');
 
         const artifact = `${licenseComment}
-local Fiu = (function()
+${this._environmentGuard()}local Fiu = (function()
 ${FIU_SOURCE}
 end)()
 local ${vAlpha} = "${alphabet}"
@@ -1886,8 +1921,13 @@ local function ${vDec}(_p, _s, _l)
     return table.concat(_out)
 end
 local bytecode = ${vDec}("${encoded}", ${seed}, ${bytecode.length})
-${integrityGuard}local env = (getfenv and getfenv(1)) or (type(getgenv) == "function" and getgenv()) or _G
-local fn = select(1, Fiu.luau_load(bytecode, env))
+${integrityGuard}local ${vRawEnv} = (getfenv and getfenv(1)) or (type(getgenv) == "function" and getgenv()) or _G
+local ${vVmEnv} = {}
+local ${vCopyOk} = pcall(function()
+    for ${vKey}, ${vValue} in next, ${vRawEnv} do ${vVmEnv}[${vKey}] = ${vValue} end
+end)
+if not ${vCopyOk} or next(${vVmEnv}) == nil then ${vVmEnv} = ${vRawEnv} end
+local fn = select(1, Fiu.luau_load(bytecode, ${vVmEnv}))
 if type(fn) ~= "function" then error("VM init failed") end
 return fn(...)
 `;
@@ -1897,6 +1937,7 @@ return fn(...)
         this.stats.payloadBytes = encoded.length;
         this.stats.payloadChunks = 1;
         this.stats.integrityChecks = this.options.antiTamper ? 2 : 0;
+        this.stats.environmentGuard = Boolean(this.options.antiTamper);
         this.stats.layers = 2;
         return artifact;
     }
@@ -1916,6 +1957,7 @@ return fn(...)
         this.stats.reverseIntegrity = reverseIntegrity;
         this.stats.sourceBytes = srcBytes.length;
         this.stats.integrityChecks = this.options.antiTamper ? 2 : 0;
+        this.stats.environmentGuard = Boolean(this.options.antiTamper);
 
         const alphabet = shuffleAlphabet();
         const chunkCount = srcBytes.length === 0
@@ -1980,7 +2022,7 @@ return fn(...)
     end
 ` : '';
 
-        return `local function ${vVm}(...)
+        return `${this._environmentGuard()}local function ${vVm}(...)
     local ${vBxor} = (type(bit32) == "table" and bit32.bxor) or (type(bit) == "table" and bit.bxor) or function(_a, _b)
         local _r, _p = 0, 1
         while _a > 0 or _b > 0 do

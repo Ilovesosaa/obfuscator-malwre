@@ -695,6 +695,45 @@ if (!luau) {
                 'original=' + JSON.stringify(original.stdout) + ' vm=' + JSON.stringify(obfuscated.stdout));
         }
     }
+
+    /* 9. Env loggers replace getfenv/loadstring with Lua closures and then
+          trace what the artifact does. The anti-tamper guard must reject that
+          runtime before either the source wrapper or VM reaches a loader. */
+    {
+        const loggerHarness = (artifact) => `local realGetfenv = getfenv
+local realLoadstring = loadstring
+local leaked = false
+local loadCalls = 0
+getfenv = function(level)
+    return realGetfenv(level)
+end
+loadstring = function(code, ...)
+    loadCalls = loadCalls + 1
+    if type(code) == "string" and code:find("ENV_LOG_CANARY", 1, true) then leaked = true end
+    return realLoadstring(code, ...)
+end
+local ok, err = pcall(function(...)
+${artifact}
+end)
+print("ok=" .. tostring(ok) .. " load_calls=" .. tostring(loadCalls) .. " leaked=" .. tostring(leaked))
+`;
+        const sourceLogged = runLuau(luau, loggerHarness(build('print("ENV_LOG_CANARY")', ALL).artifact));
+        check('env logger guard rejects a wrapped source runtime',
+            sourceLogged.ok && sourceLogged.stdout.includes('ok=false'), sourceLogged.stderr);
+        check('env logger guard blocks source decoding',
+            sourceLogged.stdout.includes('load_calls=0'), sourceLogged.stdout);
+        check('env logger guard leaves no source marker',
+            !sourceLogged.stdout.includes('leaked=true'), sourceLogged.stdout);
+
+        const loggedVm = buildVM('print("ENV_LOG_CANARY")', ALL);
+        if (loggedVm.engine.stats.virtualized) {
+            const vmLogged = runLuau(luau, loggerHarness(loggedVm.artifact));
+            check('env logger guard rejects an instrumented VM',
+                vmLogged.ok && vmLogged.stdout.includes('ok=false'), vmLogged.stderr);
+            check('env logger guard blocks VM payload loading',
+                vmLogged.stdout.includes('load_calls=0'), vmLogged.stdout);
+        }
+    }
 }
 
 console.log('\n' + (failures === 0

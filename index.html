@@ -3077,7 +3077,7 @@
                         <label class="option-toggle"><input type="checkbox" checked id="optAntiTamper"> Anti-Tamper Shield</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optVirtualize"> Bytecode VM</label>
                     </div>
-                    <p class="options-note">Applied on the server while compiling. Bytecode VM compiles Luau to bytecode and runs it inside an embedded virtual machine, so the delivered payload is not your source and cannot be recovered with a plain loadstring. Lua 5.1/5.4 targets use the source wrapper instead.</p>
+                    <p class="options-note">Applied on the server while compiling. Bytecode VM compiles Luau to bytecode and runs it inside an embedded virtual machine, so the delivered payload is not your source and cannot be recovered with a plain loadstring. Anti-Tamper also rejects instrumented runtimes used by common env loggers before any payload is decoded. Lua 5.1/5.4 targets use the source wrapper instead.</p>
 
                     <div class="input-group">
                         <label>LUAU / LUA SOURCE CODE</label>
@@ -3636,7 +3636,7 @@
                 const unicode = count('unicodeStrings');
                 parts.push(encoded + ' strings encoded' + (unicode ? ' (' + unicode + ' unicode-safe)' : ''));
             }
-            if (on.includes('antiTamper')) parts.push('integrity check armed');
+            if (on.includes('antiTamper')) parts.push('integrity + environment guard armed');
             if (on.includes('virtualize')) parts.push('Luau bytecode VM (' + (count('bytecodeBytes') / 1024).toFixed(1) + ' KB bytecode)');
             if (count('payloadBytes')) parts.push((count('payloadBytes') / 1024).toFixed(1) + ' KB payload');
             return parts.join(' / ');
