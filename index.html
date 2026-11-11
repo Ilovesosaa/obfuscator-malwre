@@ -3075,8 +3075,9 @@
                         <label class="option-toggle"><input type="checkbox" checked id="optNumbers"> Encode Numbers</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optAntiTamper"> Anti-Tamper Shield</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optVirtualize"> Bytecode VM</label>
                     </div>
-                    <p class="options-note">Applied on the server while compiling. Minify, Variable Renaming and Number Encoding rewrite the emitted source, so the payload is no longer a byte-for-byte copy of your script &mdash; the vault keeps your untouched copy for editing.</p>
+                    <p class="options-note">Applied on the server while compiling. Bytecode VM compiles Luau to bytecode and runs it inside an embedded virtual machine, so the delivered payload is not your source and cannot be recovered with a plain loadstring. Lua 5.1/5.4 targets use the source wrapper instead.</p>
 
                     <div class="input-group">
                         <label>LUAU / LUA SOURCE CODE</label>
@@ -3603,8 +3604,8 @@
             window.location.href = '/auth/logout';
         }
 
-        /* The four obfuscation toggles are read straight off the form and sent
-           to the server, which is the side that can actually transform code. */
+        /* The obfuscation toggles are read straight off the form and sent to
+           the server, which is the side that can actually transform code. */
         function readObfuscationOptions() {
             const checked = (id) => {
                 const el = document.getElementById(id);
@@ -3615,7 +3616,8 @@
                 rename: checked('optRename'),
                 encodeNumbers: checked('optNumbers'),
                 encryptStrings: checked('optEncrypt'),
-                antiTamper: checked('optAntiTamper')
+                antiTamper: checked('optAntiTamper'),
+                virtualize: checked('optVirtualize')
             };
         }
 
@@ -3635,6 +3637,7 @@
                 parts.push(encoded + ' strings encoded' + (unicode ? ' (' + unicode + ' unicode-safe)' : ''));
             }
             if (on.includes('antiTamper')) parts.push('integrity check armed');
+            if (on.includes('virtualize')) parts.push('Luau bytecode VM (' + (count('bytecodeBytes') / 1024).toFixed(1) + ' KB bytecode)');
             if (count('payloadBytes')) parts.push((count('payloadBytes') / 1024).toFixed(1) + ' KB payload');
             return parts.join(' / ');
         }

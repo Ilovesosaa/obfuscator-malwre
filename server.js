@@ -3,6 +3,8 @@ const session = require('cookie-session');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const { execFileSync } = require('child_process');
 const fetch = require('node-fetch');
 
 const app = express();
@@ -233,7 +235,8 @@ function normalizeObfuscationOptions(raw) {
         rename: input.rename !== false,
         encodeNumbers: input.encodeNumbers !== false,
         encryptStrings: input.encryptStrings !== false,
-        antiTamper: input.antiTamper !== false
+        antiTamper: input.antiTamper !== false,
+        virtualize: input.virtualize !== false
     };
 }
 
@@ -1579,7 +1582,84 @@ function encodeStrings(src) {
     return { text: segmentsToText(out), encoded, skipped, unicodeStrings };
 }
 
-// --- OBFUSCATION ENGINE (layered Base85/RC4 wrapper; source-level, not a bytecode VM) ---
+const FIU_SOURCE_PATH = path.join(__dirname, 'vendor', 'Fiu.luau');
+const FIU_LICENSE_PATH = path.join(__dirname, 'vendor', 'FIU-LICENSE.txt');
+let FIU_SOURCE = '';
+let FIU_LICENSE = 'Fiu interpreter is MIT licensed. See vendor/FIU-LICENSE.txt.';
+try { FIU_SOURCE = fs.readFileSync(FIU_SOURCE_PATH, 'utf8'); } catch (err) {}
+try { FIU_LICENSE = fs.readFileSync(FIU_LICENSE_PATH, 'utf8'); } catch (err) {}
+
+const LUAU_COMPILER_CANDIDATES = [
+    process.env.LUAU_COMPILE_BIN,
+    path.join(__dirname, 'bin', 'luau-compile'),
+    path.join(__dirname, '.tools', 'luau-compile')
+];
+let vmCompilerWarningShown = false;
+
+function findLuauCompiler() {
+    for (const candidate of LUAU_COMPILER_CANDIDATES) {
+        if (!candidate) continue;
+        try {
+            if (fs.statSync(candidate).isFile()) return candidate;
+        } catch (err) {}
+    }
+    return null;
+}
+
+/* Serverless bundles routinely drop the executable bit. Prefer the deployed
+   binary, but copy it into /tmp and chmod it once if it cannot be executed in
+   place. This keeps the VM available on Vercel without running a shell. */
+function executableCompilerPath(binary) {
+    try {
+        fs.accessSync(binary, fs.constants.X_OK);
+        return binary;
+    } catch (err) {}
+    try {
+        const copied = path.join(os.tmpdir(), 'nix6-luau-compile');
+        if (!fs.existsSync(copied)) fs.copyFileSync(binary, copied);
+        fs.chmodSync(copied, 0o755);
+        return copied;
+    } catch (err) {
+        return null;
+    }
+}
+
+/* Compiles prepared Luau source with the official compiler. Returns the raw
+   Luau bytecode, or null when this environment cannot provide a compiler.
+   The source is written to an isolated temp file and never passed through a
+   shell, so a hostile script name/payload cannot become a command. */
+function compileLuauToBytecode(source) {
+    const binary = findLuauCompiler();
+    if (!binary) return null;
+    const compiler = executableCompilerPath(binary);
+    if (!compiler) return null;
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nix6-luau-'));
+    const file = path.join(dir, 'chunk.luau');
+    try {
+        const text = String(source || '');
+        fs.writeFileSync(file, text.startsWith('#!')
+            ? text.slice(text.indexOf('\n') + 1)
+            : text, 'utf8');
+        const output = execFileSync(compiler, ['--binary', '-O2', '-g0', file], {
+            timeout: 15000,
+            maxBuffer: 64 * 1024 * 1024,
+            encoding: null,
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
+        return Buffer.isBuffer(output) && output.length > 0 ? output : null;
+    } catch (err) {
+        if (!vmCompilerWarningShown) {
+            vmCompilerWarningShown = true;
+            console.warn('[vm] Luau bytecode compilation unavailable: ' + err.message);
+        }
+        return null;
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+// --- OBFUSCATION ENGINE (source transforms + optional Luau bytecode VM) ---
 class ObfuscatorEngine {
     constructor(sourceCode, options) {
         /* A byte-order mark is not part of the program: if it reaches the
@@ -1598,7 +1678,12 @@ class ObfuscatorEngine {
             tokensSqueezed: 0,
             payloadBytes: 0,
             sourceBytes: 0,
-            integrity: 0
+            integrity: 0,
+            virtualized: false,
+            bytecodeBytes: 0,
+            payloadChunks: 0,
+            integrityChecks: 0,
+            layers: 0
         };
     }
 
@@ -1644,6 +1729,7 @@ class ObfuscatorEngine {
         if (this.options.encodeNumbers) applied.push('encodeNumbers');
         if (this.options.encryptStrings) applied.push('encryptStrings');
         if (this.options.antiTamper) applied.push('antiTamper');
+        if (this.stats.virtualized) applied.push('virtualize');
         return applied;
     }
 
@@ -1694,7 +1780,129 @@ class ObfuscatorEngine {
         /* Kept for the offline verifier: it is exactly what the wrapper must
            decode back out of the artifact. */
         this.lastPrepared = prepared;
-        const srcBytes = Buffer.from(prepared, 'utf8');
+        this.stats.sourceBytes = Buffer.byteLength(prepared, 'utf8');
+        this.stats.virtualized = false;
+        if (this.options.virtualize && FIU_SOURCE) {
+            const artifact = this.buildBytecodeVM(prepared);
+            if (artifact) return artifact;
+        }
+        return this._wrapProtected(prepared);
+    }
+
+    /* Compiles the prepared program to real Luau bytecode and embeds the Fiu
+       interpreter. The user's source is never passed to loadstring; only the
+       VM bootstrap is. The bytecode is encrypted and Base85-encoded inside
+       the bootstrap, and Fiu executes it in the caller's environment. */
+    buildBytecodeVM(prepared) {
+        if (!FIU_SOURCE) return null;
+        const bytecode = compileLuauToBytecode(prepared);
+        if (!bytecode) return null;
+
+        /* Even though the bytecode is encrypted, keep the same dual weighted
+           checks the source wrapper uses. This catches a modified bytecode
+           string before Fiu tries to interpret it. */
+        let integrity = 0;
+        let reverseIntegrity = 0;
+        for (let i = 0; i < bytecode.length; i++) {
+            integrity = (integrity + bytecode[i] * (i + 1)) % INTEGRITY_MODULUS;
+            reverseIntegrity = (reverseIntegrity + bytecode[i] * (bytecode.length - i)) % INTEGRITY_MODULUS2;
+        }
+        this.stats.integrity = integrity;
+        this.stats.reverseIntegrity = reverseIntegrity;
+        const luaNumber = (value) => {
+            const left = crypto.randomInt(0, value + 1);
+            return '(' + left + '+' + (value - left) + ')';
+        };
+        const integrityGuard = this.options.antiTamper ? `local _a, _b = 0, 0
+for _m = 1, #bytecode do
+    local _c = string.byte(bytecode, _m)
+    _a = (_a + _c * _m) % ${INTEGRITY_MODULUS}
+    _b = (_b + _c * (#bytecode - _m + 1)) % ${INTEGRITY_MODULUS2}
+end
+if _a ~= ${luaNumber(integrity)} or _b ~= ${luaNumber(reverseIntegrity)} then error("VM integrity") end
+` : '';
+
+        const alphabet = shuffleAlphabet();
+        const seed = crypto.randomInt(1, 65536);
+        const encoded = base85EncodeBytes(rc4Crypt(bytecode, seedKeyBytes(seed)), alphabet);
+        const [vAlpha, vMap, vBxor, vDec] = this._freshNames(4);
+        const licenseComment = String(FIU_LICENSE || '')
+            .replace(/\r\n?/g, '\n')
+            .split('\n')
+            .map((line) => '-- ' + line)
+            .join('\n');
+
+        const artifact = `${licenseComment}
+local Fiu = (function()
+${FIU_SOURCE}
+end)()
+local ${vAlpha} = "${alphabet}"
+local ${vMap} = {}
+for _i = 1, #${vAlpha} do ${vMap}[string.byte(${vAlpha}, _i)] = _i - 1 end
+local ${vBxor} = (type(bit32) == "table" and bit32.bxor) or (type(bit) == "table" and bit.bxor) or function(_a, _b)
+    local _r, _p = 0, 1
+    while _a > 0 or _b > 0 do
+        local _x, _y = _a % 2, _b % 2
+        if _x ~= _y then _r = _r + _p end
+        _a, _b, _p = math.floor((_a - _x) / 2), math.floor((_b - _y) / 2), _p * 2
+    end
+    return _r
+end
+local function ${vDec}(_p, _s, _l)
+    local _seed = _s
+    local _kb = {}
+    for _i = 1, 8 do
+        _seed = (_seed * 25173 + 13849) % 65536
+        _kb[_i] = string.char(math.floor(_seed / 256) % 256)
+    end
+    local _key = table.concat(_kb)
+    local _st = {}
+    for _i = 0, 255 do _st[_i] = _i end
+    local _j = 0
+    for _i = 0, 255 do
+        _j = (_j + _st[_i] + string.byte(_key, _i % #_key + 1)) % 256
+        _st[_i], _st[_j] = _st[_j], _st[_i]
+    end
+    local _x, _y = 0, 0
+    local _n = 0
+    local _out = {}
+    for _q in string.gmatch(_p, ".....") do
+        local _v = 0
+        for _r = 1, 5 do _v = _v * 85 + ${vMap}[string.byte(_q, _r)] end
+        for _r = 1, 4 do
+            if _n < _l then
+                local _z = math.floor(_v / 16777216) % 256
+                if _r == 2 then _z = math.floor(_v / 65536) % 256
+                elseif _r == 3 then _z = math.floor(_v / 256) % 256
+                elseif _r == 4 then _z = _v % 256 end
+                _x = (_x + 1) % 256
+                _y = (_y + _st[_x]) % 256
+                _st[_x], _st[_y] = _st[_y], _st[_x]
+                _out[#_out + 1] = string.char(${vBxor}(_z, _st[(_st[_x] + _st[_y]) % 256]))
+                _n = _n + 1
+            end
+        end
+    end
+    return table.concat(_out)
+end
+local bytecode = ${vDec}("${encoded}", ${seed}, ${bytecode.length})
+${integrityGuard}local env = (getfenv and getfenv(1)) or (type(getgenv) == "function" and getgenv()) or _G
+local fn = select(1, Fiu.luau_load(bytecode, env))
+if type(fn) ~= "function" then error("VM init failed") end
+return fn(...)
+`;
+
+        this.stats.virtualized = true;
+        this.stats.bytecodeBytes = bytecode.length;
+        this.stats.payloadBytes = encoded.length;
+        this.stats.payloadChunks = 1;
+        this.stats.integrityChecks = this.options.antiTamper ? 2 : 0;
+        this.stats.layers = 2;
+        return artifact;
+    }
+
+    _wrapProtected(source) {
+        const srcBytes = Buffer.from(source, 'utf8');
 
         /* Two independent checks: a forward weighted sum and a reverse
            weighted sum. Both stay in integer range on a 32-bit runtime. */
@@ -2383,6 +2591,9 @@ app.post('/api/obfuscate', async (req, res) => {
        entries and old clients keep working through normalizeTarget(). */
     const target = normalizeTarget(body.target || fileType);
     const info = targetInfo(target);
+    /* Fiu executes Luau bytecode, so only the Luau targets can use the VM.
+       Desktop Lua keeps the source-level wrapper. */
+    if (target !== 'auto' && target !== 'studio') options.virtualize = false;
     if (!scriptPayload) {
         return res.status(400).json({ success: false, error: 'Script payload is missing.' });
     }

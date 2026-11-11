@@ -103,9 +103,17 @@ function decodeArtifact(artifact) {
 }
 
 function build(code, options) {
-    const engine = new ObfuscatorEngine(code, options);
+    const engine = new ObfuscatorEngine(code, { virtualize: false, ...(options || {}) });
     const artifact = engine.buildProtectedVM();
     return { engine, artifact, decoded: decodeArtifact(artifact) };
+}
+
+/* The VM artifact deliberately has no {index,length,seed,data} chunks, so it
+   is verified by running it rather than by the source-level decoder above. */
+function buildVM(code, options) {
+    const engine = new ObfuscatorEngine(code, { ...(options || {}), virtualize: true });
+    const artifact = engine.buildProtectedVM();
+    return { engine, artifact };
 }
 
 /* Lexical coverage. `fragments` must survive byte for byte when only the
@@ -655,6 +663,37 @@ if (!luau) {
             head + (ch === 'A' ? 'B' : 'A'));
         check('tampered payload is rejected',
             tampered !== artifact && !runLuau(luau, tampered).ok);
+    }
+
+    {
+        const source = [
+            'local function fib(n: number): number',
+            '    if n < 2 then return n end',
+            '    return fib(n - 1) + fib(n - 2)',
+            'end',
+            'local parts = {}',
+            'for i = 1, 8 do parts[i] = tostring(fib(i)) end',
+            'print("bytecode-vm", table.concat(parts, ","))'
+        ].join('\n');
+        const original = runLuau(luau, source);
+        const vm = buildVM(source, ALL);
+        check('bytecode VM is selected', vm.engine.stats.virtualized === true,
+            'compiler unavailable or compile failed');
+        if (vm.engine.stats.virtualized) {
+            check('bytecode VM emits bytecode size', vm.engine.stats.bytecodeBytes > 0);
+            check('bytecode VM does not embed prepared source', !vm.artifact.includes('fib(n - 1)'));
+            check('bytecode VM embeds the Fiu interpreter', vm.artifact.includes('luau_load'));
+            check('bytecode VM integrity guards are armed',
+                vm.engine.stats.integrityChecks === 2
+                && vm.artifact.includes('% 1000000007')
+                && vm.artifact.includes('% 1000000009'));
+            check('bytecode VM has no source loadstring', !vm.artifact.includes('loadstring(prepared'));
+            const obfuscated = runLuau(luau, vm.artifact);
+            check('bytecode VM runs', obfuscated.ok, obfuscated.stderr);
+            check('bytecode VM output identical',
+                original.stdout === obfuscated.stdout,
+                'original=' + JSON.stringify(original.stdout) + ' vm=' + JSON.stringify(obfuscated.stdout));
+        }
     }
 }
 
