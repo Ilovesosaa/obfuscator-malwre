@@ -3078,7 +3078,7 @@
                         <label class="option-toggle"><input type="checkbox" checked id="optCff"> Control Flow Flattening</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optVirtualize"> Bytecode VM</label>
                     </div>
-                    <p class="options-note">Applied on the server while compiling. Control Flow Flattening turns each eligible function body into a randomized state machine with shuffled cases and decoy states. Bytecode VM compiles Luau to bytecode and runs it inside an embedded virtual machine, so the delivered payload is not your source and cannot be recovered with a plain loadstring. Anti-Tamper also rejects instrumented runtimes used by common env loggers before any payload is decoded. Lua 5.1/5.4 targets use the source wrapper instead.</p>
+                    <p class="options-note">Applied on the server while compiling. Control Flow Flattening turns each eligible function body into a randomized state machine with shuffled cases and decoy states. Bytecode VM compiles Luau to bytecode and runs it inside an embedded virtual machine, so the delivered payload is not your source and cannot be recovered with a plain loadstring. Anti-Tamper rejects the combined debug/environment instrumentation used by common env loggers, and the VM isolates guest globals in a private environment. Lua 5.1/5.4 targets use the source wrapper instead.</p>
 
                     <div class="input-group">
                         <label>LUAU / LUA SOURCE CODE</label>

@@ -1794,8 +1794,8 @@ class ObfuscatorEngine {
        any payload is decrypted or passed to a loader. */
     _environmentGuard() {
         if (!this.options.antiTamper) return '';
-        const [vNative, vDebug, vGetfenv, vLoadstring, vLoad, vInfo, vSource, vOk] =
-            this._freshNames(8);
+        const [vNative, vDebug, vGetfenv, vLoadstring, vLoad, vInfo, vSource, vOk,
+            vDebugWrapped, vGetWrapped, vLoadWrapped, vLoad2Wrapped] = this._freshNames(12);
         const err = 'E' + this._randomId(10);
         return `local ${vGetfenv} = getfenv
 local ${vLoadstring} = loadstring
@@ -1813,10 +1813,11 @@ local function ${vNative}(_f)
     local ${vSource} = string.gsub(${vInfo}, "^=", "")
     return ${vSource} == "[C]"
 end
-if type(${vGetfenv}) == "function" and not ${vNative}(${vGetfenv}) then error("${err}") end
-if type(${vLoadstring}) == "function" and not ${vNative}(${vLoadstring}) then error("${err}") end
-if type(${vLoad}) == "function" and not ${vNative}(${vLoad}) then error("${err}") end
-if type(${vDebug}) == "function" and not ${vNative}(${vDebug}) then error("${err}") end
+local ${vDebugWrapped} = type(${vDebug}) == "function" and not ${vNative}(${vDebug})
+local ${vGetWrapped} = type(${vGetfenv}) == "function" and not ${vNative}(${vGetfenv})
+local ${vLoadWrapped} = type(${vLoadstring}) == "function" and not ${vNative}(${vLoadstring})
+local ${vLoad2Wrapped} = type(${vLoad}) == "function" and not ${vNative}(${vLoad})
+if ${vDebugWrapped} and (${vGetWrapped} or ${vLoadWrapped} or ${vLoad2Wrapped}) then error("${err}") end
 `;
     }
 
@@ -1884,7 +1885,7 @@ if _a ~= ${luaNumber(integrity)} or _b ~= ${luaNumber(reverseIntegrity)} then er
             .join('\n');
 
         const artifact = `${licenseComment}
-${this._environmentGuard()}local Fiu = (function()
+local Fiu = (function()
 ${FIU_SOURCE}
 end)()
 local ${vAlpha} = "${alphabet}"
@@ -1942,7 +1943,14 @@ local ${vVmEnv} = {}
 local ${vCopyOk} = pcall(function()
     for ${vKey}, ${vValue} in next, ${vRawEnv} do ${vVmEnv}[${vKey}] = ${vValue} end
 end)
-if not ${vCopyOk} or next(${vVmEnv}) == nil then ${vVmEnv} = ${vRawEnv} end
+if not ${vCopyOk} then ${vVmEnv} = ${vRawEnv} end
+if type(${vRawEnv}) == "table" and type(setmetatable) == "function" then
+    setmetatable(${vVmEnv}, {__index = function(_, _k)
+        local _v = ${vRawEnv}[_k]
+        if _v ~= nil then return _v end
+        if type(_G) == "table" then return _G[_k] end
+    end})
+end
 local fn = select(1, Fiu.luau_load(bytecode, ${vVmEnv}))
 if type(fn) ~= "function" then error("VM init failed") end
 return fn(...)
@@ -1953,7 +1961,9 @@ return fn(...)
         this.stats.payloadBytes = encoded.length;
         this.stats.payloadChunks = 1;
         this.stats.integrityChecks = this.options.antiTamper ? 2 : 0;
-        this.stats.environmentGuard = Boolean(this.options.antiTamper);
+        /* The VM does not use a loader and runs guest code in a private
+           environment, so it must not reject benign executor wrappers. */
+        this.stats.environmentGuard = false;
         this.stats.layers = 2;
         return artifact;
     }

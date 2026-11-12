@@ -807,12 +807,41 @@ if (!luau) {
             oneScopeOut.ok && oneScope.engine.stats.cffBlocks >= 1, oneScopeOut.stderr);
     }
 
-    /* 10. Env loggers replace getfenv/loadstring with Lua closures and then
-           trace what the artifact does. The anti-tamper guard must reject that
-           runtime before either the source wrapper or VM reaches a loader. */
+    /* 10. Runtime compatibility: a normal executor may wrap getfenv and
+           loadstring for its own sandbox. That must not look like an env
+           logger. The actual logger signature also replaces debug.info. */
     {
+        const normalHarness = (artifact) => `local realGetfenv = getfenv
+local realLoadstring = loadstring
+local loadCalls = 0
+getfenv = function(level)
+    return realGetfenv(level)
+end
+loadstring = function(code, ...)
+    loadCalls = loadCalls + 1
+    return realLoadstring(code, ...)
+end
+local ok, err = pcall(function(...)
+${artifact}
+end)
+print("ok=" .. tostring(ok) .. " load_calls=" .. tostring(loadCalls))
+`;
+        const normalSource = runLuau(luau, normalHarness(build('print("NORMAL_EXEC_CANARY")', ALL).artifact));
+        check('a sandboxed executor can still run the source wrapper',
+            normalSource.ok && normalSource.stdout.includes('ok=true') && normalSource.stdout.includes('NORMAL_EXEC_CANARY'),
+            normalSource.stderr);
+
+        const normalVm = buildVM('print("NORMAL_EXEC_CANARY")', ALL);
+        if (normalVm.engine.stats.virtualized) {
+            const normalVmOut = runLuau(luau, normalHarness(normalVm.artifact));
+            check('a sandboxed executor can still run the VM',
+                normalVmOut.ok && normalVmOut.stdout.includes('ok=true') && normalVmOut.stdout.includes('NORMAL_EXEC_CANARY'),
+                normalVmOut.stderr);
+        }
+
         const loggerHarness = (artifact) => `local realGetfenv = getfenv
 local realLoadstring = loadstring
+local realDebugInfo = debug and (debug.info or debug.getinfo)
 local leaked = false
 local loadCalls = 0
 getfenv = function(level)
@@ -823,13 +852,17 @@ loadstring = function(code, ...)
     if type(code) == "string" and code:find("ENV_LOG_CANARY", 1, true) then leaked = true end
     return realLoadstring(code, ...)
 end
+if type(realDebugInfo) == "function" then
+    local wrappedInfo = function(...) return realDebugInfo(...) end
+    debug = { info = wrappedInfo, getinfo = wrappedInfo }
+end
 local ok, err = pcall(function(...)
 ${artifact}
 end)
 print("ok=" .. tostring(ok) .. " load_calls=" .. tostring(loadCalls) .. " leaked=" .. tostring(leaked))
 `;
         const sourceLogged = runLuau(luau, loggerHarness(build('print("ENV_LOG_CANARY")', ALL).artifact));
-        check('env logger guard rejects a wrapped source runtime',
+        check('env logger guard rejects an instrumented source runtime',
             sourceLogged.ok && sourceLogged.stdout.includes('ok=false'), sourceLogged.stderr);
         check('env logger guard blocks source decoding',
             sourceLogged.stdout.includes('load_calls=0'), sourceLogged.stdout);
@@ -839,9 +872,10 @@ print("ok=" .. tostring(ok) .. " load_calls=" .. tostring(loadCalls) .. " leaked
         const loggedVm = buildVM('print("ENV_LOG_CANARY")', ALL);
         if (loggedVm.engine.stats.virtualized) {
             const vmLogged = runLuau(luau, loggerHarness(loggedVm.artifact));
-            check('env logger guard rejects an instrumented VM',
-                vmLogged.ok && vmLogged.stdout.includes('ok=false'), vmLogged.stderr);
-            check('env logger guard blocks VM payload loading',
+            check('the private VM environment still runs under a logger',
+                vmLogged.ok && vmLogged.stdout.includes('ok=true') && vmLogged.stdout.includes('ENV_LOG_CANARY'),
+                vmLogged.stderr);
+            check('VM does not call a source loader under a logger',
                 vmLogged.stdout.includes('load_calls=0'), vmLogged.stdout);
         }
     }
