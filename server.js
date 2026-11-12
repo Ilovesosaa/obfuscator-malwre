@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const { execFileSync } = require('child_process');
 const fetch = require('node-fetch');
+const { controlFlowFlatten } = require('./lib/control-flow');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -236,6 +237,7 @@ function normalizeObfuscationOptions(raw) {
         encodeNumbers: input.encodeNumbers !== false,
         encryptStrings: input.encryptStrings !== false,
         antiTamper: input.antiTamper !== false,
+        cff: input.cff !== false,
         virtualize: input.virtualize !== false
     };
 }
@@ -1684,6 +1686,9 @@ class ObfuscatorEngine {
             payloadChunks: 0,
             integrityChecks: 0,
             environmentGuard: false,
+            cffFunctions: 0,
+            cffBlocks: 0,
+            cffSkipped: 0,
             layers: 0
         };
     }
@@ -1703,6 +1708,16 @@ class ObfuscatorEngine {
             const result = renameIdentifiers(text);
             text = result.text;
             this.stats.identifiersRenamed = result.renamed.length;
+        }
+        /* Flatten before the literal passes so the random state constants are
+           encoded too. The AST names are fresh and cannot collide with the
+           source, so this does not interfere with the rename pass above. */
+        if (this.options.cff) {
+            const result = controlFlowFlatten(text);
+            text = result.text;
+            this.stats.cffFunctions = result.functions;
+            this.stats.cffBlocks = result.blocks;
+            this.stats.cffSkipped = result.skipped;
         }
         /* Numbers run before the string pass so the string helper itself keeps
            its readable constants; the original source no longer has any. */
@@ -1730,6 +1745,7 @@ class ObfuscatorEngine {
         if (this.options.encodeNumbers) applied.push('encodeNumbers');
         if (this.options.encryptStrings) applied.push('encryptStrings');
         if (this.options.antiTamper) applied.push('antiTamper');
+        if (this.options.cff) applied.push('cff');
         if (this.stats.virtualized) applied.push('virtualize');
         return applied;
     }

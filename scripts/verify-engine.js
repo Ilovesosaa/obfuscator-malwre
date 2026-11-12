@@ -23,8 +23,8 @@ const { execFileSync } = require('child_process');
 
 const { ObfuscatorEngine } = require('../server.js');
 
-const ALL = { minify: true, rename: true, encodeNumbers: true, encryptStrings: true, antiTamper: true };
-const PLAIN = { minify: true, rename: true, encodeNumbers: false, encryptStrings: false, antiTamper: true };
+const ALL = { minify: true, rename: true, encodeNumbers: true, encryptStrings: true, antiTamper: true, cff: true };
+const PLAIN = { minify: true, rename: true, encodeNumbers: false, encryptStrings: false, antiTamper: true, cff: false };
 
 /* Mirrors the emitted wrapper: recover the per-build Base85 alphabet, collect
    the independently keyed payload chunks, decode five characters into four
@@ -299,7 +299,7 @@ for (const size of [0, 1, 2, 3, 191, 192, 193, 5000]) {
 
 /* 4. Each option must work on its own. */
 const toggleSource = 'local function demo(a)\n    for i = 1, 2 do\n        a = a .. "x 🎃"\n    end\n    return a\nend\nreturn demo("y")';
-const OPTION_NAMES = ['minify', 'rename', 'encodeNumbers', 'encryptStrings', 'antiTamper'];
+const OPTION_NAMES = ['minify', 'rename', 'encodeNumbers', 'encryptStrings', 'antiTamper', 'cff'];
 for (const option of OPTION_NAMES) {
     const options = { minify: false, rename: false, encodeNumbers: false, encryptStrings: false, antiTamper: false };
     options[option] = true;
@@ -696,9 +696,120 @@ if (!luau) {
         }
     }
 
-    /* 9. Env loggers replace getfenv/loadstring with Lua closures and then
-          trace what the artifact does. The anti-tamper guard must reject that
-          runtime before either the source wrapper or VM reaches a loader. */
+    /* 9. Control-flow flattening: a function body becomes a randomized
+          dispatcher, locals are hoisted only when safe, and the VM carries the
+          same flattened CFG into bytecode. */
+    {
+        const source = [
+            'local function outer(base: number)',
+            '    local total = 0',
+            '    local function add(x: number)',
+            '        local bump = x + 1',
+            '        return bump + base',
+            '    end',
+            '    for i = 1, 3 do',
+            '        total = total + add(i)',
+            '    end',
+            '    return total',
+            'end',
+            'print(outer(10))'
+        ].join('\n');
+        const original = runLuau(luau, source);
+        const bare = { minify: false, rename: false, encodeNumbers: false, encryptStrings: false, antiTamper: false, cff: true };
+        const first = build(source, bare);
+        const second = build(source, bare);
+        check('CFF flattens top-level and nested functions', first.engine.stats.cffFunctions >= 3 && first.engine.stats.cffBlocks >= 4);
+        check('CFF emits a dispatcher', first.engine.lastPrepared.includes('while true do'));
+        check('CFF shuffles and randomizes per build', first.engine.lastPrepared !== second.engine.lastPrepared);
+        check('CFF output has multiple states', (first.engine.lastPrepared.match(/\belseif\b/g) || []).length >= 2);
+        check('CFF can be switched off',
+            !build(source, { ...bare, cff: false }).engine.lastPrepared.includes('while true do'));
+        const flattened = runLuau(luau, first.artifact);
+        check('CFF artifact runs', flattened.ok, flattened.stderr);
+        check('CFF output identical', original.stdout === flattened.stdout,
+            'original=' + JSON.stringify(original.stdout) + ' cff=' + JSON.stringify(flattened.stdout));
+
+        const vm = buildVM(source, ALL);
+        if (vm.engine.stats.virtualized) {
+            check('CFF is compiled into the VM path', vm.engine.stats.cffFunctions > 0);
+            const vmOut = runLuau(luau, vm.artifact);
+            check('CFF VM output identical', vmOut.ok && vmOut.stdout === original.stdout, vmOut.stderr);
+        }
+
+        /* One direct statement is still a basic block: a single loop must be
+           wrapped without moving its break/return targets out of the loop. */
+        const oneLoopSource = [
+            'local function emit(n: number)',
+            '    for i = 1, n do',
+            '        if i == 2 then break end',
+            '        print("one-loop", i)',
+            '    end',
+            'end',
+            'emit(5)'
+        ].join('\n');
+        const oneLoopOriginal = runLuau(luau, oneLoopSource);
+        const oneLoop = build(oneLoopSource, bare);
+        check('CFF flattens a one-loop function',
+            oneLoop.engine.stats.cffFunctions >= 2
+            && oneLoop.engine.lastPrepared.includes('while true do'));
+        const oneLoopOut = runLuau(luau, oneLoop.artifact);
+        check('CFF preserves break inside a one-loop function',
+            oneLoopOut.ok && oneLoopOut.stdout === oneLoopOriginal.stdout,
+            'original=' + JSON.stringify(oneLoopOriginal.stdout) + ' cff=' + JSON.stringify(oneLoopOut.stdout) + ' ' + oneLoopOut.stderr);
+
+        const earlyReturnSource = [
+            'local function firstSmall(n: number)',
+            '    for i = 1, n do',
+            '        if i == 3 then return i end',
+            '    end',
+            'end',
+            'print(firstSmall(5))'
+        ].join('\n');
+        const earlyReturnOriginal = runLuau(luau, earlyReturnSource);
+        const earlyReturn = build(earlyReturnSource, bare);
+        const earlyReturnOut = runLuau(luau, earlyReturn.artifact);
+        check('CFF preserves return inside a one-loop function',
+            earlyReturnOut.ok && earlyReturnOut.stdout === earlyReturnOriginal.stdout,
+            'original=' + JSON.stringify(earlyReturnOriginal.stdout) + ' cff=' + JSON.stringify(earlyReturnOut.stdout) + ' ' + earlyReturnOut.stderr);
+
+        const oneReturnSource = [
+            'local function oneValue()',
+            '    return "one"',
+            'end',
+            'print(oneValue())'
+        ].join('\n');
+        const oneReturnOriginal = runLuau(luau, oneReturnSource);
+        const oneReturn = build(oneReturnSource, bare);
+        const oneReturnOut = runLuau(luau, oneReturn.artifact);
+        check('CFF preserves a direct return',
+            oneReturnOut.ok && oneReturnOut.stdout === oneReturnOriginal.stdout,
+            'original=' + JSON.stringify(oneReturnOriginal.stdout) + ' cff=' + JSON.stringify(oneReturnOut.stdout) + ' ' + oneReturnOut.stderr);
+
+        const oneTopSource = 'for i = 1, 3 do print("top-loop", i) end';
+        const oneTopOriginal = runLuau(luau, oneTopSource);
+        const oneTop = build(oneTopSource, bare);
+        check('CFF flattens a single top-level loop',
+            oneTop.engine.stats.cffBlocks >= 1 && oneTop.engine.lastPrepared.includes('while true do'));
+        const oneTopOut = runLuau(luau, oneTop.artifact);
+        check('CFF single top-level loop output identical',
+            oneTopOut.ok && oneTopOut.stdout === oneTopOriginal.stdout,
+            'original=' + JSON.stringify(oneTopOriginal.stdout) + ' cff=' + JSON.stringify(oneTopOut.stdout) + ' ' + oneTopOut.stderr);
+
+        const oneScopeSource = [
+            'local function keep(n: number)',
+            '    local value = n',
+            'end',
+            'keep(3)'
+        ].join('\n');
+        const oneScope = build(oneScopeSource, bare);
+        const oneScopeOut = runLuau(luau, oneScope.artifact);
+        check('CFF preserves a one-statement local scope',
+            oneScopeOut.ok && oneScope.engine.stats.cffBlocks >= 1, oneScopeOut.stderr);
+    }
+
+    /* 10. Env loggers replace getfenv/loadstring with Lua closures and then
+           trace what the artifact does. The anti-tamper guard must reject that
+           runtime before either the source wrapper or VM reaches a loader. */
     {
         const loggerHarness = (artifact) => `local realGetfenv = getfenv
 local realLoadstring = loadstring

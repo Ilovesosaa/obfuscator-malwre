@@ -6,9 +6,11 @@
       "use": "@vercel/node",
       "config": {
         "includeFiles": [
+          "bin/luau-ast",
           "bin/luau-compile",
-          "vendor/Fiu.luau",
+          "lib/control-flow.js",
           "vendor/FIU-LICENSE.txt",
+          "vendor/Fiu.luau",
           "vendor/LUAU-LICENSE.txt"
         ]
       }
