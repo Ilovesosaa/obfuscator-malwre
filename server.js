@@ -986,7 +986,8 @@ function localDeclarations(src, mask, bounds) {
                 index: decl.index,
                 depth,
                 blockEnd,
-                initializer: src.slice(i, stmtEnd)
+                initializer: src.slice(i, stmtEnd),
+                activeStart: stmtEnd
             });
         }
     }
@@ -1248,6 +1249,138 @@ function renameIdentifiers(src) {
     out += src.slice(last);
 
     return { text: out, renamed: [...newNames.keys()], skipped };
+}
+
+/* Renames every local binding in a large, self-contained program such as Fiu.
+   Unlike `renameIdentifiers`, this resolves each occurrence to its actual
+   declaration, so parameters, loop variables and shadowed locals can all get
+   random names. Initializer references stay bound to the outer scope, globals
+   are untouched, and member names/table keys are skipped by position. */
+function renameAllLocals(src) {
+    const segs = scanLua(src);
+    const mask = buildMask(segs);
+
+    const occurrences = new Map();
+    const idRe = /[A-Za-z_][A-Za-z0-9_]*/g;
+    let m;
+    while ((m = idRe.exec(src)) !== null) {
+        if (mask[m.index] !== 1) continue;
+        if (!occurrences.has(m[0])) occurrences.set(m[0], []);
+        occurrences.get(m[0]).push(m.index);
+    }
+
+    const { depthAt, closers } = computeBlockBounds(src, mask);
+    const closerIndex = buildCloserIndex(closers);
+    const declarations = localDeclarations(src, mask, { depthAt, closers });
+    const scoped = [
+        ...functionParameterDeclarations(src, mask, depthAt, closerIndex),
+        ...forLoopDeclarations(src, mask, depthAt, closerIndex)
+    ];
+
+    const bindings = [];
+    const bindingsByName = new Map();
+    const declarationNameBindings = new Map();
+    const addBinding = (name, index, activeStart, blockEnd) => {
+        const binding = {
+            name,
+            index,
+            activeStart,
+            blockEnd,
+            fresh: null
+        };
+        bindings.push(binding);
+        if (!bindingsByName.has(name)) bindingsByName.set(name, []);
+        bindingsByName.get(name).push(binding);
+        declarationNameBindings.set(index, binding);
+    };
+
+    for (const [name, decls] of declarations) {
+        for (const decl of decls) {
+            /* `local` declarations carry the position after their initializer.
+               Parameters and loop variables are added below from `scoped`. */
+            addBinding(name, decl.index, decl.activeStart === undefined ? decl.index : decl.activeStart, decl.blockEnd);
+        }
+    }
+    for (const decl of scoped) {
+        addBinding(decl.name, decl.index, decl.scopeStart, decl.blockEnd);
+    }
+
+    /* A field/table key/label occurrence is never a local reference. */
+    const codeView = buildCodeView(segs);
+    const protectedPositions = new Set();
+    for (const field of codeView.matchAll(/[.:](?!\.)\s*([A-Za-z_][A-Za-z0-9_]*)/g)) {
+        protectedPositions.add(field.index + field[0].lastIndexOf(field[1]));
+    }
+    /* Only protect keys that are actually inside a table constructor. A plain
+       `local high, low = ...` is not a table key, even though it also contains
+       a comma followed by `name =`. */
+    let braceDepth = 0;
+    for (let i = 0; i < codeView.length; i++) {
+        const c = codeView[i];
+        if (c === '{') {
+            braceDepth++;
+            let j = i + 1;
+            while (j < codeView.length && /\s/.test(codeView[j])) j++;
+            const key = /^([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(codeView.slice(j));
+            if (key) protectedPositions.add(j);
+        } else if (c === '}') {
+            braceDepth = Math.max(0, braceDepth - 1);
+        } else if (braceDepth > 0 && (c === ',' || c === ';')) {
+            let j = i + 1;
+            while (j < codeView.length && /\s/.test(codeView[j])) j++;
+            const key = /^([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(codeView.slice(j));
+            if (key) protectedPositions.add(j);
+        }
+    }
+    for (const label of codeView.matchAll(/\bgoto\s+([A-Za-z_][A-Za-z0-9_]*)/g)) {
+        protectedPositions.add(label.index + label[0].lastIndexOf(label[1]));
+    }
+    for (const label of codeView.matchAll(/::\s*([A-Za-z_][A-Za-z0-9_]*)\s*::/g)) {
+        protectedPositions.add(label.index + label[0].lastIndexOf(label[1]));
+    }
+
+    const used = new Set(occurrences.keys());
+    const randomName = () => {
+        let name;
+        do {
+            name = '_' + Math.random().toString(36).slice(2, 9);
+        } while (used.has(name) || LUA_KEYWORDS.has(name) || /^\d/.test(name));
+        used.add(name);
+        return name;
+    };
+
+    const resolve = (name, position) => {
+        const direct = declarationNameBindings.get(position);
+        if (direct && direct.name === name) return direct;
+        let best = null;
+        for (const binding of bindingsByName.get(name) || []) {
+            if (position < binding.activeStart || position >= binding.blockEnd) continue;
+            if (!best || binding.activeStart > best.activeStart) best = binding;
+        }
+        return best;
+    };
+
+    const edits = [];
+    for (const [name, positions] of occurrences) {
+        for (const position of positions) {
+            if (protectedPositions.has(position)) continue;
+            const binding = resolve(name, position);
+            if (!binding) continue;                                  // global or member
+            if (!binding.fresh) binding.fresh = randomName();
+            edits.push([position, name.length, binding.fresh]);
+        }
+    }
+
+    if (!edits.length) return { text: src, renamed: [], skipped: [] };
+    edits.sort((a, b) => a[0] - b[0]);
+    let out = '';
+    let last = 0;
+    for (const [index, len, fresh] of edits) {
+        out += src.slice(last, index) + fresh;
+        last = index + len;
+    }
+    out += src.slice(last);
+    return { text: out, renamed: bindings.filter((b) => b.fresh).map((b) => b.name), skipped: [] };
 }
 
 /* --- string literals ---------------------------------------------------- */
@@ -1689,6 +1822,14 @@ class ObfuscatorEngine {
             cffFunctions: 0,
             cffBlocks: 0,
             cffSkipped: 0,
+            vmBytes: 0,
+            vmRenamed: 0,
+            vmNumbersEncoded: 0,
+            vmStringsEncoded: 0,
+            vmCff: false,
+            vmCffBlocks: 0,
+            vmHardenMs: 0,
+            vmBuildMs: 0,
             layers: 0
         };
     }
@@ -1840,12 +1981,70 @@ if ${vDebugWrapped} and (${vGetWrapped} or ${vLoadWrapped} or ${vLoad2Wrapped}) 
         return this._wrapProtected(prepared);
     }
 
+    /* Hardens the embedded interpreter itself. Renames its locals, rewrites
+       its numbers, encrypts its strings and optionally flattens its functions.
+       Fiu is a substantial program; every candidate is compiled before it is
+       used, and an unsafe transformation falls back to the previous stage (or
+       the untouched interpreter) instead of shipping a VM that cannot load. */
+    _hardenInterpreter() {
+        if (!FIU_SOURCE) return FIU_SOURCE;
+        const started = process.hrtime.bigint();
+        const finishTiming = () => {
+            this.stats.vmHardenMs = Math.round(Number(process.hrtime.bigint() - started) / 10000) / 100;
+        };
+        const applyLiterals = (input) => {
+            const numbers = encodeNumbers(input);
+            const strings = encodeStrings(numbers.text);
+            return {
+                text: strings.text,
+                numbersEncoded: numbers.encoded,
+                stringsEncoded: strings.encoded
+            };
+        };
+
+        const minified = minifySource(FIU_SOURCE);
+        const renamed = renameAllLocals(minified.text);
+        const base = applyLiterals(renamed.text);
+        /* A rare Fiu/Luau version may exceed a compiler limit after rewriting;
+           keep the original interpreter available as a final fallback. */
+        if (!compileLuauToBytecode(base.text)) {
+            this.stats.vmBytes = Buffer.byteLength(FIU_SOURCE, 'utf8');
+            finishTiming();
+            return FIU_SOURCE;
+        }
+
+        let chosen = base;
+        let cffUsed = false;
+        let cffBlocks = 0;
+        if (this.options.cff) {
+            const flattened = controlFlowFlatten(renamed.text);
+            if (flattened.text !== renamed.text) {
+                const candidate = applyLiterals(flattened.text);
+                if (compileLuauToBytecode(candidate.text)) {
+                    chosen = candidate;
+                    cffUsed = true;
+                    cffBlocks = flattened.blocks;
+                }
+            }
+        }
+
+        this.stats.vmBytes = Buffer.byteLength(chosen.text, 'utf8');
+        this.stats.vmRenamed = renamed.renamed.length;
+        this.stats.vmNumbersEncoded = chosen.numbersEncoded;
+        this.stats.vmStringsEncoded = chosen.stringsEncoded;
+        this.stats.vmCff = cffUsed;
+        this.stats.vmCffBlocks = cffBlocks;
+        finishTiming();
+        return chosen.text;
+    }
+
     /* Compiles the prepared program to real Luau bytecode and embeds the Fiu
        interpreter. The user's source is never passed to loadstring; only the
        VM bootstrap is. The bytecode is encrypted and Base85-encoded inside
        the bootstrap, and Fiu executes it in the caller's environment. */
     buildBytecodeVM(prepared) {
         if (!FIU_SOURCE) return null;
+        const buildStarted = process.hrtime.bigint();
         const bytecode = compileLuauToBytecode(prepared);
         if (!bytecode) return null;
 
@@ -1884,9 +2083,39 @@ if _a ~= ${luaNumber(integrity)} or _b ~= ${luaNumber(reverseIntegrity)} then er
             .map((line) => '-- ' + line)
             .join('\n');
 
+        let hardenedFiu = this._hardenInterpreter();
+        /* The stock Fiu API name is a signature. Rename the single exported
+           entry point the bootstrap uses, and give the interpreter local a
+           fresh name too. The rest of the table is never reached by the
+           generated artifact. */
+        const freshFiuNames = this._freshNames(3);
+        const vFiu = freshFiuNames[0];
+        let fiuApiName = 'luau_load';
+        /* The interpreter returns a public API table with several named
+           exports. The artifact only needs the load entry point, so collapse
+           the table to one randomized key and rename that local function. */
+        const exportTable = /\breturn\{([^{}]*)\}\s*$/.exec(hardenedFiu);
+        const loadExport = exportTable
+            ? /(?:^|[,;])\s*luau_load\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?=[,;]|$)/.exec(exportTable[1])
+            : null;
+        if (exportTable && loadExport) {
+            fiuApiName = freshFiuNames[1];
+            const apiLocal = freshFiuNames[2];
+            hardenedFiu = hardenedFiu.slice(0, exportTable.index)
+                + `return{${fiuApiName}=${apiLocal}}`;
+            hardenedFiu = hardenedFiu.replace(new RegExp(`\\b${loadExport[1]}\\b`, 'g'), apiLocal);
+        } else {
+            /* Conservative fallback for a differently formatted Fiu build. */
+            const apiKey = /([\{,]\s*)luau_load\s*=/;
+            if (apiKey.test(hardenedFiu)) {
+                fiuApiName = freshFiuNames[1];
+                hardenedFiu = hardenedFiu.replace(apiKey, (_, prefix) => `${prefix}${fiuApiName} =`);
+                hardenedFiu = hardenedFiu.replace(/\bluau_load\b/g, freshFiuNames[2]);
+            }
+        }
         const artifact = `${licenseComment}
-local Fiu = (function()
-${FIU_SOURCE}
+local ${vFiu} = (function()
+${hardenedFiu}
 end)()
 local ${vAlpha} = "${alphabet}"
 local ${vMap} = {}
@@ -1951,7 +2180,7 @@ if type(${vRawEnv}) == "table" and type(setmetatable) == "function" then
         if type(_G) == "table" then return _G[_k] end
     end})
 end
-local fn = select(1, Fiu.luau_load(bytecode, ${vVmEnv}))
+local fn = select(1, ${vFiu}.${fiuApiName}(bytecode, ${vVmEnv}))
 if type(fn) ~= "function" then error("VM init failed") end
 return fn(...)
 `;
@@ -1965,6 +2194,7 @@ return fn(...)
            environment, so it must not reject benign executor wrappers. */
         this.stats.environmentGuard = false;
         this.stats.layers = 2;
+        this.stats.vmBuildMs = Math.round(Number(process.hrtime.bigint() - buildStarted) / 10000) / 100;
         return artifact;
     }
 
@@ -3015,6 +3245,7 @@ module.exports.__engine = {
     encodeNumbers,
     encodeStrings,
     renameIdentifiers,
+    renameAllLocals,
     computeBlockBounds,
     buildLoader,
     classifyRawClient,

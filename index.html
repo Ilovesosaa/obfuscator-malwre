@@ -3640,7 +3640,16 @@
             }
             if (on.includes('antiTamper')) parts.push('integrity + environment guard armed');
             if (on.includes('cff')) parts.push(count('cffBlocks') + ' CFF blocks in ' + count('cffFunctions') + ' functions');
-            if (on.includes('virtualize')) parts.push('Luau bytecode VM (' + (count('bytecodeBytes') / 1024).toFixed(1) + ' KB bytecode)');
+            if (on.includes('virtualize')) {
+                let vm = 'Luau bytecode VM (' + (count('bytecodeBytes') / 1024).toFixed(1) + ' KB bytecode)';
+                if (count('vmRenamed') || count('vmNumbersEncoded')) {
+                    vm += ' · VM hardened (' + count('vmRenamed') + ' names, ' + count('vmNumbersEncoded') + ' numbers';
+                    vm += count('vmCffBlocks') ? ', ' + count('vmCffBlocks') + ' CFF blocks' : '';
+                    if (count('vmBuildMs')) vm += ', ' + count('vmBuildMs') + 'ms build';
+                    vm += ')';
+                }
+                parts.push(vm);
+            }
             if (count('payloadBytes')) parts.push((count('payloadBytes') / 1024).toFixed(1) + ' KB payload');
             return parts.join(' / ');
         }

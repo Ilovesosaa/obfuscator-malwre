@@ -665,6 +665,27 @@ if (!luau) {
             tampered !== artifact && !runLuau(luau, tampered).ok);
     }
 
+    /* 7b. The scope-aware Fiu renamer must preserve shadowing, initializer
+           binding and upvalues while still touching every local. */
+    {
+        const source = [
+            'local outer = 5',
+            'local function add(v: number): number',
+            '    local function inner() return v + outer end',
+            '    local outer = 100',
+            '    return inner()',
+            'end',
+            'print("scope", add(3))'
+        ].join('\n');
+        const api = require('../server.js').__engine;
+        const renamed = api.renameAllLocals(source);
+        const before = runLuau(luau, source);
+        const after = runLuau(luau, renamed.text);
+        check('scope-aware renamer preserves shadowing and upvalues',
+            before.ok && after.ok && before.stdout === after.stdout,
+            'before=' + JSON.stringify(before.stdout) + ' after=' + JSON.stringify(after.stdout));
+    }
+
     {
         const source = [
             'local function fib(n: number): number',
@@ -682,7 +703,24 @@ if (!luau) {
         if (vm.engine.stats.virtualized) {
             check('bytecode VM emits bytecode size', vm.engine.stats.bytecodeBytes > 0);
             check('bytecode VM does not embed prepared source', !vm.artifact.includes('fib(n - 1)'));
-            check('bytecode VM embeds the Fiu interpreter', vm.artifact.includes('luau_load'));
+            check('bytecode VM renames every Fiu local',
+                vm.engine.stats.vmRenamed >= 500
+                && vm.engine.stats.vmNumbersEncoded > 0
+                && vm.engine.stats.vmStringsEncoded > 0
+                && vm.engine.stats.vmCff === true
+                && vm.engine.stats.vmCffBlocks > 0);
+            check('bytecode VM reports hardening overhead',
+                vm.engine.stats.vmHardenMs > 0
+                && vm.engine.stats.vmBuildMs >= vm.engine.stats.vmHardenMs);
+            check('bytecode VM hides the Fiu API and other exports',
+                !vm.artifact.includes('local Fiu =')
+                && !vm.artifact.includes('luau_load')
+                && !vm.artifact.includes('luau_newsettings')
+                && !vm.artifact.includes('luau_validatesettings')
+                && !vm.artifact.includes('luau_deserialize')
+                && !vm.artifact.includes('luau_getcoverage')
+                && !vm.artifact.includes('Fiu VM Error')
+                && !vm.artifact.includes('local opList'));
             check('bytecode VM integrity guards are armed',
                 vm.engine.stats.integrityChecks === 2
                 && vm.artifact.includes('% 1000000007')
