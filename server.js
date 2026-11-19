@@ -11,8 +11,11 @@ const { controlFlowFlatten } = require('./lib/control-flow');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Owner Discord ID
-const OWNER_DISCORD_ID = "1257596807857569793";
+// Owner Discord IDs
+const OWNER_DISCORD_IDS = new Set([
+    "1257596807857569793",
+    "1561816720845443317"
+]);
 
 // Storage backends for the vault and the API-key list. The document names are
 // the same in every backend so a deployment can be moved between them.
@@ -2558,7 +2561,7 @@ function requireOwner(req, res, next) {
     /* Only a verified Discord session may administer keys. Header identity and
        API keys are deliberately not accepted here: both are client-controlled
        and previously let any caller reach the owner endpoints. */
-    if (req.session && req.session.user && req.session.user.id === OWNER_DISCORD_ID) {
+    if (req.session && req.session.user && OWNER_DISCORD_IDS.has(req.session.user.id)) {
         return next();
     }
     return res.status(403).json({ success: false, error: 'Forbidden: Owner access required.' });
@@ -2815,7 +2818,7 @@ app.get('/api/me', (req, res) => {
         return res.json({
             authenticated: true,
             user: req.session.user,
-            isOwner: req.session.user.id === OWNER_DISCORD_ID
+            isOwner: OWNER_DISCORD_IDS.has(req.session.user.id)
         });
     }
     return res.json({ authenticated: false, isOwner: false });

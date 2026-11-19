@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node scripts/verify-engine.js",
+    "test": "node scripts/verify-engine.js && node scripts/verify-owner.js",
     "dev": "node --watch server.js"
   },
   "keywords": [
