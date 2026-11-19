@@ -475,13 +475,18 @@ const runtimeSamples = [
             /loadstring or load|_g\.loadstring/.test(loader));
     }
 
-    /* The executor loader is the one users paste, so it has to stay a single
-       line that reads as a loadstring -- not a probe chain. */
-    check('executor loader is one line', loaders.auto.split('\n').length === 1, loaders.auto);
-    check('executor loader is a loadstring',
-        loaders.auto.startsWith('(loadstring or load)(game:HttpGet(') && loaders.auto.endsWith('))()'));
-    check('executor loader stays short (< 120 chars)', loaders.auto.length < 120, loaders.auto);
-    check('executor loader fetches with game:HttpGet', loaders.auto.includes('game:HttpGet'));
+    /* The executor loader is the one users paste. It must keep the fast
+       game:HttpGet path but also survive the APIs phone executors expose. */
+    check('executor loader uses game:HttpGet', loaders.auto.includes('game:HttpGet'));
+    check('executor loader falls back to async HTTP', loaders.auto.includes('game:HttpGetAsync'));
+    check('executor loader falls back to request', loaders.auto.includes('request'));
+    check('executor loader falls back to http_request', loaders.auto.includes('http_request'));
+    check('executor loader falls back to syn.request', loaders.auto.includes('syn.request'));
+    check('executor loader resolves loadstring or load', loaders.auto.includes('loadstring or load'));
+    check('mobile target is registered', Boolean(loaders.mobile) && api.normalizeTarget('mobile') === 'mobile');
+    check('delta maps to the mobile target', api.normalizeTarget('delta') === 'mobile');
+    check('mobile loader is mobile-safe', loaders.mobile.includes('game:HttpGet') && loaders.mobile.includes('request'));
+    check('mobile loader does not probe debug', !loaders.mobile.includes('debug'));
 
     check('studio target uses HttpService:GetAsync', loaders.studio.includes('HttpService'));
     check('studio loader is one line', loaders.studio.split('\n').length === 1, loaders.studio);
@@ -569,6 +574,11 @@ const runtimeSamples = [
     check('link decoys curl for executor links', classify('curl/8.4.0', {}, 'auto') === 'tool');
     check('link allows desktop curl', classify('curl/8.4.0', {}, 'lua51') === 'runtime');
     check('link allows renamed executor agents', classify('SomeExecutor/1.0', {}, 'auto') === 'runtime');
+    check('link allows Delta mobile clients', classify('Delta/2.0 (Android)', {}, 'mobile') === 'runtime');
+    check('link allows Android clients on the mobile target',
+        classify('Mozilla/5.0 (Linux; Android 13; Pixel 7)', {}, 'mobile') === 'runtime');
+    check('link still blocks desktop browsers on mobile links',
+        classify('Mozilla/5.0 (Windows NT 10.0) Chrome/120.0', { accept: 'text/html' }, 'mobile') === 'browser');
     check('link decoy is harmless Lua',
         api.RAW_DECOY.includes('return _app') && !api.RAW_DECOY.includes('script.code'));
 }
@@ -970,6 +980,86 @@ print("ok=" .. tostring(ok) .. " load_calls=" .. tostring(loadCalls) .. " leaked
             check('VM does not call a source loader under a logger',
                 vmLogged.stdout.includes('load_calls=0'), vmLogged.stdout);
         }
+
+        /* Mobile executors wrap these primitives too, but they are not
+           loggers. mobileSafe must not reject them. */
+        const mobileLogged = build('print("MOBILE_SAFE_CANARY")', {
+            ...ALL, deep: true, mobileSafe: true, target: 'mobile'
+        });
+        const mobileLoggedOut = runLuau(luau, loggerHarness(mobileLogged.artifact));
+        check('mobile-safe builds run under wrapped executor primitives',
+            mobileLoggedOut.ok && mobileLoggedOut.stdout.includes('ok=true') && mobileLoggedOut.stdout.includes('MOBILE_SAFE_CANARY'),
+            mobileLoggedOut.stderr);
+        check('mobile-safe source is allowed to reach loadstring',
+            mobileLoggedOut.stdout.includes('load_calls=1'), mobileLoggedOut.stdout);
+    }
+
+    /* 11. Mobile loader: the generated snippet must work with Delta-style
+           game:HttpGet and with request fallbacks, without debug/getfenv. */
+    {
+        const api = require('../server.js').__engine;
+        const payload = 'print("MOBILE_LOADER_OK")';
+        const loader = api.buildLoader('mobile', 'https://nix6.example/raw/test');
+        const primary = `local game = { HttpGet = function(self, url) return ${JSON.stringify(payload)} end }
+${loader}`;
+        const primaryOut = runLuau(luau, primary);
+        check('mobile loader runs with game:HttpGet', primaryOut.ok && primaryOut.stdout.includes('MOBILE_LOADER_OK'), primaryOut.stderr);
+
+        const fallback = `local game = {
+    HttpGet = function() error("HttpGet blocked") end,
+    HttpGetAsync = function() error("HttpGetAsync blocked") end
+}
+local function request() return { Body = ${JSON.stringify(payload)} } end
+${loader}`;
+        const fallbackOut = runLuau(luau, fallback);
+        check('mobile loader runs with request fallback', fallbackOut.ok && fallbackOut.stdout.includes('MOBILE_LOADER_OK'), fallbackOut.stderr);
+
+        const secondary = `local game = {
+    HttpGet = function() error("HttpGet blocked") end,
+    HttpGetAsync = function() error("HttpGetAsync blocked") end
+}
+local function request() error("request blocked") end
+local syn = { request = function() return { Body = ${JSON.stringify(payload)} } end }
+${loader}`;
+        const secondaryOut = runLuau(luau, secondary);
+        check('mobile loader tries the next provider when request fails',
+            secondaryOut.ok && secondaryOut.stdout.includes('MOBILE_LOADER_OK'), secondaryOut.stderr);
+        check('mobile loader does not probe debug/getfenv availability',
+            !loader.includes('debug') && !loader.includes('getfenv') && !loader.includes('setfenv'));
+    }
+
+    /* 12. Deep source mode: lua-obfuscator's AST passes run before the Nix6
+           encryption wrapper, and the source path (not a bytecode VM) is used
+           for executor/mobile builds. */
+    {
+        const source = [
+            'local function add(a: number, b: number): number',
+            '    return a + b',
+            'end',
+            'local label = "DEEP_SOURCE_CANARY"',
+            'print(label, add(20, 22))'
+        ].join('\n');
+        const original = runLuau(luau, source);
+        const deep = build(source, { ...ALL, deep: true, mobileSafe: true, target: 'auto' });
+        check('deep source obfuscation is selected',
+            deep.engine.stats.sourceObfuscated === true && deep.engine.stats.sourcePasses >= 4);
+        check('deep source mode stays on the source path',
+            deep.engine.stats.virtualized === false && deep.engine.stats.environmentGuard === false);
+        const deepOut = runLuau(luau, deep.artifact);
+        check('deep source artifact runs', deepOut.ok, deepOut.stderr);
+        check('deep source output is identical',
+            original.stdout === deepOut.stdout,
+            'original=' + JSON.stringify(original.stdout) + ' deep=' + JSON.stringify(deepOut.stdout));
+
+        const fallbackSource = 'local value = 1_000\nprint(value)';
+        const fallbackOriginal = runLuau(luau, fallbackSource);
+        const fallback = build(fallbackSource, { ...ALL, deep: true, mobileSafe: true, target: 'auto' });
+        check('deep source falls back on unsupported syntax instead of breaking',
+            fallback.engine.stats.sourceFallback === true && fallback.engine.stats.sourceObfuscated === false);
+        const fallbackOut = runLuau(luau, fallback.artifact);
+        check('deep-source fallback artifact still runs',
+            fallbackOut.ok && fallbackOut.stdout === fallbackOriginal.stdout,
+            fallbackOut.stderr);
     }
 }
 

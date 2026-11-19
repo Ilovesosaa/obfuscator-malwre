@@ -7,6 +7,7 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 const fetch = require('node-fetch');
 const { controlFlowFlatten } = require('./lib/control-flow');
+const { obfuscateWithUpstream } = require('./lib/source-obfuscator');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -241,7 +242,9 @@ function normalizeObfuscationOptions(raw) {
         encryptStrings: input.encryptStrings !== false,
         antiTamper: input.antiTamper !== false,
         cff: input.cff !== false,
-        virtualize: input.virtualize !== false
+        virtualize: input.virtualize === true,
+        deep: input.deep === true,
+        mobileSafe: input.mobileSafe === true
     };
 }
 
@@ -256,7 +259,14 @@ const RUN_TARGETS = {
         label: 'Any executor',
         ext: 'luau',
         legacyFileType: 'luau',
-        note: 'One line: game:HttpGet fetches the payload, loadstring or load compiles it.'
+        note: 'Mobile-safe: tries game:HttpGet, HttpGetAsync, request/http_request/syn.request, then loadstring or load.'
+    },
+    mobile: {
+        id: 'mobile',
+        label: 'Mobile / Delta',
+        ext: 'luau',
+        legacyFileType: 'luau',
+        note: 'Delta-safe loader with multiple HTTP fallbacks and a loadstring/load fallback.'
     },
     studio: {
         id: 'studio',
@@ -283,7 +293,7 @@ const RUN_TARGETS = {
 
 /* Vault entries written before targets existed stored luau or lua, and
    executor was a separate target before the one-liner became the default. */
-const LEGACY_TARGETS = { luau: 'auto', lua: 'lua54', executor: 'auto' };
+const LEGACY_TARGETS = { luau: 'auto', lua: 'lua54', executor: 'auto', delta: 'mobile' };
 
 function normalizeTarget(raw) {
     const key = String(raw == null ? '' : raw).trim().toLowerCase();
@@ -311,8 +321,49 @@ if not ok or not src or src == "" then local p = io.popen('curl -fsSL "${u}"'); 
 `;
 }
 
-/* The snippet a user pastes into their runtime. Nothing here is longer than it
-   has to be: the executor path is the one-line loadstring everyone expects. */
+/* Mobile executors often expose only one of game:HttpGet, HttpGetAsync or
+   request. Delta in particular is used on phones where game:HttpGet can throw
+   before the payload is returned. This loader tries the common paths in order
+   and only then reports a clear failure. It deliberately does not touch
+   debug, getfenv or setfenv, which several mobile sandboxes wrap. */
+function buildMobileLoader(rawUrl) {
+    const url = luaSafeUrl(rawUrl);
+    return `local _u = "${url}"
+local _s
+local _ok = pcall(function() _s = game:HttpGet(_u) end)
+if not _ok or type(_s) ~= "string" or #_s == 0 then
+    pcall(function() _s = game:HttpGetAsync(_u) end)
+end
+if type(_s) ~= "string" or #_s == 0 then
+    local _providers = {}
+    local function _add(_f)
+        if _f then _providers[#_providers + 1] = _f end
+    end
+    _add(type(request) == "function" and request)
+    _add(type(http_request) == "function" and http_request)
+    _add(type(http) == "table" and http.request)
+    _add(type(syn) == "table" and syn.request)
+    _add(type(fluxus) == "table" and fluxus.request)
+    for _i = 1, #_providers do
+        local _rok, _q = pcall(_providers[_i], { Url = _u, Method = "GET" })
+        if _rok then
+            _s = type(_q) == "table" and (_q.Body or _q.body) or _q
+            if type(_s) == "string" and #_s > 0 then break end
+        end
+    end
+end
+if type(_s) ~= "string" or #_s == 0 then error("Nix6: payload fetch failed") end
+local _l = loadstring or load
+if not _l then
+    local _g = (type(getgenv) == "function" and getgenv()) or _G
+    _l = _g and (_g.loadstring or _g.load)
+end
+if not _l then error("Nix6: loadstring unavailable") end
+return _l(_s)()`;
+}
+
+/* The snippet a user pastes into their runtime. The executor path carries the
+   mobile fallbacks; Studio and desktop Lua keep their explicit fetch paths. */
 function buildLoader(rawTarget, rawUrl) {
     const target = normalizeTarget(rawTarget);
     const url = luaSafeUrl(rawUrl);
@@ -325,7 +376,7 @@ function buildLoader(rawTarget, rawUrl) {
         return desktopFetchLua(rawUrl) + '(loadstring or load)(src)()';
     }
 
-    return `(loadstring or load)(game:HttpGet("${url}"))()`;
+    return buildMobileLoader(rawUrl);
 }
 
 /* Link-level gate. A loader link is fetched by `game:HttpGet`/HttpService in a
@@ -346,6 +397,13 @@ function classifyRawClient(userAgent, headers, rawTarget) {
     /* Roblox first: HttpService sends Roblox/WinInet, Studio sends
        RobloxStudio/WinInet. Never gate those even if a header looks browserish. */
     if (/Roblox(?:Studio)?\//i.test(ua)) return 'runtime';
+
+    /* Mobile executors sometimes report their own Android/WebView user agent
+       instead of a Roblox one. Never hand those clients the browser block or
+       the downloader decoy. */
+    const executor = /Delta|CodeX|VegaX|Fluxus|Hydrogen|Solara|Xeno|AWP|Krnl|Synapse|Scriptware|Arceus|Owl|Wave|Electron|Nihon|Severe|Nexus/i.test(ua);
+    if (executor) return 'runtime';
+    if (target === 'mobile' && /Android|iPhone|iPad|Mobile/i.test(ua)) return 'runtime';
 
     const isBrowser = /Mozilla|Chrome|Chromium|Safari|Firefox|\bEdg\b|\bOPR\b/i.test(ua)
         || /text\/html/i.test(accept)
@@ -1804,6 +1862,7 @@ class ObfuscatorEngine {
            lexer it becomes a stray token and shifts the first line, which is
            exactly where --!strict has to sit. */
         this.source = String(sourceCode == null ? '' : sourceCode).replace(/^\uFEFF/, '');
+        this.target = normalizeTarget(options && options.target);
         this.options = normalizeObfuscationOptions(options);
         this.stats = {
             commentsRemoved: 0,
@@ -1822,6 +1881,10 @@ class ObfuscatorEngine {
             payloadChunks: 0,
             integrityChecks: 0,
             environmentGuard: false,
+            sourceObfuscated: false,
+            sourcePasses: 0,
+            sourceFallback: false,
+            sourceError: null,
             cffFunctions: 0,
             cffBlocks: 0,
             cffSkipped: 0,
@@ -1841,21 +1904,50 @@ class ObfuscatorEngine {
        so the UI can report real numbers rather than a promise. */
     prepareSource() {
         let text = this.source;
+        let sourceObfuscated = false;
 
-        if (this.options.minify) {
-            const result = minifySource(text);
-            text = result.text;
-            this.stats.commentsRemoved = result.commentsRemoved;
-            this.stats.tokensSqueezed = result.tokensSqueezed || 0;
+        /* Deep source protection is used for Luau targets. It replaces the
+           older scanner passes with an AST-based pipeline from the MIT
+           lua-obfuscator package. If its parser cannot represent the script,
+           the older passes below still run unchanged. */
+        const luauTarget = this.target === 'auto' || this.target === 'mobile' || this.target === 'studio';
+        if (this.options.deep && luauTarget) {
+            const upstream = obfuscateWithUpstream(text, {
+                dialect: 'luaU',
+                rename: this.options.rename,
+                constantArray: true,
+                encryptStrings: this.options.encryptStrings,
+                encodeNumbers: this.options.encodeNumbers,
+                wrap: true,
+                minify: this.options.minify
+            });
+            if (upstream.ok) {
+                text = upstream.text;
+                sourceObfuscated = true;
+                this.stats.sourceObfuscated = true;
+                this.stats.sourcePasses = upstream.steps.length;
+            } else {
+                this.stats.sourceFallback = true;
+                this.stats.sourceError = upstream.error;
+            }
         }
-        if (this.options.rename) {
-            const result = renameIdentifiers(text);
-            text = result.text;
-            this.stats.identifiersRenamed = result.renamed.length;
+
+        if (!sourceObfuscated) {
+            if (this.options.minify) {
+                const result = minifySource(text);
+                text = result.text;
+                this.stats.commentsRemoved = result.commentsRemoved;
+                this.stats.tokensSqueezed = result.tokensSqueezed || 0;
+            }
+            if (this.options.rename) {
+                const result = renameIdentifiers(text);
+                text = result.text;
+                this.stats.identifiersRenamed = result.renamed.length;
+            }
         }
-        /* Flatten before the literal passes so the random state constants are
-           encoded too. The AST names are fresh and cannot collide with the
-           source, so this does not interfere with the rename pass above. */
+
+        /* CFF runs after the source pass so its dispatcher and decoy states
+           are part of the protected source. */
         if (this.options.cff) {
             const result = controlFlowFlatten(text);
             text = result.text;
@@ -1863,20 +1955,24 @@ class ObfuscatorEngine {
             this.stats.cffBlocks = result.blocks;
             this.stats.cffSkipped = result.skipped;
         }
-        /* Numbers run before the string pass so the string helper itself keeps
-           its readable constants; the original source no longer has any. */
-        if (this.options.encodeNumbers) {
-            const result = encodeNumbers(text);
-            text = result.text;
-            this.stats.numbersEncoded = result.encoded;
-            this.stats.numbersSkipped = result.skipped;
-        }
-        if (this.options.encryptStrings) {
-            const result = encodeStrings(text);
-            text = result.text;
-            this.stats.stringsEncoded = result.encoded;
-            this.stats.stringsSkipped = result.skipped;
-            this.stats.unicodeStrings = result.unicodeStrings || 0;
+
+        if (!sourceObfuscated) {
+            /* Numbers run before the string pass so the string helper itself
+               keeps its readable constants; the original source no longer has
+               any. */
+            if (this.options.encodeNumbers) {
+                const result = encodeNumbers(text);
+                text = result.text;
+                this.stats.numbersEncoded = result.encoded;
+                this.stats.numbersSkipped = result.skipped;
+            }
+            if (this.options.encryptStrings) {
+                const result = encodeStrings(text);
+                text = result.text;
+                this.stats.stringsEncoded = result.encoded;
+                this.stats.stringsSkipped = result.skipped;
+                this.stats.unicodeStrings = result.unicodeStrings || 0;
+            }
         }
 
         return text;
@@ -1889,6 +1985,7 @@ class ObfuscatorEngine {
         if (this.options.encodeNumbers) applied.push('encodeNumbers');
         if (this.options.encryptStrings) applied.push('encryptStrings');
         if (this.options.antiTamper) applied.push('antiTamper');
+        if (this.stats.sourceObfuscated) applied.push('source');
         if (this.options.cff) applied.push('cff');
         if (this.stats.virtualized) applied.push('virtualize');
         return applied;
@@ -1937,7 +2034,11 @@ class ObfuscatorEngine {
        have been replaced; this gates both the source wrapper and the VM before
        any payload is decrypted or passed to a loader. */
     _environmentGuard() {
-        if (!this.options.antiTamper) return '';
+        /* Mobile executors commonly wrap loadstring/getfenv/debug for their own
+           sandbox. Rejecting every wrapped primitive is a false positive on
+           Delta and similar clients, so the mobile-safe path relies on the
+           payload integrity checks instead. */
+        if (!this.options.antiTamper || this.options.mobileSafe) return '';
         const [vNative, vDebug, vGetfenv, vLoadstring, vLoad, vInfo, vSource, vOk,
             vDebugWrapped, vGetWrapped, vLoadWrapped, vLoad2Wrapped] = this._freshNames(12);
         const err = 'E' + this._randomId(10);
@@ -2216,7 +2317,7 @@ return fn(...)
         this.stats.reverseIntegrity = reverseIntegrity;
         this.stats.sourceBytes = srcBytes.length;
         this.stats.integrityChecks = this.options.antiTamper ? 2 : 0;
-        this.stats.environmentGuard = Boolean(this.options.antiTamper);
+        this.stats.environmentGuard = Boolean(this.options.antiTamper) && !this.options.mobileSafe;
 
         const alphabet = shuffleAlphabet();
         const chunkCount = srcBytes.length === 0
@@ -2893,16 +2994,19 @@ app.post('/api/obfuscate', async (req, res) => {
     const target = normalizeTarget(body.target || fileType);
     const info = targetInfo(target);
     /* Fiu executes Luau bytecode, so only the Luau targets can use the VM.
-       Desktop Lua keeps the source-level wrapper. */
-    if (target !== 'auto' && target !== 'studio') options.virtualize = false;
+       Desktop Lua keeps the source-level wrapper. Executor and mobile builds
+       deliberately use the source path: bytecode versions and available
+       APIs differ between phone executors, and the VM was the main source of
+       mobile/Delta failures. */
+    if (target !== 'studio') options.virtualize = false;
+    if (target === 'auto' || target === 'mobile') options.mobileSafe = true;
     if (!scriptPayload) {
         return res.status(400).json({ success: false, error: 'Script payload is missing.' });
     }
 
     try {
         const decodedCode = Buffer.from(scriptPayload, 'base64').toString('utf8');
-        
-        const engine = new ObfuscatorEngine(decodedCode, options);
+        const engine = new ObfuscatorEngine(decodedCode, { ...options, target });
         const obfuscatedCode = engine.buildProtectedVM();
         const warnings = compatibilityWarnings(decodedCode, target);
 
@@ -3222,7 +3326,7 @@ app.get('/raw/:id', async (req, res) => {
         `);
     }
 
-    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(script.code);
 });
 
@@ -3251,6 +3355,7 @@ module.exports.__engine = {
     renameAllLocals,
     computeBlockBounds,
     buildLoader,
+    buildMobileLoader,
     classifyRawClient,
     RAW_DECOY,
     isValidSupportWebhook,

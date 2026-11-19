@@ -23,6 +23,7 @@
     "@vercel/blob": "^2.8.2",
     "cookie-session": "^2.1.0",
     "express": "^4.19.2",
+    "lua-obfuscator": "^3.0.9",
     "node-fetch": "^2.7.0"
   },
   "engines": {

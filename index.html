@@ -4944,6 +4944,7 @@
                             <label>ENVIRONMENT</label>
                             <select id="fileType" onchange="updateTargetHint()">
                                 <option value="auto">Any executor</option>
+                                <option value="mobile">Mobile / Delta</option>
                                 <option value="studio">Roblox Studio</option>
                                 <option value="lua51">Lua 5.1 / LuaJIT</option>
                                 <option value="lua54">Lua 5.2 - 5.5</option>
@@ -4959,10 +4960,11 @@
                         <label class="option-toggle"><input type="checkbox" checked id="optNumbers"> Encode Numbers</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optEncrypt"> Encrypt Strings</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optAntiTamper"> Anti-Tamper Shield</label>
+                        <label class="option-toggle"><input type="checkbox" checked id="optDeep"> Deep source obfuscation</label>
                         <label class="option-toggle"><input type="checkbox" checked id="optCff"> Control Flow Flattening</label>
-                        <label class="option-toggle"><input type="checkbox" checked id="optVirtualize"> Bytecode VM</label>
+                        <label class="option-toggle"><input type="checkbox" id="optVirtualize"> Bytecode VM (experimental)</label>
                     </div>
-                    <p class="options-note">Applied on the server while compiling. Control Flow Flattening turns each eligible function body into a randomized state machine with shuffled cases and decoy states. Bytecode VM compiles Luau to bytecode and runs it inside an embedded virtual machine, so the delivered payload is not your source and cannot be recovered with a plain loadstring. Anti-Tamper rejects the combined debug/environment instrumentation used by common env loggers, and the VM isolates guest globals in a private environment. Lua 5.1/5.4 targets use the source wrapper instead.</p>
+                    <p class="options-note">Deep source obfuscation runs AST-based renaming, constant-table packing, string encryption, number encryption and an IIFE wrapper before the payload is encrypted. Control Flow Flattening then turns eligible function bodies into randomized state machines with decoy states. The legacy Bytecode VM is off by default because phone executors differ in their Luau bytecode support; executor and mobile builds always use the source path. Anti-Tamper checks the payload checksum before it is loaded. Lua 5.1/5.4 targets keep the source wrapper.</p>
 
                     <div class="input-group">
                         <label>LUAU / LUA SOURCE CODE</label>
@@ -5781,6 +5783,7 @@
                 encodeNumbers: checked('optNumbers'),
                 encryptStrings: checked('optEncrypt'),
                 antiTamper: checked('optAntiTamper'),
+                deep: checked('optDeep'),
                 cff: checked('optCff'),
                 virtualize: checked('optVirtualize')
             };
@@ -5801,7 +5804,8 @@
                 const unicode = count('unicodeStrings');
                 parts.push(encoded + ' strings encoded' + (unicode ? ' (' + unicode + ' unicode-safe)' : ''));
             }
-            if (on.includes('antiTamper')) parts.push('integrity + environment guard armed');
+            if (on.includes('antiTamper')) parts.push('payload integrity guard armed');
+            if (on.includes('source')) parts.push(count('sourcePasses') + ' deep AST passes');
             if (on.includes('cff')) parts.push(count('cffBlocks') + ' CFF blocks in ' + count('cffFunctions') + ' functions');
             if (on.includes('virtualize')) {
                 let vm = 'Luau bytecode VM (' + (count('bytecodeBytes') / 1024).toFixed(1) + ' KB bytecode)';
@@ -5834,7 +5838,8 @@
            the one line that tells the user what their runtime needs to fetch
            and compile the payload. */
         const TARGET_META = {
-            auto: { chip: 'EXECUTOR', ext: 'luau', hint: 'One line: (loadstring or load)(game:HttpGet(url))(). Works in any Roblox executor, including ones that renamed loadstring.' },
+            auto: { chip: 'EXECUTOR', ext: 'luau', hint: 'Mobile-safe loader: tries game:HttpGet, HttpGetAsync, request, http_request and syn.request, then compiles with loadstring or load.' },
+            mobile: { chip: 'MOBILE', ext: 'luau', hint: 'Delta-safe loader: multiple HTTP fallbacks, then loadstring or load. No bytecode VM and no debug/getfenv probes.' },
             studio: { chip: 'STUDIO', ext: 'luau', hint: 'One line through HttpService:GetAsync. Studio must have LoadStringEnabled turned on or the chunk cannot compile.' },
             lua51: { chip: 'LUA 5.1', ext: 'lua', hint: 'Desktop Lua: three lines. Needs luasocket or a curl binary, since plain Lua has no HTTP of its own.' },
             lua54: { chip: 'LUA 5.4', ext: 'lua', hint: 'Desktop Lua 5.2-5.5: same three lines as 5.1, compiled with load instead of loadstring.' }
@@ -5844,6 +5849,7 @@
             const key = String(value || '').toLowerCase();
             if (TARGET_META[key]) return key;
             if (key === 'luau' || key === 'executor') return 'auto';
+            if (key === 'delta') return 'mobile';
             if (key === 'lua') return 'lua54';
             return 'auto';
         }
