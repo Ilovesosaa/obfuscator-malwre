@@ -4825,7 +4825,7 @@
                     <article class="feature-card narrow reveal">
                         <div class="feature-copy">
                             <h3>Runs where you run</h3>
-                            <p>Pick a target and the loader is emitted for it. One line for executors, explicit bytecode paths for plain Lua runtimes.</p>
+                            <p>Pick a target and the loader is emitted for it. One line for executors and mobile, explicit fetch paths for plain Lua runtimes.</p>
                         </div>
                         <div class="mock mock-tight">
                             <div class="mock-head"><span>Targets</span><span>4 runtimes</span></div>
@@ -5838,8 +5838,8 @@
            the one line that tells the user what their runtime needs to fetch
            and compile the payload. */
         const TARGET_META = {
-            auto: { chip: 'EXECUTOR', ext: 'luau', hint: 'Mobile-safe loader: tries game:HttpGet, HttpGetAsync, request, http_request and syn.request, then compiles with loadstring or load.' },
-            mobile: { chip: 'MOBILE', ext: 'luau', hint: 'Delta-safe loader: multiple HTTP fallbacks, then loadstring or load. No bytecode VM and no debug/getfenv probes.' },
+            auto: { chip: 'EXECUTOR', ext: 'luau', hint: 'One line: loadstring(game:HttpGet(url))(), the form every Roblox executor supports.' },
+            mobile: { chip: 'MOBILE', ext: 'luau', hint: 'Same one-line loader as any executor, with Delta-safe payload settings and no bytecode VM.' },
             studio: { chip: 'STUDIO', ext: 'luau', hint: 'One line through HttpService:GetAsync. Studio must have LoadStringEnabled turned on or the chunk cannot compile.' },
             lua51: { chip: 'LUA 5.1', ext: 'lua', hint: 'Desktop Lua: three lines. Needs luasocket or a curl binary, since plain Lua has no HTTP of its own.' },
             lua54: { chip: 'LUA 5.4', ext: 'lua', hint: 'Desktop Lua 5.2-5.5: same three lines as 5.1, compiled with load instead of loadstring.' }

@@ -250,23 +250,23 @@ function normalizeObfuscationOptions(raw) {
 
 /* Runtime targets. The payload itself is plain Lua in every case; what changes
    is how the vault hands it back. The default is deliberately one line: every Roblox
-   executor exposes game:HttpGet and either loadstring or load, so the short
-   form is the most portable one there is. The longer variants exist only for
-   runtimes that genuinely need a different fetch path. */
+   executor exposes game:HttpGet and loadstring, so the short form is the most
+   portable one there is. The longer variants exist only for runtimes that
+   genuinely need a different fetch path. */
 const RUN_TARGETS = {
     auto: {
         id: 'auto',
         label: 'Any executor',
         ext: 'luau',
         legacyFileType: 'luau',
-        note: 'Mobile-safe: tries game:HttpGet, HttpGetAsync, request/http_request/syn.request, then loadstring or load.'
+        note: 'One line: loadstring(game:HttpGet(url))(), the form every Roblox executor supports.'
     },
     mobile: {
         id: 'mobile',
         label: 'Mobile / Delta',
         ext: 'luau',
         legacyFileType: 'luau',
-        note: 'Delta-safe loader with multiple HTTP fallbacks and a loadstring/load fallback.'
+        note: 'Same one-line loader as any executor, with Delta-safe payload settings and no bytecode VM.'
     },
     studio: {
         id: 'studio',
@@ -321,49 +321,9 @@ if not ok or not src or src == "" then local p = io.popen('curl -fsSL "${u}"'); 
 `;
 }
 
-/* Mobile executors often expose only one of game:HttpGet, HttpGetAsync or
-   request. Delta in particular is used on phones where game:HttpGet can throw
-   before the payload is returned. This loader tries the common paths in order
-   and only then reports a clear failure. It deliberately does not touch
-   debug, getfenv or setfenv, which several mobile sandboxes wrap. */
-function buildMobileLoader(rawUrl) {
-    const url = luaSafeUrl(rawUrl);
-    return `local _u = "${url}"
-local _s
-local _ok = pcall(function() _s = game:HttpGet(_u) end)
-if not _ok or type(_s) ~= "string" or #_s == 0 then
-    pcall(function() _s = game:HttpGetAsync(_u) end)
-end
-if type(_s) ~= "string" or #_s == 0 then
-    local _providers = {}
-    local function _add(_f)
-        if _f then _providers[#_providers + 1] = _f end
-    end
-    _add(type(request) == "function" and request)
-    _add(type(http_request) == "function" and http_request)
-    _add(type(http) == "table" and http.request)
-    _add(type(syn) == "table" and syn.request)
-    _add(type(fluxus) == "table" and fluxus.request)
-    for _i = 1, #_providers do
-        local _rok, _q = pcall(_providers[_i], { Url = _u, Method = "GET" })
-        if _rok then
-            _s = type(_q) == "table" and (_q.Body or _q.body) or _q
-            if type(_s) == "string" and #_s > 0 then break end
-        end
-    end
-end
-if type(_s) ~= "string" or #_s == 0 then error("Nix6: payload fetch failed") end
-local _l = loadstring or load
-if not _l then
-    local _g = (type(getgenv) == "function" and getgenv()) or _G
-    _l = _g and (_g.loadstring or _g.load)
-end
-if not _l then error("Nix6: loadstring unavailable") end
-return _l(_s)()`;
-}
-
-/* The snippet a user pastes into their runtime. The executor path carries the
-   mobile fallbacks; Studio and desktop Lua keep their explicit fetch paths. */
+/* The snippet a user pastes into their runtime. Executors and mobile clients
+   get the same short form they expect; Studio and desktop Lua keep their
+   explicit fetch paths. */
 function buildLoader(rawTarget, rawUrl) {
     const target = normalizeTarget(rawTarget);
     const url = luaSafeUrl(rawUrl);
@@ -376,7 +336,7 @@ function buildLoader(rawTarget, rawUrl) {
         return desktopFetchLua(rawUrl) + '(loadstring or load)(src)()';
     }
 
-    return buildMobileLoader(rawUrl);
+    return `loadstring(game:HttpGet("${url}"))()`;
 }
 
 /* Link-level gate. A loader link is fetched by `game:HttpGet`/HttpService in a
@@ -3355,7 +3315,6 @@ module.exports.__engine = {
     renameAllLocals,
     computeBlockBounds,
     buildLoader,
-    buildMobileLoader,
     classifyRawClient,
     RAW_DECOY,
     isValidSupportWebhook,

@@ -472,20 +472,19 @@ const runtimeSamples = [
         check(target + ' loader is non-empty', typeof loader === 'string' && loader.length > 40);
         check(target + ' loader embeds the payload URL', loader.includes(URL));
         check(target + ' loader resolves a compile function',
-            /loadstring or load|_g\.loadstring/.test(loader));
+            /loadstring/.test(loader));
     }
 
-    /* The executor loader is the one users paste. It must keep the fast
-       game:HttpGet path but also survive the APIs phone executors expose. */
+    /* Executors and mobile clients get the one-line form users expect:
+       loadstring(game:HttpGet(url))() */
     check('executor loader uses game:HttpGet', loaders.auto.includes('game:HttpGet'));
-    check('executor loader falls back to async HTTP', loaders.auto.includes('game:HttpGetAsync'));
-    check('executor loader falls back to request', loaders.auto.includes('request'));
-    check('executor loader falls back to http_request', loaders.auto.includes('http_request'));
-    check('executor loader falls back to syn.request', loaders.auto.includes('syn.request'));
-    check('executor loader resolves loadstring or load', loaders.auto.includes('loadstring or load'));
+    check('executor loader compiles with loadstring', loaders.auto.includes('loadstring('));
+    check('executor loader is exactly the short one-liner',
+        loaders.auto === `loadstring(game:HttpGet("${URL}"))()`);
+    check('executor loader is one line', loaders.auto.split('\n').length === 1);
     check('mobile target is registered', Boolean(loaders.mobile) && api.normalizeTarget('mobile') === 'mobile');
     check('delta maps to the mobile target', api.normalizeTarget('delta') === 'mobile');
-    check('mobile loader is mobile-safe', loaders.mobile.includes('game:HttpGet') && loaders.mobile.includes('request'));
+    check('mobile loader is the same short one-liner', loaders.mobile === loaders.auto);
     check('mobile loader does not probe debug', !loaders.mobile.includes('debug'));
 
     check('studio target uses HttpService:GetAsync', loaders.studio.includes('HttpService'));
@@ -995,7 +994,7 @@ print("ok=" .. tostring(ok) .. " load_calls=" .. tostring(loadCalls) .. " leaked
     }
 
     /* 11. Mobile loader: the generated snippet must work with Delta-style
-           game:HttpGet and with request fallbacks, without debug/getfenv. */
+           game:HttpGet and stay a single readable line. */
     {
         const api = require('../server.js').__engine;
         const payload = 'print("MOBILE_LOADER_OK")';
@@ -1004,26 +1003,7 @@ print("ok=" .. tostring(ok) .. " load_calls=" .. tostring(loadCalls) .. " leaked
 ${loader}`;
         const primaryOut = runLuau(luau, primary);
         check('mobile loader runs with game:HttpGet', primaryOut.ok && primaryOut.stdout.includes('MOBILE_LOADER_OK'), primaryOut.stderr);
-
-        const fallback = `local game = {
-    HttpGet = function() error("HttpGet blocked") end,
-    HttpGetAsync = function() error("HttpGetAsync blocked") end
-}
-local function request() return { Body = ${JSON.stringify(payload)} } end
-${loader}`;
-        const fallbackOut = runLuau(luau, fallback);
-        check('mobile loader runs with request fallback', fallbackOut.ok && fallbackOut.stdout.includes('MOBILE_LOADER_OK'), fallbackOut.stderr);
-
-        const secondary = `local game = {
-    HttpGet = function() error("HttpGet blocked") end,
-    HttpGetAsync = function() error("HttpGetAsync blocked") end
-}
-local function request() error("request blocked") end
-local syn = { request = function() return { Body = ${JSON.stringify(payload)} } end }
-${loader}`;
-        const secondaryOut = runLuau(luau, secondary);
-        check('mobile loader tries the next provider when request fails',
-            secondaryOut.ok && secondaryOut.stdout.includes('MOBILE_LOADER_OK'), secondaryOut.stderr);
+        check('mobile loader is a single line', loader.split('\n').length === 1, loader);
         check('mobile loader does not probe debug/getfenv availability',
             !loader.includes('debug') && !loader.includes('getfenv') && !loader.includes('setfenv'));
     }
