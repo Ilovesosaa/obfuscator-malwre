@@ -665,25 +665,79 @@ if (!luau) {
             tampered !== artifact && !runLuau(luau, tampered).ok);
     }
 
-    /* 7b. The scope-aware Fiu renamer must preserve shadowing, initializer
-           binding and upvalues while still touching every local. */
+    /* 7b. The scope-aware Fiu renamer must preserve nested scopes, sibling
+           shadowing and initializer binding. Each case is checked against
+           the original source, then against a fully hardened VM build. */
     {
-        const source = [
-            'local outer = 5',
-            'local function add(v: number): number',
-            '    local function inner() return v + outer end',
-            '    local outer = 100',
-            '    return inner()',
-            'end',
-            'print("scope", add(3))'
-        ].join('\n');
         const api = require('../server.js').__engine;
-        const renamed = api.renameAllLocals(source);
-        const before = runLuau(luau, source);
-        const after = runLuau(luau, renamed.text);
-        check('scope-aware renamer preserves shadowing and upvalues',
-            before.ok && after.ok && before.stdout === after.stdout,
-            'before=' + JSON.stringify(before.stdout) + ' after=' + JSON.stringify(after.stdout));
+        const cases = [
+            {
+                name: 'nested scopes and upvalues',
+                source: [
+                    'local outer = 5',
+                    'local function add(v: number): number',
+                    '    local function inner() return v + outer end',
+                    '    local outer = 100',
+                    '    return inner()',
+                    'end',
+                    'print("nested", add(3))'
+                ].join('\n')
+            },
+            {
+                name: 'same-name locals in sibling branches',
+                source: [
+                    'local function branch(flag: boolean): number',
+                    '    if flag then',
+                    '        local x = 10',
+                    '        local function read() return x end',
+                    '        return read()',
+                    '    else',
+                    '        local x = 20',
+                    '        local function read() return x end',
+                    '        return read()',
+                    '    end',
+                    'end',
+                    'print("sibling", branch(true), branch(false))'
+                ].join('\n')
+            },
+            {
+                name: 'initializer shadowing',
+                source: [
+                    'local x = 5',
+                    'local function capture() return x end',
+                    'do',
+                    '    local x = x + 1',
+                    '    print("init", x)',
+                    'end',
+                    'local x = x + 2',
+                    'print("init2", x, capture())'
+                ].join('\n')
+            }
+        ];
+
+        for (const testCase of cases) {
+            const original = runLuau(luau, testCase.source);
+            const renamed = api.renameAllLocals(testCase.source);
+            const renamedRun = runLuau(luau, renamed.text);
+            check('scope-aware renamer: ' + testCase.name,
+                original.ok && renamedRun.ok && original.stdout === renamedRun.stdout,
+                'original=' + JSON.stringify(original.stdout)
+                + ' renamed=' + JSON.stringify(renamedRun.stdout)
+                + ' stderr=' + JSON.stringify(renamedRun.stderr));
+
+            const vm = buildVM(testCase.source, ALL);
+            check('hardened VM output: ' + testCase.name,
+                vm.engine.stats.virtualized === true,
+                'compiler unavailable or compile failed');
+            if (vm.engine.stats.virtualized) {
+                const vmRun = runLuau(luau, vm.artifact);
+                check('hardened VM runs: ' + testCase.name, vmRun.ok, vmRun.stderr);
+                check('hardened VM matches original: ' + testCase.name,
+                    original.stdout === vmRun.stdout,
+                    'original=' + JSON.stringify(original.stdout)
+                    + ' vm=' + JSON.stringify(vmRun.stdout));
+            }
+        }
     }
 
     {
