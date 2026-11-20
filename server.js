@@ -364,6 +364,10 @@ function classifyRawClient(userAgent, headers, rawTarget) {
     const executor = /Delta|CodeX|VegaX|Fluxus|Hydrogen|Solara|Xeno|AWP|Krnl|Synapse|Scriptware|Arceus|Owl|Wave|Electron|Nihon|Severe|Nexus/i.test(ua);
     if (executor) return 'runtime';
     if (target === 'mobile' && /Android|iPhone|iPad|Mobile/i.test(ua)) return 'runtime';
+    /* Delta's Android HTTP stack can identify itself as OkHttp rather than
+       with a Delta UA. It is an executor on mobile/executor links, not a
+       downloader, so it must receive the real artifact. */
+    if ((target === 'mobile' || target === 'auto') && /\bokhttp\//i.test(ua)) return 'runtime';
 
     const isBrowser = /Mozilla|Chrome|Chromium|Safari|Firefox|\bEdg\b|\bOPR\b/i.test(ua)
         || /text\/html/i.test(accept)
@@ -1815,6 +1819,32 @@ function compileLuauToBytecode(source) {
     }
 }
 
+/* Mobile executors do not expose the same globals as desktop executors. Delta
+   and similar clients can omit getgenv/request/cloneref entirely or expose
+   them only under another name. The payload provides the small, non-invasive
+   polyfills here so scripts that use those globals do not fail before their
+   own code runs. Existing functions are never replaced. */
+const MOBILE_COMPAT_PRELUDE = `-- mobile executor compatibility (Delta)
+pcall(function()
+    if type(getgenv) ~= "function" then
+        getgenv = function() return _G end
+    end
+    if type(request) ~= "function" then
+        local _request = http_request or http_request_async
+        if type(_request) ~= "function" and type(syn) == "table" then
+            _request = syn.request
+        end
+        if type(_request) == "function" then request = _request end
+    end
+    if type(http_request) ~= "function" and type(request) == "function" then
+        http_request = request
+    end
+    if type(cloneref) ~= "function" then
+        cloneref = function(_value) return _value end
+    end
+end)
+`;
+
 // --- OBFUSCATION ENGINE (source transforms + optional Luau bytecode VM) ---
 class ObfuscatorEngine {
     constructor(sourceCode, options) {
@@ -1865,6 +1895,22 @@ class ObfuscatorEngine {
     prepareSource() {
         let text = this.source;
         let sourceObfuscated = false;
+
+        /* Delta/mobile clients run the payload inside their own sandbox. Add
+           the compatibility globals to the protected source, not to the
+           loader line, so the link serves a payload that can run there. */
+        if (this.target === 'auto' || this.target === 'mobile') {
+            /* Keep a shebang or a Luau directive (--!strict/--!nocheck) on
+               line one; both are only recognized in that position. */
+            if (/^(?:#!|--!)/.test(text)) {
+                const newline = text.indexOf('\n');
+                text = newline === -1
+                    ? text + '\n' + MOBILE_COMPAT_PRELUDE
+                    : text.slice(0, newline + 1) + MOBILE_COMPAT_PRELUDE + text.slice(newline + 1);
+            } else {
+                text = MOBILE_COMPAT_PRELUDE + text;
+            }
+        }
 
         /* Deep source protection is used for Luau targets. It replaces the
            older scanner passes with an AST-based pipeline from the MIT
@@ -3317,6 +3363,7 @@ module.exports.__engine = {
     buildLoader,
     classifyRawClient,
     RAW_DECOY,
+    MOBILE_COMPAT_PRELUDE,
     isValidSupportWebhook,
     buildSupportPayload,
     postSupportReport,

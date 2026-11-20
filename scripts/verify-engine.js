@@ -574,6 +574,10 @@ const runtimeSamples = [
     check('link allows desktop curl', classify('curl/8.4.0', {}, 'lua51') === 'runtime');
     check('link allows renamed executor agents', classify('SomeExecutor/1.0', {}, 'auto') === 'runtime');
     check('link allows Delta mobile clients', classify('Delta/2.0 (Android)', {}, 'mobile') === 'runtime');
+    check('link allows Delta OkHttp clients on mobile links',
+        classify('okhttp/4.12.0', {}, 'mobile') === 'runtime');
+    check('link allows Delta OkHttp clients on executor links',
+        classify('okhttp/4.12.0', {}, 'auto') === 'runtime');
     check('link allows Android clients on the mobile target',
         classify('Mozilla/5.0 (Linux; Android 13; Pixel 7)', {}, 'mobile') === 'runtime');
     check('link still blocks desktop browsers on mobile links',
@@ -1040,6 +1044,18 @@ ${loader}`;
         check('deep-source fallback artifact still runs',
             fallbackOut.ok && fallbackOut.stdout === fallbackOriginal.stdout,
             fallbackOut.stderr);
+
+        /* Delta and other mobile clients may omit executor globals. The
+           payload prelude must install them before user code runs. */
+        const deltaSource = 'print("DELTA_SHIM", type(getgenv), type(request), type(cloneref))';
+        const delta = build(deltaSource, { ...ALL, deep: true, mobileSafe: true, target: 'mobile' });
+        const deltaOut = runLuau(luau,
+            'http_request = function() return { Body = "" } end\n'
+            + 'getgenv = nil\nrequest = nil\ncloneref = nil\n'
+            + delta.artifact);
+        check('mobile payload installs Delta compatibility globals',
+            deltaOut.ok && deltaOut.stdout.includes('DELTA_SHIM\tfunction\tfunction\tfunction'),
+            deltaOut.stderr + ' ' + deltaOut.stdout);
     }
 }
 

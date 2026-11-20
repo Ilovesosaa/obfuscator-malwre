@@ -3911,6 +3911,61 @@
         }
         .app-view .card h2 { font-family: 'Space Grotesk', sans-serif; }
 
+        /* ---------- top announcement ---------- */
+        .app-announcement-wrap {
+            width: min(1240px, 100%);
+            margin: 0 auto;
+            padding: 22px 52px 0;
+        }
+        .delta-announcement {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 12px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: linear-gradient(100deg, #1a1a1c 0%, #141416 55%, #101012 100%);
+            box-shadow: 0 16px 36px -30px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            color: #f4f4f5;
+            text-decoration: none;
+            transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .delta-announcement:hover {
+            border-color: rgba(255, 255, 255, 0.28);
+            transform: translateY(-1px);
+            box-shadow: 0 20px 42px -30px rgba(0, 0, 0, 0.98), 0 0 24px -18px rgba(255, 255, 255, 0.5);
+        }
+        .delta-announcement-copy {
+            display: flex;
+            align-items: baseline;
+            gap: 18px;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+        .delta-announcement-copy strong {
+            font-family: 'Inter Tight', sans-serif;
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: #fff;
+            white-space: nowrap;
+        }
+        .delta-announcement-copy span {
+            font-family: 'Inter Tight', sans-serif;
+            font-size: 0.8rem;
+            color: #a1a1aa;
+            line-height: 1.4;
+        }
+        .delta-announcement-arrow {
+            width: 18px;
+            height: 18px;
+            flex: none;
+            stroke: #d4d4d8;
+            stroke-width: 1.8;
+            fill: none;
+        }
+
         /* ---------- overview ---------- */
         .overview-head {
             display: grid;
@@ -4411,6 +4466,7 @@
         @media (max-width: 1120px) {
             :root { --sidebar-w: 238px; }
             .app-view { padding: 38px 34px 54px; }
+            .app-announcement-wrap { padding-left: 34px; padding-right: 34px; }
             .overview-head { grid-template-columns: minmax(0, 1fr) 320px; gap: 30px; }
             .overview-title { font-size: clamp(4rem, 8vw, 6.4rem); }
             .app-view.results.is-active { grid-template-columns: minmax(0, 1fr) 340px; gap: 30px; }
@@ -4478,6 +4534,7 @@
             .sidebar-session-state { display: none; }
             .sidebar-logout { border: 1px solid #2c2c2c; border-radius: 6px; height: 29px; padding: 0 8px; }
             .app-content { height: auto; overflow: visible; }
+            .app-announcement-wrap { padding-left: 22px; padding-right: 22px; }
             .app-view { width: 100%; padding: 30px 22px 52px; }
             .app-view.results.is-active {
                 display: grid;
@@ -4497,6 +4554,11 @@
         }
         @media (max-width: 700px) {
             .app-sidebar { padding-left: 12px; padding-right: 12px; }
+            .app-announcement-wrap { padding: 14px 16px 0; }
+            .delta-announcement { padding: 11px 14px; gap: 12px; }
+            .delta-announcement-copy { flex-direction: column; gap: 3px; }
+            .delta-announcement-copy strong { font-size: 0.86rem; }
+            .delta-announcement-copy span { font-size: 0.72rem; }
             .app-view { padding: 25px 16px 44px; }
             .sidebar-link { font-size: 0.67rem; padding: 0 8px; }
             .sidebar-link svg { display: none; }
@@ -4675,6 +4737,16 @@
         </aside>
 
         <div class="app-content" id="appContent">
+            <div class="app-announcement-wrap">
+                <a class="delta-announcement" href="#compiler" data-view="compiler" aria-label="Delta now supported — open the compiler">
+                    <span class="delta-announcement-copy">
+                        <strong>Delta now supported</strong>
+                        <span>Mobile payloads now include native Delta executor shims.</span>
+                    </span>
+                    <svg class="delta-announcement-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+                </a>
+            </div>
+
             <section class="app-view overview-view is-active" id="overview">
                 <div class="overview-head">
                     <div class="overview-copy">
